@@ -30,22 +30,28 @@ def setup_db():
 
 def test_webhook_invalid_secret():
     response = client.post(
-        "/api/v1/messages",
+        "/api/v1/telegram/webhook",
         json={
-            "user": {"id": 12345, "username": "tony_test", "first_name": "Tony"},
-            "message": {"text": "/start", "message_id": 1, "chat_id": 12345}
+            "message": {
+                "chat": {"id": 12345, "type": "private"},
+                "from": {"id": 12345, "username": "tony_test", "first_name": "Tony"},
+                "text": "/start"
+            }
         },
-        headers={"X-FamFin-Token": "wrong-secret"}
+        headers={"X-Telegram-Bot-Api-Secret-Token": "wrong-secret"}
     )
     assert response.status_code == 403
     assert response.json() == {"detail": "Invalid secret token"}
 
 def test_webhook_missing_secret():
     response = client.post(
-        "/api/v1/messages",
+        "/api/v1/telegram/webhook",
         json={
-            "user": {"id": 12345, "username": "tony_test", "first_name": "Tony"},
-            "message": {"text": "/start", "message_id": 1, "chat_id": 12345}
+            "message": {
+                "chat": {"id": 12345, "type": "private"},
+                "from": {"id": 12345, "username": "tony_test", "first_name": "Tony"},
+                "text": "/start"
+            }
         }
     )
     assert response.status_code == 403
@@ -55,33 +61,36 @@ def test_webhook_success_registration(monkeypatch):
     # Mock settings secret
     monkeypatch.setattr(settings, "MESSAGING_WEBHOOK_SECRET", "valid-secret")
     
-    # Mock payload
+    # Mock TelegramService
+    class MockTelegramService:
+        async def send_message(self, chat_id, text):
+            pass
+    monkeypatch.setattr("src.api.routes.telegram.TelegramService", MockTelegramService)
+    
+    # Mock payload for Telegram Update
     payload = {
-        "user": {
-            "id": 12345,
-            "username": "tony_test",
-            "first_name": "Tony",
-            "last_name": "Crespo"
-        },
         "message": {
-            "text": "/start",
-            "message_id": 1,
-            "chat_id": 12345
+            "chat": {"id": 12345, "type": "private"},
+            "from": {
+                "id": 12345,
+                "username": "tony_test",
+                "first_name": "Tony",
+                "last_name": "Crespo"
+            },
+            "text": "/start"
         }
     }
     
-    # We expect a success response with standardized welcome action
+    # We expect a success response with ok status
     response = client.post(
-        "/api/v1/messages",
+        "/api/v1/telegram/webhook",
         json=payload,
-        headers={"X-FamFin-Token": "valid-secret"}
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
     )
     
     assert response.status_code == 200
     res_data = response.json()
     assert res_data["status"] == "ok"
-    assert res_data["action"] == "reply"
-    assert "Welcome to FamFin-AI" in res_data["text"]
     
     # Verify DB record creation
     with Session(test_engine) as session:
@@ -93,33 +102,29 @@ def test_webhook_success_registration(monkeypatch):
 def test_webhook_transaction_processing(monkeypatch):
     monkeypatch.setattr(settings, "MESSAGING_WEBHOOK_SECRET", "valid-secret")
     
-    # We will just see if the route responds with processing
+    # Mock AIOrchestrator
+    class MockOrchestrator:
+        async def orchestrate(self, user_id, text, audio_file_id, chat_id):
+            pass
+    monkeypatch.setattr("src.api.routes.telegram.AIOrchestrator", MockOrchestrator)
+    
     payload = {
-        "user": {
-            "id": 12345,
-            "username": "tony_test"
-        },
         "message": {
-            "text": "50 for lunch",
-            "message_id": 2,
-            "chat_id": 12345,
-            "audio_url": "http://audio.url/test.ogg"
+            "chat": {"id": 12345, "type": "private"},
+            "from": {
+                "id": 12345,
+                "username": "tony_test"
+            },
+            "text": "50 for lunch"
         }
     }
     
-    # Mock AIOrchestrator
-    class MockOrchestrator:
-        async def orchestrate(self, user_id, text, audio_url, chat_id):
-            pass
-    monkeypatch.setattr("src.api.routes.messages.AIOrchestrator", MockOrchestrator)
-    
     response = client.post(
-        "/api/v1/messages",
+        "/api/v1/telegram/webhook",
         json=payload,
-        headers={"X-FamFin-Token": "valid-secret"}
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
     )
     
     assert response.status_code == 200
     res_data = response.json()
-    assert res_data["status"] == "processing"
-
+    assert res_data["status"] == "ok"

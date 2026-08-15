@@ -54,7 +54,7 @@ filesIncluded:
 * **FR9:** System provides conversational summaries of financial history.
 * **FR10:** Users can establish shared Family Groups with invited members. (Phase 2)
 * **FR11:** All members of a Family Group can view and contribute to a shared ledger. (Phase 2)
-* **FR12:** Premium users can synchronize local records to a Notion database via the n8n integration gateway. (Phase 2)
+* **FR12:** Premium users can synchronize local records to a Notion database via a native Python task. (Phase 2)
 * **FR13:** Users can manually trigger a synchronization to the Notion mirror. (Phase 2)
 * **FR14:** Users can export transaction history in CSV/JSON format (GDPR Portability).
 * **FR15:** Users can permanently delete their account and data (Right to be Forgotten).
@@ -71,14 +71,14 @@ filesIncluded:
 * **NFR5 (Secrets):** All integration tokens (Notion/Bot) stored in encrypted environment variables.
 * **NFR6 (Persistence):** Transactional DB writes to ensure zero data loss on system failure.
 * **NFR7 (Backup):** Daily automated encrypted backups to external storage.
-* **NFR8 (Consistency):** Retry mechanisms for Notion mirroring (eventual consistency, visual retry in n8n).
+* **NFR8 (Consistency):** Retry mechanisms for Notion mirroring (eventual consistency, via tenacity or Celery).
 
 **Total NFRs:** 8
 
 ### Additional Requirements
 
 * **AR1 (Zero-Persistence Audio):** Raw voice audio notes must be immediately deleted from temp storage after Faster-Whisper transcription to ensure privacy.
-* **AR2 (Hybrid Gateway Integration):** Message ingestion from both Telegram and WhatsApp must route securely through a self-hosted n8n instance and forward standardized JSON payloads to the FastAPI core.
+* **AR2 (Native Gateway Integration):** Message ingestion from Telegram must route securely through a native FastAPI webhook endpoint.
 
 ---
 
@@ -101,11 +101,11 @@ We traced the 16 Functional Requirements from our PRD to the specific Stories de
 | **FR9** | Conversational response generation | Epic 3 Stories 3.1, 3.2, 3.3 *(AI Query handlers)* | ✓ Covered |
 | **FR10** | Shared Family Groups configuration | Epic 4 Story 4.2 *(Family Invite & Membership)* | ✓ Covered |
 | **FR11** | Shared Ledger multi-user contribution | Epic 4 Story 4.1 & 4.3 *(Family Ledgers)* | ✓ Covered |
-| **FR12** | Premium Notion Sync via n8n | Epic 6 Story 6.1 & 6.2 *(Notion Setup/Mirroring)* | ✓ Covered |
+| **FR12** | Premium Notion Sync via Python SDK | Epic 6 Story 6.1 & 6.2 *(Notion Setup/Mirroring)* | ✓ Covered |
 | **FR13** | Manual/Triggered Notion Mirror Sync | Epic 6 Story 6.3 *(Notion sync flow)* | ✓ Covered |
 | **FR14** | GDPR Data Portability (CSV/JSON Export) | Epic 5 Story 5.1 *(Data Portability)* | ✓ Covered |
 | **FR15** | GDPR Right to be Forgotten (Account Deletion) | Epic 5 Story 5.2 *(Account Deletion)* | ✓ Covered |
-| **FR16** | Onboarding via initiating conversation | Epic 1 Story 1.4 *(Registration API & n8n)* | ✓ Covered |
+| **FR16** | Onboarding via initiating conversation | Epic 1 Story 1.4 *(Registration API)* | ✓ Covered |
 
 ### Coverage Statistics
 
@@ -122,7 +122,7 @@ We traced the 16 Functional Requirements from our PRD to the specific Stories de
 
 ### Alignment & Implied UX Analysis
 * Although there is no separate UX file, the **usability flows and conversational UI mockups are highly specified** directly inside the story BDD acceptance criteria in `epics.md`. 
-* The asynchronous confirmation flow (which ensures the critical **3-second rule** is met) is natively integrated into both the n8n gateway and the FastAPI `BackgroundTasks` handler. 
+* The asynchronous confirmation flow (which ensures the critical **3-second rule** is met) is natively integrated into the FastAPI `BackgroundTasks` handler. 
 * There is strong alignment between the PRD user journeys, the conversational outputs specified in the stories, and the micro-service latency boundaries.
 
 ---
@@ -142,8 +142,8 @@ We conducted a best-practices quality review of all epics and stories against th
   * *Remediation:* Keep Story 1.3 focused on setting up the database connection and the initial `User` schema, moving the transaction model definitions into Epic 2 and family group models into Epic 4.
 
 #### 🟡 Minor Concerns
-* **Generic Callback API Payload Validation (Story 1.4):** Story 1.4 defines a generic, token-based verification for messages received from n8n.
-  * *Concern:* Standardizing the token structure (e.g., using a secure header `X-FamFin-Token`) is critical to ensure that external requests from n8n cannot be forged or manipulated.
+* **Telegram Webhook Payload Validation (Story 1.4):** Story 1.4 defines token-based verification for messages received from Telegram.
+  * *Concern:* Standardizing the token structure (e.g., using `X-Telegram-Bot-Api-Secret-Token`) is critical to ensure that external requests from Telegram cannot be forged or manipulated.
 
 ---
 
@@ -152,16 +152,16 @@ We conducted a best-practices quality review of all epics and stories against th
 ### Overall Readiness Status
 🟢 **READY (WITH RECOMMENDATIONS)**
 
-The planning artifacts have successfully adjusted to the **n8n + FastAPI Hybrid Architecture**. The traceability and requirement coverage are at a perfect **100%**, providing a clear path forward for local development.
+The planning artifacts have successfully adjusted to the **Native FastAPI Architecture**. The traceability and requirement coverage are at a perfect **100%**, providing a clear path forward for local development.
 
 ### Critical Issues Requiring Immediate Action
-* **Define n8n integration variables in `.env`:** Add environment placeholders for the shared webhook authentication token between n8n and FastAPI.
+* **Define Telegram integration variables in `.env`:** Add environment placeholders for the Telegram Bot API Secret Token.
 
 ### Recommended Next Steps
 
-1. **Introduce n8n Service to Container Stack:** Update the local container setup to spin up the n8n Community Edition alongside FastAPI and PostgreSQL in the environment.
-2. **Develop the Messaging Routing API:** Implement the secure `/api/v1/message` route in FastAPI to receive parsed payloads from n8n.
-3. **Draft the Initial n8n Ingestion Workflows:** Visual webhooks in n8n to connect Telegram/WhatsApp APIs and route events into our secure backend.
+1. **Container Stack:** Update the local container setup to spin up FastAPI and PostgreSQL in the environment.
+2. **Develop the Messaging Routing API:** Implement the secure `/api/v1/telegram/webhook` route in FastAPI to receive parsed payloads from Telegram.
+3. **Draft the Webhook Handlers:** Route events into our secure backend natively.
 
 ---
 

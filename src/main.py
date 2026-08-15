@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db
 from src.core.config import settings
-from src.api.routes.messages import router as messages_router
+from src.api.routes.telegram import router as telegram_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
 # Register routers
-app.include_router(messages_router, prefix="/api/v1")
+app.include_router(telegram_router, prefix="/api/v1")
 
 @app.get("/")
 async def root():

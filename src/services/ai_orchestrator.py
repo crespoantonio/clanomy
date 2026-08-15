@@ -12,6 +12,7 @@ from src.services.extraction_service import ExtractionService
 from src.db.session import engine
 from src.db.models import User, Transaction
 from src.core.encryption import EncryptionService
+from src.services.telegram_service import TelegramService
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ class AIOrchestrator:
                 session.rollback()
                 raise e
 
-    async def orchestrate(self, user_id: str, text: Optional[str], audio_url: Optional[str], chat_id: int):
+    async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int):
         start_time = time.time()
         status = "success"
         response_text = ""
@@ -60,8 +61,13 @@ class AIOrchestrator:
                 raise ValueError(f"Invalid user_id format: {user_id}")
 
             # 1. Process Audio if provided
-            if audio_url:
+            if audio_file_id:
                 try:
+                    telegram_service = TelegramService()
+                    audio_url = await telegram_service.get_file_url(audio_file_id)
+                    if not audio_url:
+                        raise ValueError(f"Could not resolve Telegram file_id: {audio_file_id}")
+                        
                     whisper_service = WhisperService()
                     text, _ = await whisper_service.transcribe(audio_url=audio_url)
                     if not text:
@@ -111,25 +117,12 @@ class AIOrchestrator:
             status = "error"
             response_text = "An unexpected error occurred while processing your request."
             
-        # 3. Callback to n8n
-        payload = {
-            "chat_id": chat_id,
-            "user_id": user_id,
-            "status": status,
-            "text": response_text,
-            "extracted_data": extracted_data
-        }
-        
+        # 3. Direct Reply via Telegram API
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    settings.N8N_CALLBACK_URL,
-                    json=payload,
-                    headers={"X-FamFin-Token": settings.MESSAGING_WEBHOOK_SECRET}
-                )
-                response.raise_for_status()
+            telegram_service = TelegramService()
+            await telegram_service.send_message(chat_id=chat_id, text=response_text)
         except Exception as e:
-            logger.error(f"Failed to send callback to n8n: {e}")
+            logger.error(f"Failed to send direct reply to Telegram: {e}")
             
         # 4. Log 3s Audit
         duration = time.time() - start_time

@@ -37,28 +37,12 @@ services:
       WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
       OLLAMA_MODEL: ${OLLAMA_MODEL}
-      N8N_CALLBACK_URL: ${N8N_CALLBACK_URL}
     volumes:
       - .:/app
       - whisper_model_cache:/root/.cache/huggingface
     depends_on:
       db:
         condition: service_healthy
-
-  n8n:
-    image: n8nio/n8n
-    container_name: famfin-n8n
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=https://e6b6-181-105-82-108.ngrok-free.app
-    volumes:
-      - n8n_data:/home/node/.n8n
-    depends_on:
-      - app
 
   ollama:
     image: ollama/ollama:latest
@@ -70,6 +54,5 @@ services:
 
 volumes:
   postgres_data:
-  n8n_data:
   ollama_data:
   whisper_model_cache:

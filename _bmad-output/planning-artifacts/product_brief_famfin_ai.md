@@ -32,12 +32,12 @@ FamFin AI is a messaging-based (Telegram/WhatsApp) SaaS that allows users to log
 
 ## 4. Technical Stack (The "Low-Cost/Local" Stack)
 - **Core API & DB:** Python (FastAPI) + SQLModel for secure AI processing, application-level field-encryption, and multi-tenant ledger.
-- **Integration & Messaging Gateway:** Self-hosted n8n (Community Edition) for Telegram and WhatsApp Cloud API webhook routing, binary audio downloading, and Notion mirroring.
+- **Integration & Messaging Gateway:** Native FastAPI endpoint for Telegram webhook routing and binary audio downloading. Python SDK for Notion mirroring.
 - **Database:** PostgreSQL (encrypted fields for PII).
 - **AI Models (Local/Ollama):** 
   - **LLM:** Ollama running Phi-3 or Llama 3.1 (Strict JSON Mode).
   - **STT:** Faster-Whisper (Tiny/Base model).
-- **Interface:** Telegram and WhatsApp via n8n integration gateway (MVP/Scale).
+- **Interface:** Telegram via native FastAPI webhook integration gateway.
 
 ## 5. Privacy & Security Invariants (Spec-Driven)
 - **GDPR Compliance:** Full adherence to EU data standards via Estonian entity.

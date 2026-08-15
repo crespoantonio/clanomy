@@ -9,10 +9,7 @@ This guide walks you through building, configuring, and testing the **FamFin-AI*
 ```
 [ Telegram User ] (Text or Voice)
        │
-       ▼
-   [ n8n ] (Telegram Trigger Workflow)
-       │  (Resolves Voice URL if audio / Extracts text)
-       ▼  POST http://app:8000/messages (Header: x-famfin-token)
+       ▼  POST /api/v1/telegram/webhook (Header: X-Telegram-Bot-Api-Secret-Token)
  [ FamFin API ] ── Immediate 200 OK (< 3s)
        │
        ├─► (Background Task)
@@ -21,11 +18,8 @@ This guide walks you through building, configuring, and testing the **FamFin-AI*
        │      ├─► [ Ollama - Llama3 ] (JSON extraction: Amount, Concept, Category)
        │      └─► [ PostgreSQL ] (AES-256 encrypted storage)
        │
-       ▼  POST http://n8n:5678/webhook/famfin-callback
-   [ n8n ] (Callback Workflow)
-       │
-       ▼  Telegram "Send Message"
-[ Telegram User ] ("Saved $12.50 for 'Lunch' under category 'Food'")
+       ▼  httpx.post("https://api.telegram.org/bot<TOKEN>/sendMessage")
+[ Telegram User ] ("Saved 12.50 USD for 'Lunch' under category 'Food'")
 ```
 
 ---
@@ -57,13 +51,13 @@ podman-compose --version
    - **Name:** e.g., `My FamFin Assistant`
    - **Username:** e.g., `my_famfin_test_bot` (must end in `bot`)
 5. BotFather will provide your **Telegram Bot Token** (e.g., `7123456789:AAF_xxxxxxx_xxxxxxx`).
-6. **Save this token** — you will use it in `.env` and n8n.
+6. **Save this token** — you will use it in `.env`.
 
 ---
 
 ## Step 2: Environment Configuration (`.env`)
 
-1. In the project root (`c:\Users\cresp\Documents\Projectos\FamFin-AI`), copy `.env.example` to `.env`:
+1. In the project root, copy `.env.example` to `.env`:
    ```powershell
    Copy-Item .env.example .env
    ```
@@ -101,20 +95,16 @@ podman-compose --version
    # Ollama Settings
    OLLAMA_BASE_URL=http://ollama:11434
    OLLAMA_MODEL=llama3
-
-   # Callback URL (n8n container endpoint)
-   N8N_CALLBACK_URL=http://n8n:5678/webhook/famfin-callback
    ```
 
 ---
 
 ## Step 3: Build & Start Containers with Podman
 
-1. Build and start all 4 services (`db`, `app`, `n8n`, `ollama`):
+1. Build and start the services (`db`, `app`, `ollama`):
    ```powershell
    podman-compose up -d --build
    ```
-   *(or `podman compose up -d --build`)*
 
 2. Verify all containers are running and healthy:
    ```powershell
@@ -123,12 +113,10 @@ podman-compose --version
    You should see:
    - `famfin-db` (Port `5433->5432`)
    - `famfin-app` (Port `8000->8000`)
-   - `famfin-n8n` (Port `5678->5678`)
    - `famfin-ollama` (Port `11434->11434`)
 
 3. Verify API Health:
    Open your browser and navigate to:
-   - **Interactive Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
    - **Health Check:** [http://localhost:8000/health](http://localhost:8000/health)
 
 ---
@@ -151,116 +139,22 @@ The Ollama container starts without downloaded weights. Pull `llama3` inside the
 
 ---
 
-## Step 5: n8n Workflow Setup (Telegram Inbound & Outbound)
+## Step 5: Telegram Webhook Setup (via ngrok)
 
-Open n8n in your browser at: **[http://localhost:5678](http://localhost:5678)**
+For Telegram to send messages to your local FastAPI backend, you must expose port `8000` to the internet.
 
-> **First Time in n8n:** Create your local admin user credentials when prompted.
+1. **Start ngrok:**
+   ```powershell
+   ngrok http 8000
+   ```
+2. Copy the `https` forwarding URL provided by ngrok (e.g., `https://abcdef1234.ngrok-free.app`).
 
-You will create **two workflows**:
-1. **Workflow 1: Telegram Inbound** (Receives text/audio from Telegram -> forwards to FamFin API)
-2. **Workflow 2: FamFin Callback** (Receives completed processing from FamFin API -> replies to Telegram)
-
----
-
-### 5.1 Telegram Inbound Workflow
-
-Create a new workflow named `FamFin Telegram Inbound`:
-
-#### Node 1: Telegram Trigger
-1. Add a **Telegram Trigger** node.
-2. Under **Credential to connect with**, click *Create New Credential*:
-   - Paste your `TELEGRAM_BOT_TOKEN`.
-   - Save the credential as `FamFin Telegram Bot`.
-3. Set **Updates**: `message`.
-4. Click **Listen for Test Event** to confirm connection.
-
-#### Node 2: Code / Function Node (Resolve Audio vs Text)
-Add a **Code** node (JavaScript) connected to the Telegram Trigger with the following code:
-```javascript
-const message = $json.message || {};
-const fromUser = message.from || {};
-const voice = message.voice;
-const botToken = "YOUR_TELEGRAM_BOT_TOKEN_HERE"; // Replace with your token
-
-let audioUrl = null;
-let text = message.text || null;
-
-// If voice note was received, resolve the Telegram file download URL
-if (voice && voice.file_id) {
-  // Telegram File ID is present
-  audioUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${voice.file_id}`;
-}
-
-return {
-  json: {
-    user: {
-      id: fromUser.id,
-      username: fromUser.username || null,
-      first_name: fromUser.first_name || null,
-      last_name: fromUser.last_name || null
-    },
-    message: {
-      message_id: message.message_id,
-      chat_id: message.chat ? message.chat.id : fromUser.id,
-      text: text,
-      voice_file_id: voice ? voice.file_id : null
-    }
-  }
-};
-```
-
-#### Node 3: Forward to FamFin API (HTTP Request Node)
-Add an **HTTP Request** node connected to Node 2:
-- **Method:** `POST`
-- **URL:** `http://app:8000/api/v1/messages`
-- **Authentication:** `None`
-- **Headers:**
-  - Name: `x-famfin-token`
-  - Value: `famfin_super_secret_webhook_token_123` *(matches `MESSAGING_WEBHOOK_SECRET` in `.env`)*
-- **Send Body:** `JSON`
-- **Body Parameters (Expression or JSON):**
-  ```json
-  {
-    "user": {{$json.user}},
-    "message": {
-      "message_id": {{$json.message.message_id}},
-      "chat_id": {{$json.message.chat_id}},
-      "text": {{$json.message.text}},
-      "audio_url": {{$json.message.audio_url}}
-    }
-  }
-  ```
-
-#### Node 4: Reply on `/start` Command (Optional If/Switch node)
-If the response from `http://app:8000/messages` returns `action: "reply"`, route to a **Telegram Node** ("Send Message"):
-- **Chat ID:** `{{$json.message.chat_id}}`
-- **Text:** `{{$json.text}}`
-
-Save and click **Activate Workflow** (toggle at top right).
-
----
-
-### 5.2 FamFin Callback Workflow (Async Replies to User)
-
-When the backend completes background transcription, extraction, and database persistence, it sends an async POST request to `N8N_CALLBACK_URL` (`http://n8n:5678/webhook/famfin-callback`).
-
-Create a second workflow named `FamFin Callback`:
-
-#### Node 1: Webhook Node
-1. Add a **Webhook** node.
-2. Set **HTTP Method:** `POST`.
-3. Set **Path:** `famfin-callback`.
-4. Set **Response Mode:** `When Last Node Finishes` (or `Immediate 200`).
-
-#### Node 2: Telegram Node ("Send Message")
-1. Connect the Webhook node to a **Telegram** node.
-2. **Resource:** `Message`.
-3. **Operation:** `Send Message`.
-4. **Chat ID:** `={{ $json.body.chat_id }}`
-5. **Text:** `={{ $json.body.text }}`
-
-Save and click **Activate Workflow**.
+3. **Register the Webhook with Telegram:**
+   Run the following `curl` command to link Telegram to your ngrok URL. Make sure to replace `<YOUR_BOT_TOKEN>`, `<YOUR_NGROK_URL>`, and `<YOUR_SECRET_TOKEN>`:
+   ```powershell
+   curl.exe -F "url=https://<YOUR_NGROK_URL>/api/v1/telegram/webhook" -F "secret_token=<YOUR_SECRET_TOKEN>" https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook
+   ```
+   *Note: `YOUR_SECRET_TOKEN` must perfectly match the `MESSAGING_WEBHOOK_SECRET` in your `.env` file.*
 
 ---
 
@@ -350,7 +244,6 @@ Verify that data was stored and encrypted using AES-256:
 |---|---|
 | View App Logs | `podman logs -f famfin-app` |
 | View Ollama Logs | `podman logs -f famfin-ollama` |
-| View n8n Logs | `podman logs -f famfin-n8n` |
 | Restart App Service | `podman restart famfin-app` |
 | Tear down containers | `podman-compose down` |
 | Rebuild all containers | `podman-compose up -d --build` |

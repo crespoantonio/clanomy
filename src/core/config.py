@@ -26,9 +26,7 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
     
-    # Callback
-    N8N_CALLBACK_URL: str = "http://localhost:5678/webhook/famfin-callback"
-    
+    # Callback (Removed n8n)    
     @field_validator("WHISPER_DEVICE")
     def validate_whisper_device(cls, v: str) -> str:
         allowed = {"cpu", "cuda", "auto"}
@@ -59,17 +57,6 @@ class Settings(BaseSettings):
             raise ValueError("OLLAMA_MODEL cannot be empty")
         return v.strip()
 
-    @field_validator("N8N_CALLBACK_URL")
-    def validate_n8n_callback_url(cls, v: str) -> str:
-        from urllib.parse import urlparse
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("N8N_CALLBACK_URL must start with http:// or https://")
-        parsed = urlparse(v)
-        if not parsed.netloc:
-            raise ValueError("N8N_CALLBACK_URL must contain a valid host")
-        return v
-
-    
     # Configuration
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 

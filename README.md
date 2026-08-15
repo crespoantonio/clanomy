@@ -23,13 +23,12 @@ python scripts/generate_key.py
 Copy the output into `ENCRYPTION_KEY` in your `.env`.
 
 ### 4. Launch the Application
-Start the containerized environment (FastAPI + PostgreSQL + n8n + Ollama):
+Start the containerized environment (FastAPI + PostgreSQL + Ollama):
 ```bash
 podman compose up -d --build
 ```
 
-- **FastAPI API:** [http://localhost:8000](http://localhost:8000)
-- **n8n Workflow Engine:** [http://localhost:5678](http://localhost:5678)
+- **FastAPI Interactive Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Ollama AI Inference:** [http://localhost:11434](http://localhost:11434)
 
 ### 5. Download AI Models
@@ -42,20 +41,24 @@ podman-compose exec ollama ollama pull llama3
 
 ---
 
-## 🔗 Testing & n8n Webhook Integration
+## 🔗 Testing & Telegram Webhook Integration
 
-### Using Postman
-You can test the entire pipeline locally without connecting Telegram/WhatsApp:
-1. Import the `FamFin_Postman_Collection.json` file into Postman.
-2. Ensure `podman-compose up -d` is running.
-3. Use the **1. User Registration (/start)** request, followed by the text or audio expense endpoints.
+The architecture natively integrates with the Telegram Bot API via FastAPI `BackgroundTasks`.
 
-### Connecting n8n
-To connect n8n with the FastAPI backend:
-1. Configure an n8n HTTP Request node to send parsed Telegram/WhatsApp payloads to `POST http://app:8000/api/v1/messages`.
-2. Include the authentication header:
-   * **Header Name:** `X-FamFin-Token`
-   * **Header Value:** The secret value you configured for `MESSAGING_WEBHOOK_SECRET` in your `.env` file.
+### Connecting Telegram
+
+To connect Telegram with the FastAPI backend:
+
+1. Expose your local port 8000 to the internet (e.g., using `ngrok`):
+   ```bash
+   ngrok http 8000
+   ```
+2. Register your webhook URL directly with Telegram:
+   ```bash
+   curl -F "url=https://<your-ngrok-url>/api/v1/telegram/webhook" -F "secret_token=your_messaging_secret_token_here" https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook
+   ```
+3. Send a message to your Telegram bot.
+4. Watch the backend terminal logs to see the "3-second rule" async processing, transcription, Ollama extraction, and encryption!
 
 ---
 

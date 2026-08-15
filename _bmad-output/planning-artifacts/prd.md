@@ -30,7 +30,7 @@ workflowType: prd
 **Date:** 2026-05-08
 
 ## 1. Executive Summary
-FamFin AI is an "invisible" financial companion designed to solve the chronic problem of expense tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (orchestrated via self-hosted n8n) and leveraging local AI (Ollama and Whisper), FamFin AI enables zero-friction, privacy-centric expense logging via natural language audio and text. Users manage their finances through conversational interaction, receiving instant text confirmations and querying their spending history without ever leaving their primary messaging app.
+FamFin AI is an "invisible" financial companion designed to solve the chronic problem of expense tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper), FamFin AI enables zero-friction, privacy-centric expense logging via natural language audio and text. Users manage their finances through conversational interaction, receiving instant text confirmations and querying their spending history without ever leaving their primary messaging app.
 
 ### Core Differentiator
 The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, FamFin AI allows users to record expenses in seconds via voice notes processed locally, ensuring sensitive financial data never leaves the user's controlled infrastructure.
@@ -72,7 +72,7 @@ In a noisy environment, the AI fails to extract an amount. The bot conversationa
 ## 4. Phased Development Roadmap
 
 ### Phase 1: MVP (V1)
-*   **Messaging Gateway (n8n):** Telegram and WhatsApp voice and text note handling routed via self-hosted n8n.
+*   **Messaging Gateway:** Telegram voice and text note handling routed via native FastAPI webhook endpoint.
 *   **Secure Core API (FastAPI):** Application-level encryption and multi-tenant ledger management.
 *   **Local AI Pipeline:** Faster-Whisper (STT) + Ollama (JSON Extraction) integrated with FastAPI.
 *   **"ASK" Functionality:** Conversational queries for weekly/monthly totals.
@@ -80,7 +80,7 @@ In a noisy environment, the AI fails to extract an amount. The bot conversationa
 *   **Infrastructure:** Hosted on personal hardware via Podman Compose (Beta limit: first 10 users).
 
 ### Phase 2: Growth (V2)
-*   **Notion Mirror:** Premium integration to push logs to user Notion databases using n8n workflows.
+*   **Notion Mirror:** Premium integration to push logs to user Notion databases using the official Python SDK.
 *   **Family Groups:** Multi-user sync and shared ledgers (Flat permission model).
 *   **Proactive Insights:** Behavioral nudges and spending trend alerts.
 *   **Infrastructure Scaling:** Migration to a secure, containerized HA-VPS.
@@ -108,7 +108,7 @@ In a noisy environment, the AI fails to extract an amount. The bot conversationa
 ### 5.3 Family & Mirroring (Phase 2)
 *   **FR10:** Users can establish shared Family Groups with invited members.
 *   **FR11:** All members of a Family Group can view and contribute to a shared ledger.
-*   **FR12:** Premium users can synchronize local records to a Notion database via the n8n integration gateway.
+*   **FR12:** Premium users can synchronize local records to a Notion database via a native Python background task.
 *   **FR13:** Users can manually trigger a synchronization to the Notion mirror.
 
 ### 5.4 Privacy & Data Rights

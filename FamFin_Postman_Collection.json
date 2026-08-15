@@ -6,6 +6,22 @@
   },
   "item": [
     {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/health",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      }
+    },
+    {
       "name": "1. User Registration (/start)",
       "request": {
         "method": "POST",
@@ -15,13 +31,13 @@
             "value": "application/json"
           },
           {
-            "key": "x-famfin-token",
+            "key": "X-Telegram-Bot-Api-Secret-Token",
             "value": "{{WEBHOOK_SECRET}}"
           }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"user\": {\n    \"id\": 1001,\n    \"username\": \"testuser\",\n    \"first_name\": \"Tony\",\n    \"last_name\": \"Stark\"\n  },\n  \"message\": {\n    \"message_id\": 1,\n    \"chat_id\": 1001,\n    \"text\": \"/start\"\n  }\n}",
+          "raw": "{\n  \"message\": {\n    \"chat\": {\"id\": 1001, \"type\": \"private\"},\n    \"from\": {\n      \"id\": 1001,\n      \"username\": \"testuser\",\n      \"first_name\": \"Tony\",\n      \"last_name\": \"Stark\"\n    },\n    \"text\": \"/start\"\n  }\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -29,14 +45,15 @@
           }
         },
         "url": {
-          "raw": "{{BASE_URL}}/api/v1/messages",
+          "raw": "{{BASE_URL}}/api/v1/telegram/webhook",
           "host": [
             "{{BASE_URL}}"
           ],
           "path": [
             "api",
             "v1",
-            "messages"
+            "telegram",
+            "webhook"
           ]
         }
       }
@@ -51,13 +68,13 @@
             "value": "application/json"
           },
           {
-            "key": "x-famfin-token",
+            "key": "X-Telegram-Bot-Api-Secret-Token",
             "value": "{{WEBHOOK_SECRET}}"
           }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"user\": {\n    \"id\": 1001,\n    \"username\": \"testuser\",\n    \"first_name\": \"Tony\",\n    \"last_name\": \"Stark\"\n  },\n  \"message\": {\n    \"message_id\": 2,\n    \"chat_id\": 1001,\n    \"text\": \"Bought a large coffee and a bagel for 8.50 at Starbucks.\"\n  }\n}",
+          "raw": "{\n  \"message\": {\n    \"chat\": {\"id\": 1001, \"type\": \"private\"},\n    \"from\": {\n      \"id\": 1001,\n      \"username\": \"testuser\",\n      \"first_name\": \"Tony\",\n      \"last_name\": \"Stark\"\n    },\n    \"text\": \"Bought a large coffee and a bagel for 8.50 at Starbucks.\"\n  }\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -65,20 +82,21 @@
           }
         },
         "url": {
-          "raw": "{{BASE_URL}}/api/v1/messages",
+          "raw": "{{BASE_URL}}/api/v1/telegram/webhook",
           "host": [
             "{{BASE_URL}}"
           ],
           "path": [
             "api",
             "v1",
-            "messages"
+            "telegram",
+            "webhook"
           ]
         }
       }
     },
     {
-      "name": "3. Log Audio Expense",
+      "name": "3. Log Audio Expense (Voice Note)",
       "request": {
         "method": "POST",
         "header": [
@@ -87,13 +105,13 @@
             "value": "application/json"
           },
           {
-            "key": "x-famfin-token",
+            "key": "X-Telegram-Bot-Api-Secret-Token",
             "value": "{{WEBHOOK_SECRET}}"
           }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"user\": {\n    \"id\": 1001,\n    \"username\": \"testuser\",\n    \"first_name\": \"Tony\",\n    \"last_name\": \"Stark\"\n  },\n  \"message\": {\n    \"message_id\": 3,\n    \"chat_id\": 1001,\n    \"text\": \"\",\n    \"audio_url\": \"https://example-audio-url.com/sample.ogg\"\n  }\n}",
+          "raw": "{\n  \"message\": {\n    \"chat\": {\"id\": 1001, \"type\": \"private\"},\n    \"from\": {\n      \"id\": 1001,\n      \"username\": \"testuser\",\n      \"first_name\": \"Tony\",\n      \"last_name\": \"Stark\"\n    },\n    \"voice\": {\n      \"file_id\": \"AwADBAADbXXXXXXXXXXX\"\n    }\n  }\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -101,14 +119,15 @@
           }
         },
         "url": {
-          "raw": "{{BASE_URL}}/api/v1/messages",
+          "raw": "{{BASE_URL}}/api/v1/telegram/webhook",
           "host": [
             "{{BASE_URL}}"
           ],
           "path": [
             "api",
             "v1",
-            "messages"
+            "telegram",
+            "webhook"
           ]
         }
       }

@@ -246,3 +246,114 @@ def test_get_category_aggregation(mock_session, query_service):
     asyncio.run(_test())
 
 
+
+def test_build_summary_prompt_context():
+    from src.services.query_service import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown
+    intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
+    agg = TimeAggregation(timeframe="this_week", total_amount=45.0, primary_currency="USD", currency_totals={"USD": 45.0}, transaction_count=2, average_per_transaction=22.5, daily_breakdown={})
+    cb = CategoryBreakdown(timeframe="this_week", total_spending=45.0, primary_currency="USD", categories={}, top_category="Food/Drink", top_category_amount=45.0)
+    qr = QueryResult(intent=intent, total_count=2, aggregation=agg, category_breakdown=cb)
+    
+    ctx = _build_summary_prompt_context(qr, user_name="Tony")
+    assert "User: Tony" in ctx
+    assert "this_week" in ctx
+    assert "45.0" in ctx
+    assert "Food/Drink" in ctx
+
+def test_generate_fallback_summary():
+    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown, PeriodComparison
+    intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
+    
+    # Standard summary with comparison diff > 0
+    agg = TimeAggregation(
+        timeframe="this_week", total_amount=45.0, primary_currency="USD",
+        currency_totals={"USD": 45.0}, transaction_count=2, average_per_transaction=22.5, daily_breakdown={},
+        comparison=PeriodComparison(previous_timeframe="last_week", previous_total_amount=50.0, previous_transaction_count=2, difference_amount=-5.0, percentage_change=-10.0)
+    )
+    cb = CategoryBreakdown(timeframe="this_week", total_spending=45.0, primary_currency="USD", categories={}, top_category="Food/Drink", top_category_amount=45.0)
+    qr = QueryResult(intent=intent, total_count=2, aggregation=agg, category_breakdown=cb)
+    
+    res = generate_fallback_summary(qr, user_name="Tony")
+    assert "45.00 USD" in res
+    assert "Food/Drink" in res
+    assert "less than last week" in res
+
+    # Comparison diff == 0.0
+    agg.comparison = PeriodComparison(previous_timeframe="last_week", previous_total_amount=45.0, previous_transaction_count=2, difference_amount=0.0, percentage_change=0.0)
+    res_zero_diff = generate_fallback_summary(qr, user_name="Tony")
+    assert "exact same total as last week" in res_zero_diff
+
+    # Zero total amount but transactions exist (total_count > 0)
+    agg_zero_val = TimeAggregation(timeframe="this_week", total_amount=0.0, primary_currency="USD", currency_totals={"USD": 0.0}, transaction_count=1, average_per_transaction=0.0, daily_breakdown={})
+    qr_zero_val = QueryResult(intent=intent, total_count=1, aggregation=agg_zero_val)
+    res_zero_val = generate_fallback_summary(qr_zero_val, user_name="Tony")
+    assert "0.00 USD across 1 transactions" in res_zero_val
+
+@patch("src.services.query_service.Session")
+def test_generate_summary_success(mock_session, query_service):
+    async def _test():
+        from src.services.query_service import QueryResult, ParsedQueryIntent
+        intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
+        qr = QueryResult(intent=intent)
+        
+        mock_chat = AsyncMock()
+        mock_chat.return_value.message.content = "This is a mocked summary response."
+        query_service.client.chat = mock_chat
+        
+        summary = await query_service.generate_summary(qr, user_name="Tony", use_llm=True)
+        assert summary == "This is a mocked summary response."
+    import asyncio
+    asyncio.run(_test())
+
+@patch("src.services.query_service.Session")
+def test_generate_summary_fallback(mock_session, query_service):
+    async def _test():
+        from src.services.query_service import QueryResult, ParsedQueryIntent
+        intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
+        qr = QueryResult(intent=intent)
+        
+        mock_chat = AsyncMock(side_effect=Exception("Ollama error"))
+        query_service.client.chat = mock_chat
+        
+        summary = await query_service.generate_summary(qr, user_name="Tony", use_llm=True)
+        assert "Tony" in summary
+    import asyncio
+    asyncio.run(_test())
+
+@patch("src.services.query_service.Session")
+def test_get_spending_summary(mock_session, query_service):
+    async def _test():
+        mock_session_inst = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_session_inst
+        mock_session_inst.exec.return_value.all.return_value = []
+        
+        mock_chat = AsyncMock()
+        mock_chat.return_value.message.content = "Mocked spending summary."
+        query_service.client.chat = mock_chat
+        
+        res = await query_service.get_spending_summary(uuid4(), timeframe="this_week", user_name="Tony")
+        assert res == "Mocked spending summary."
+    import asyncio
+    asyncio.run(_test())
+
+@patch("src.services.query_service.Session")
+def test_process_query_with_summary(mock_session, query_service):
+    async def _test():
+        mock_session_inst = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_session_inst
+        mock_session_inst.exec.return_value.all.return_value = []
+        
+        mock_chat = AsyncMock()
+        # First call is for intent parsing
+        mock_chat.return_value.message.content = '{"intent": "query_spending", "timeframe": "today", "category": "Food/Drink"}'
+        query_service.client.chat = mock_chat
+        
+        # We need to mock generate_summary because the intent parser and summary generator use the same ollama client mock.
+        # Alternatively, we can patch generate_summary.
+        with patch.object(query_service, 'generate_summary', return_value="Summary from process_query"):
+            res = await query_service.process_query("What did I spend today?", uuid4(), user_name="Tony", generate_summary=True)
+            assert res.summary == "Summary from process_query"
+    import asyncio
+    asyncio.run(_test())
+
+

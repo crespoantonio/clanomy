@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-08-16 13:17:00
+last_updated: 2026-08-16 13:50:00
 project: FamFin-AI
 tracking_system: file-system
 story_location: {implementation_artifacts}
@@ -59,7 +59,7 @@ development_status:
   3-1-natural-language-query-processor-rag-lite: done
   3-2-time-based-aggregations-weekly-monthly-totals: done
   3-3-category-based-spending-filters: done
-  3-4-friendly-conversational-summary-generator: backlog
+  3-4-friendly-conversational-summary-generator: done
   epic-3-retrospective: optional
 
   epic-4: backlog

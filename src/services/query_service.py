@@ -127,6 +127,7 @@ class QueryResult(BaseModel):
     total_count: int = 0
     aggregation: Optional[TimeAggregation] = None
     category_breakdown: Optional[CategoryBreakdown] = None
+    summary: Optional[str] = None
 
 def _parse_amount_string(decrypted_str: str) -> tuple[float, str]:
     parts = decrypted_str.strip().split()
@@ -316,6 +317,78 @@ def compute_period_comparison(
         percentage_change=round(pct_change, 2) if pct_change is not None else None
     )
 
+def _build_summary_prompt_context(query_result: QueryResult, user_name: Optional[str] = None) -> str:
+    ctx = []
+    if user_name:
+        ctx.append(f"User: {user_name}")
+    ctx.append(f"Timeframe: {query_result.intent.timeframe}")
+    if query_result.aggregation:
+        agg = query_result.aggregation
+        ctx.append(f"Total spending: {agg.total_amount:.2f} {agg.primary_currency}")
+        if len(agg.currency_totals) > 1:
+            multi_curr = ", ".join(f"{v:.2f} {k}" for k, v in agg.currency_totals.items())
+            ctx.append(f"Currencies involved: {multi_curr}")
+        ctx.append(f"Transaction count: {agg.transaction_count}")
+        ctx.append(f"Average per transaction: {agg.average_per_transaction:.2f} {agg.primary_currency}")
+        
+        if agg.comparison:
+            comp = agg.comparison
+            ctx.append(f"Comparison vs {comp.previous_timeframe}:")
+            ctx.append(f"- Previous total: {comp.previous_total_amount:.2f} {agg.primary_currency}")
+            ctx.append(f"- Difference: {comp.difference_amount:.2f} {agg.primary_currency}")
+            if comp.percentage_change is not None:
+                dir_str = "increase" if comp.percentage_change > 0 else "decrease" if comp.percentage_change < 0 else "no change"
+                ctx.append(f"- Change: {abs(comp.percentage_change):.2f}% {dir_str}")
+
+    if query_result.category_breakdown and query_result.category_breakdown.top_category:
+        cb = query_result.category_breakdown
+        top_cat = cb.top_category
+        top_amt = cb.top_category_amount
+        pct = cb.categories[top_cat].percentage_of_total if top_cat in cb.categories else None
+        pct_str = f" ({pct:.1f}% of total)" if pct is not None else ""
+        ctx.append(f"Top spending category: {top_cat}: {top_amt:.2f} {cb.primary_currency}{pct_str}")
+
+    if query_result.transactions:
+        samples = []
+        for tx in query_result.transactions[:5]: # Take up to 5 concepts
+            samples.append(f"{tx.concept} ({tx.amount:.2f} {tx.currency})")
+        ctx.append("Sample transactions: " + ", ".join(samples))
+        
+    return "\n".join(ctx)
+
+def generate_fallback_summary(query_result: QueryResult, user_name: Optional[str] = None) -> str:
+    greeting = f"Hi {user_name}! " if user_name else ""
+    tf = query_result.intent.timeframe.replace('_', ' ')
+    
+    if query_result.total_count == 0:
+        curr = query_result.aggregation.primary_currency if query_result.aggregation else "USD"
+        return f"{greeting}You haven't logged any expenses for {tf} yet (Total: 0.00 {curr})."
+        
+    if not query_result.aggregation:
+        return f"{greeting}Here are your results for {tf}."
+        
+    agg = query_result.aggregation
+    total_str = f"{agg.total_amount:.2f} {agg.primary_currency}"
+    
+    if len(agg.currency_totals) > 1:
+        total_str += " (" + ", ".join(f"{v:.2f} {k}" for k, v in agg.currency_totals.items() if k != agg.primary_currency) + ")"
+        
+    top_cat_str = ""
+    if query_result.category_breakdown and query_result.category_breakdown.top_category:
+        cb = query_result.category_breakdown
+        top_cat_str = f" (Top category: {cb.top_category} at {cb.top_category_amount:.2f} {cb.primary_currency})"
+        
+    comp_str = ""
+    if agg.comparison:
+        comp = agg.comparison
+        if comp.difference_amount == 0.0:
+            comp_str = f" That's the exact same total as {comp.previous_timeframe.replace('_', ' ')} ({comp.previous_total_amount:.2f} {agg.primary_currency})!"
+        elif comp.percentage_change is not None:
+            more_less = "more" if comp.difference_amount > 0 else "less"
+            comp_str = f" That's {abs(comp.difference_amount):.2f} {agg.primary_currency} ({abs(comp.percentage_change):.2f}%) {more_less} than {comp.previous_timeframe.replace('_', ' ')} ({comp.previous_total_amount:.2f} {agg.primary_currency})!"
+            
+    return f"{greeting}You've spent {total_str} across {agg.transaction_count} transactions this {tf}{top_cat_str}.{comp_str}"
+
 class QueryService:
     _instance: Optional['QueryService'] = None
     _lock = threading.Lock()
@@ -427,7 +500,7 @@ class QueryService:
                 results.append(decrypted)
             return results
 
-    async def process_query(self, text: str, family_id: UUID, reference_time: Optional[datetime] = None) -> QueryResult:
+    async def process_query(self, text: str, family_id: UUID, user_name: Optional[str] = None, generate_summary: bool = True, reference_time: Optional[datetime] = None) -> QueryResult:
         if not text or not text.strip():
             raise ValueError("Query string cannot be empty")
         
@@ -512,7 +585,7 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
         logger.info(f"[3s Audit] Aggregation query took {elapsed:.2f} seconds (timeframe: {intent.timeframe}, family_id: {family_id})")
         logger.info(f"[3s Audit] Category query took {elapsed:.2f} seconds (category: {intent.category}, timeframe: {intent.timeframe}, family_id: {family_id})")
 
-        return QueryResult(
+        result = QueryResult(
             intent=intent,
             resolved_start_time=start_time,
             resolved_end_time=end_time,
@@ -521,6 +594,114 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             aggregation=aggregation,
             category_breakdown=category_breakdown
         )
+        
+        if generate_summary:
+            result.summary = await self.generate_summary(result, user_name=user_name, use_llm=True)
+            
+        return result
+
+    async def generate_summary(self, query_result: QueryResult, user_name: Optional[str] = None, use_llm: bool = True) -> str:
+        if not use_llm:
+            return generate_fallback_summary(query_result, user_name)
+            
+        start_exec_time = time.time()
+        
+        system_prompt = """You are a warm, supportive, empathetic, and encouraging personal financial assistant.
+Your job is to generate a conversational summary of the user's spending based EXACTLY on the provided factual context.
+Use appropriate, tasteful emojis (e.g., ☕ for food/drink, 🚗 for transport, 📉/📈 for comparison, 🎉 for under budget, 💡 for insights).
+STRICT FACTUAL FIDELITY: You must strictly reflect ONLY the numbers, categories, dates, and concepts provided in the prompt context. NEVER invent dollar amounts, merchants, or comparison percentages.
+Conciseness: Keep the summary between 2 and 4 sentences.
+If total spending is 0, provide a friendly, reassuring message."""
+
+        context_data = _build_summary_prompt_context(query_result, user_name)
+        user_prompt = f"Please summarize the following spending data:\n{context_data}"
+        
+        llm_used = False
+        summary = ""
+        
+        try:
+            response = await asyncio.wait_for(
+                self.client.chat(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                ),
+                timeout=30.0
+            )
+            summary = response.message.content.strip() if response.message and response.message.content else ""
+            if summary:
+                llm_used = True
+        except Exception as e:
+            logger.warning(f"Ollama summary generation failed or timed out: {e}")
+            
+        if not summary:
+            summary = generate_fallback_summary(query_result, user_name)
+            
+        elapsed = time.time() - start_exec_time
+        logger.info(f"[3s Audit] Conversational summary generation took {elapsed:.2f} seconds (llm_used: {llm_used})")
+        
+        return summary
+        
+    async def get_spending_summary(self, family_id: UUID, timeframe: str = "this_month", category: Optional[str] = None, user_name: Optional[str] = None, reference_time: Optional[datetime] = None) -> str:
+        intent = ParsedQueryIntent(
+            intent="query",
+            timeframe=timeframe,
+            category=category
+        )
+        
+        ref_time = reference_time or datetime.now(timezone.utc)
+        start_time, end_time = self._resolve_date_range(intent.timeframe, intent.start_date, intent.end_date, ref_time)
+        
+        transactions = await asyncio.to_thread(
+            self._fetch_and_decrypt_transactions,
+            family_id, start_time, end_time, intent.category, intent.concept_keyword
+        )
+        
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe=intent.timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=settings.DEFAULT_CURRENCY,
+            calculate_daily=True
+        )
+
+        prev_tf, prev_start, prev_end = _resolve_comparison_timeframe(intent.timeframe, ref_time)
+        if prev_tf:
+            prev_txs = await asyncio.to_thread(
+                self._fetch_and_decrypt_transactions,
+                family_id, prev_start, prev_end, intent.category, intent.concept_keyword
+            )
+            aggregation.comparison = compute_period_comparison(
+                current_aggregation=aggregation,
+                previous_transactions=prev_txs,
+                previous_timeframe=prev_tf,
+                prev_start=prev_start,
+                prev_end=prev_end
+            )
+
+        category_breakdown = aggregate_by_category(
+            transactions=transactions,
+            timeframe=intent.timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=settings.DEFAULT_CURRENCY,
+            overall_total=aggregation.total_amount
+        )
+        
+        qr = QueryResult(
+            intent=intent,
+            resolved_start_time=start_time,
+            resolved_end_time=end_time,
+            transactions=transactions,
+            total_count=len(transactions),
+            aggregation=aggregation,
+            category_breakdown=category_breakdown
+        )
+        
+        return await self.generate_summary(qr, user_name=user_name, use_llm=True)
 
     async def get_time_aggregation(
         self, family_id: UUID, timeframe: str = "this_month", 

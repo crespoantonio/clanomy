@@ -211,6 +211,60 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ---
 
+### 🧪 Test 4: Time-Based Aggregation Queries
+1. Send a text message to your bot asking about your spending:
+   ```text
+   How much did I spend this week?
+   ```
+2. Check backend logs:
+   ```powershell
+   podman logs -f famfin-app
+   ```
+   You will see the `[3s Audit]` logs for the query:
+   ```text
+   INFO: [3s Audit] Aggregation query took 0.02 seconds (timeframe: this_week, family_id: ...)
+   INFO: [3s Audit] Conversational summary generation took 1.24 seconds (llm_used: True)
+   ```
+3. **Expected Output in Telegram:**
+   Bot replies with a friendly conversational summary:
+   > *"Hi [Name]! You've spent 69.98 USD across 2 transactions this week. Your top spending category was groceries at Walmart!"*
+
+---
+
+### 🧪 Test 5: Category-Filtered Queries
+1. Send a query specifically targeting a category or alias:
+   ```text
+   What have I spent on groceries this month?
+   ```
+2. **Expected Output in Telegram:**
+   Bot filters down to the `Food/Drink` category (resolving the "groceries" alias) and replies:
+   > *"You've spent 45.50 USD on Food/Drink this month. This was from your transaction at Walmart."*
+
+---
+
+### 🧪 Test 6: Period-Over-Period Comparison Queries
+1. Ask the bot to compare spending between periods:
+   ```text
+   Compare my spending this week to last week
+   ```
+2. **Expected Output in Telegram:**
+   Bot fetches the current week's total and compares it to last week's total, calculating the percentage difference:
+   > *"You've spent 69.98 USD across 2 transactions this week. That's 15.30 USD (17.9%) less than last week (85.28 USD)!"*
+
+---
+
+### 🧪 Test 7: Zero-Spending Fallback Response
+1. Ask the bot for a timeframe where you have not logged any expenses:
+   ```text
+   How much did I spend yesterday?
+   ```
+   *(Assuming no expenses were logged for yesterday)*
+2. **Expected Output in Telegram:**
+   Bot responds with a warm, encouraging zero-spending message:
+   > *"You haven't logged any expenses for yesterday yet! You're sitting pretty at 0.00 USD."*
+
+---
+
 ## Step 7: Database & Encryption Verification
 
 Verify that data was stored and encrypted using AES-256:

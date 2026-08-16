@@ -99,6 +99,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
    MESSAGING_WEBHOOK_SECRET=your_super_secret_webhook_token
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token_from_botfather
    GROQ_API_KEY=gsk_your_groq_key_here
+   DEFAULT_CURRENCY=USD  # Optional: Primary currency code (defaults to USD)
    ```
 6. Click **Deploy Web Service**. Render will give you a public HTTPS URL (e.g. `https://famfin-ai.onrender.com`).
 

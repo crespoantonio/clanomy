@@ -20,6 +20,41 @@ logger = logging.getLogger(__name__)
 class QueryProcessingError(Exception):
     pass
 
+def resolve_category_alias(input_category: Optional[str]) -> Optional[str]:
+    if not input_category or not isinstance(input_category, str) or not input_category.strip():
+        return None
+    
+    raw_cleaned = input_category.strip().lower()
+    cleaned = "/".join(part.strip() for part in raw_cleaned.split("/"))
+    
+    aliases = {
+        "food/drink": ["groceries", "grocery", "food", "drink", "drinks", "dining", "restaurant", "restaurants", "coffee", "cafe", "supermarket", "lunch", "dinner", "breakfast", "snacks", "bar", "pub", "takeout", "delivery"],
+        "transport": ["transport", "transportation", "uber", "taxi", "cab", "gas", "fuel", "petrol", "bus", "train", "subway", "metro", "transit", "parking", "toll", "flight", "flights", "airline"],
+        "rent/bills": ["rent", "bills", "utilities", "utility", "electricity", "electric", "water", "gas bill", "power", "internet", "wifi", "phone", "mobile", "mortgage", "insurance", "subscription", "subscriptions"],
+        "shopping": ["shopping", "clothes", "clothing", "apparel", "shoes", "electronics", "gadgets", "hardware", "tools", "amazon", "books", "home", "furniture"],
+        "leisure": ["leisure", "entertainment", "movies", "cinema", "games", "gaming", "concerts", "hobby", "hobbies", "sports", "gym", "fitness", "vacation", "travel", "clubbing", "party"],
+        "other": ["other", "misc", "miscellaneous", "uncategorized", "fees", "bank fees", "donations", "gifts"]
+    }
+    
+    canonical_mapping = {
+        "food/drink": "Food/Drink",
+        "transport": "Transport",
+        "rent/bills": "Rent/Bills",
+        "shopping": "Shopping",
+        "leisure": "Leisure",
+        "other": "Other"
+    }
+    
+    if cleaned in canonical_mapping:
+        return canonical_mapping[cleaned]
+        
+    for canonical, alias_list in aliases.items():
+        if cleaned in alias_list:
+            return canonical_mapping[canonical]
+            
+    return "Other"
+
+
 class ParsedQueryIntent(BaseModel):
     intent: str
     timeframe: str
@@ -31,17 +66,7 @@ class ParsedQueryIntent(BaseModel):
     @field_validator('category')
     @classmethod
     def normalize_category(cls, v: Optional[str]) -> Optional[str]:
-        if not v or not isinstance(v, str) or not v.strip():
-            return None
-        valid_categories = {
-            "Food/Drink", "Transport", "Rent/Bills", 
-            "Shopping", "Leisure", "Other"
-        }
-        cleaned = v.strip()
-        lower_mapping = {cat.lower(): cat for cat in valid_categories}
-        if cleaned.lower() in lower_mapping:
-            return lower_mapping[cleaned.lower()]
-        return "Other"
+        return resolve_category_alias(v)
 
 class DecryptedTransaction(BaseModel):
     id: UUID
@@ -62,6 +87,25 @@ class PeriodComparison(BaseModel):
     difference_amount: float
     percentage_change: Optional[float] = None
 
+class CategorySpending(BaseModel):
+    category: str
+    total_amount: float
+    primary_currency: str = "USD"
+    currency_totals: Dict[str, float]
+    transaction_count: int
+    percentage_of_total: Optional[float] = None
+    average_per_transaction: float
+
+class CategoryBreakdown(BaseModel):
+    timeframe: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    total_spending: float
+    primary_currency: str = "USD"
+    categories: Dict[str, CategorySpending]
+    top_category: Optional[str] = None
+    top_category_amount: Optional[float] = None
+
 class TimeAggregation(BaseModel):
     timeframe: str
     start_time: Optional[datetime] = None
@@ -73,6 +117,7 @@ class TimeAggregation(BaseModel):
     average_per_transaction: float
     daily_breakdown: Dict[str, float]
     comparison: Optional[PeriodComparison] = None
+    category_breakdown: Dict[str, float] = {}
 
 class QueryResult(BaseModel):
     intent: ParsedQueryIntent
@@ -81,6 +126,7 @@ class QueryResult(BaseModel):
     transactions: List[DecryptedTransaction] = []
     total_count: int = 0
     aggregation: Optional[TimeAggregation] = None
+    category_breakdown: Optional[CategoryBreakdown] = None
 
 def _parse_amount_string(decrypted_str: str) -> tuple[float, str]:
     parts = decrypted_str.strip().split()
@@ -111,11 +157,16 @@ def aggregate_transactions(
         effective_currency = next(iter(currency_totals))
 
     daily_breakdown: Dict[str, float] = {}
+    category_breakdown: Dict[str, float] = {}
     if calculate_daily:
         for tx in transactions:
             if tx.currency == effective_currency:
                 date_str = tx.timestamp.strftime("%Y-%m-%d")
                 daily_breakdown[date_str] = daily_breakdown.get(date_str, 0.0) + tx.amount
+                
+    for tx in transactions:
+        if tx.currency == effective_currency:
+            category_breakdown[tx.category] = category_breakdown.get(tx.category, 0.0) + tx.amount
 
     total_amount = currency_totals.get(effective_currency, 0.0)
     tx_count = len(transactions)
@@ -130,7 +181,83 @@ def aggregate_transactions(
         currency_totals={k: round(v, 2) for k, v in currency_totals.items()},
         transaction_count=tx_count,
         average_per_transaction=round(avg, 2),
-        daily_breakdown={k: round(v, 2) for k, v in daily_breakdown.items()}
+        daily_breakdown={k: round(v, 2) for k, v in daily_breakdown.items()},
+        category_breakdown={k: round(v, 2) for k, v in category_breakdown.items()}
+    )
+
+def aggregate_by_category(
+    transactions: List[DecryptedTransaction],
+    timeframe: str = "all_time",
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    primary_currency: str = "USD",
+    overall_total: Optional[float] = None
+) -> CategoryBreakdown:
+    categories_dict: Dict[str, CategorySpending] = {}
+    
+    currency_totals_all: Dict[str, float] = {}
+    for tx in transactions:
+        currency_totals_all[tx.currency] = currency_totals_all.get(tx.currency, 0.0) + tx.amount
+
+    effective_currency = primary_currency
+    if primary_currency not in currency_totals_all and len(currency_totals_all) == 1:
+        effective_currency = next(iter(currency_totals_all))
+
+    if overall_total is None:
+        overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
+        
+    for tx in transactions:
+        cat = tx.category
+        if cat not in categories_dict:
+            categories_dict[cat] = CategorySpending(
+                category=cat,
+                total_amount=0.0,
+                primary_currency=effective_currency,
+                currency_totals={},
+                transaction_count=0,
+                percentage_of_total=None,
+                average_per_transaction=0.0
+            )
+            
+        c = categories_dict[cat]
+        c.currency_totals[tx.currency] = c.currency_totals.get(tx.currency, 0.0) + tx.amount
+        if tx.currency == effective_currency:
+            c.total_amount += tx.amount
+        c.transaction_count += 1
+        
+    for cat, c in categories_dict.items():
+        if overall_total > 0:
+            c.percentage_of_total = round((c.total_amount / overall_total) * 100, 2)
+        else:
+            c.percentage_of_total = None
+            
+        if c.transaction_count > 0:
+            c.average_per_transaction = round(c.total_amount / c.transaction_count, 2)
+        else:
+            c.average_per_transaction = 0.0
+            
+        c.total_amount = round(c.total_amount, 2)
+        c.currency_totals = {k: round(v, 2) for k, v in c.currency_totals.items()}
+        
+    sorted_categories = dict(sorted(categories_dict.items(), key=lambda item: item[1].total_amount, reverse=True))
+    
+    top_category = None
+    top_category_amount = None
+    
+    if sorted_categories:
+        top_cat_key = next(iter(sorted_categories))
+        top_category = top_cat_key
+        top_category_amount = sorted_categories[top_cat_key].total_amount
+        
+    return CategoryBreakdown(
+        timeframe=timeframe,
+        start_time=start_time,
+        end_time=end_time,
+        total_spending=round(overall_total, 2),
+        primary_currency=effective_currency,
+        categories=sorted_categories,
+        top_category=top_category,
+        top_category_amount=top_category_amount
     )
 
 def _resolve_comparison_timeframe(timeframe: str, reference_time: Optional[datetime] = None) -> tuple[Optional[str], Optional[datetime], Optional[datetime]]:
@@ -312,7 +439,8 @@ class QueryService:
         system_prompt = f"""You are a financial query parser. Your task is to extract intent, timeframe, and filters from the user's plain English query.
 Current Date: {current_date_str}
 
-Allowed categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
+Allowed canonical categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
+Map synonyms (e.g. "groceries" -> "Food/Drink", "utilities" -> "Rent/Bills") to these canonical categories.
 Standard timeframes: "today", "yesterday", "this_week", "last_week", "this_month", "last_month", "custom", "all_time".
 Extract `concept_keyword` if the user asks about a specific place or item (e.g., "Starbucks", "Uber")."""
 
@@ -371,8 +499,18 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
                 prev_end=prev_end
             )
 
+        category_breakdown = aggregate_by_category(
+            transactions=transactions,
+            timeframe=intent.timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=settings.DEFAULT_CURRENCY,
+            overall_total=aggregation.total_amount
+        )
+
         elapsed = time.time() - start_exec_time
         logger.info(f"[3s Audit] Aggregation query took {elapsed:.2f} seconds (timeframe: {intent.timeframe}, family_id: {family_id})")
+        logger.info(f"[3s Audit] Category query took {elapsed:.2f} seconds (category: {intent.category}, timeframe: {intent.timeframe}, family_id: {family_id})")
 
         return QueryResult(
             intent=intent,
@@ -380,7 +518,8 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             resolved_end_time=end_time,
             transactions=transactions,
             total_count=len(transactions),
-            aggregation=aggregation
+            aggregation=aggregation,
+            category_breakdown=category_breakdown
         )
 
     async def get_time_aggregation(
@@ -422,3 +561,31 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
                 )
                 
         return aggregation
+
+    async def get_category_aggregation(
+        self, family_id: UUID, category: Optional[str] = None, timeframe: str = "this_month", 
+        primary_currency: Optional[str] = None, reference_time: Optional[datetime] = None
+    ) -> CategoryBreakdown:
+        start_exec_time = time.time()
+        ref_time = reference_time or datetime.now(timezone.utc)
+        curr = primary_currency or settings.DEFAULT_CURRENCY
+        start_time, end_time = self._resolve_date_range(timeframe, None, None, ref_time)
+        resolved_category = resolve_category_alias(category) if category else None
+        
+        transactions = await asyncio.to_thread(
+            self._fetch_and_decrypt_transactions,
+            family_id, start_time, end_time, resolved_category, None
+        )
+        
+        breakdown = aggregate_by_category(
+            transactions=transactions,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=curr
+        )
+        
+        elapsed = time.time() - start_exec_time
+        logger.info(f"[3s Audit] Category query took {elapsed:.2f} seconds (category: {resolved_category}, timeframe: {timeframe}, family_id: {family_id})")
+        
+        return breakdown

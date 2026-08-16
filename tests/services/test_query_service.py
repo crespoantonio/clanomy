@@ -9,7 +9,10 @@ from src.services.query_service import (
     ParsedQueryIntent, 
     QueryProcessingError, 
     QueryService, 
-    _parse_amount_string
+    _parse_amount_string,
+    resolve_category_alias,
+    aggregate_by_category,
+    CategoryBreakdown
 )
 from src.db.models import Transaction
 
@@ -178,3 +181,68 @@ def test_get_time_aggregation(mock_session, query_service):
         assert agg.transaction_count == 1
     import asyncio
     asyncio.run(_test())
+
+def test_resolve_category_alias():
+    assert resolve_category_alias("groceries") == "Food/Drink"
+    assert resolve_category_alias("Food/Drink") == "Food/Drink"
+    assert resolve_category_alias("Food / Drink") == "Food/Drink"
+    assert resolve_category_alias("Rent / Bills") == "Rent/Bills"
+    assert resolve_category_alias("utilities") == "Rent/Bills"
+    assert resolve_category_alias("hardware") == "Shopping"
+    assert resolve_category_alias("unknown") == "Other"
+    assert resolve_category_alias(None) is None
+    assert resolve_category_alias("") is None
+
+def test_aggregate_by_category():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=10.0, currency="USD", concept="A", category="Food/Drink", timestamp=datetime.now(timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=20.0, currency="USD", concept="B", category="Food/Drink", timestamp=datetime.now(timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=10.0, currency="EUR", concept="C", category="Transport", timestamp=datetime.now(timezone.utc))
+    ]
+    breakdown = aggregate_by_category(transactions)
+    assert breakdown.top_category == "Food/Drink"
+    assert breakdown.top_category_amount == 30.0
+    assert breakdown.categories["Food/Drink"].percentage_of_total == 100.0
+    assert breakdown.categories["Food/Drink"].transaction_count == 2
+    assert breakdown.categories["Transport"].transaction_count == 1
+    assert breakdown.categories["Transport"].total_amount == 0.0
+    assert breakdown.categories["Transport"].currency_totals == {"EUR": 10.0}
+
+def test_aggregate_by_category_single_non_default_currency():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=45.0, currency="EUR", concept="Coffee", category="Food/Drink", timestamp=datetime.now(timezone.utc))
+    ]
+    breakdown = aggregate_by_category(transactions, primary_currency="USD")
+    assert breakdown.total_spending == 45.0
+    assert breakdown.primary_currency == "EUR"
+    assert breakdown.top_category == "Food/Drink"
+    assert breakdown.top_category_amount == 45.0
+    assert breakdown.categories["Food/Drink"].percentage_of_total == 100.0
+
+def test_aggregate_by_category_empty():
+    breakdown = aggregate_by_category([])
+    assert breakdown.total_spending == 0.0
+    assert breakdown.top_category is None
+    assert breakdown.categories == {}
+
+@patch("src.services.query_service.Session")
+def test_get_category_aggregation(mock_session, query_service):
+    async def _test():
+        mock_session_inst = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_session_inst
+        
+        family_id = uuid4()
+        tx = Transaction(
+            id=uuid4(), family_id=family_id, user_id=uuid4(),
+            amount="15.0 USD", concept="Lunch", category="Food/Drink",
+            timestamp=datetime.now(timezone.utc)
+        )
+        mock_session_inst.exec.return_value.all.return_value = [tx]
+        
+        breakdown = await query_service.get_category_aggregation(family_id, "groceries", "this_month")
+        assert breakdown.top_category == "Food/Drink"
+        assert breakdown.total_spending == 15.0
+    import asyncio
+    asyncio.run(_test())
+
+

@@ -57,7 +57,7 @@ def resolve_category_alias(input_category: Optional[str]) -> Optional[str]:
 
 class ParsedQueryIntent(BaseModel):
     intent: str
-    timeframe: str
+    timeframe: Optional[str] = "this_month"
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     category: Optional[str] = None
@@ -515,6 +515,7 @@ Intents:
 - "export_data": If the user wants to export or download data (e.g., "export my data", "export to csv"). Set `export_format` to "csv" or "json" based on the query.
 - "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week").
 - "log_expense": If the user is logging a new expense or purchase (e.g., "15 for coffee", "I bought shoes for 50", "Uber 20 dollars"). For this intent, timeframe and category can be null.
+- "delete_account": If the user wants to permanently delete their account and data (e.g., "delete my account", "remove my data", "delete all my transactions", "erase my account", "forget me").
 
 Allowed canonical categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
 Map synonyms (e.g. "groceries" -> "Food/Drink", "utilities" -> "Rent/Bills") to these canonical categories.

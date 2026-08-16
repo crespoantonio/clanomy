@@ -64,7 +64,7 @@ development_status:
 
   epic-4: in-progress
   4-1-financial-data-export-json-csv: done
-  4-2-account-deletion-right-to-be-forgotten: backlog
+  4-2-account-deletion-right-to-be-forgotten: done
   epic-4-retrospective: optional
 
   epic-5: backlog

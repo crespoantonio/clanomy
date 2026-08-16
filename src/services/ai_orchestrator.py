@@ -13,8 +13,9 @@ from src.db.session import engine
 from src.db.models import User, Transaction
 from src.core.encryption import EncryptionService
 from src.services.telegram_service import TelegramService
-from src.services.query_service import QueryService
+from src.services.query_service import QueryService, ParsedQueryIntent
 from src.services.export_service import ExportService
+from src.services.account_service import AccountService
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +50,24 @@ class AIOrchestrator:
                 session.rollback()
                 raise e
 
-    def _is_query_or_export(self, text: str) -> bool:
-        """Heuristic to check if text is likely a query or export request."""
-        query_and_export_keywords = {
+    def _is_special_intent(self, text: str) -> bool:
+        """Heuristic to check if text is likely a query, export, or account deletion request."""
+        if text.strip() == "CONFIRM DELETE":
+            return True
+            
+        special_intent_keywords = {
             "export", "download", "csv", "json", "backup",
             "how", "what", "spend", "spent", "total", "summary",
             "breakdown", "history", "compare", "report", "chart",
-            "graph", "list", "show", "tell", "query"
+            "graph", "list", "show", "tell", "query",
+            "delete", "remove", "erase", "forget", "purge", "confirm delete"
         }
         words = set(text.lower().split())
-        return bool(words.intersection(query_and_export_keywords))
+        # We also check if "confirm delete" or "delete account" is in the text directly
+        text_lower = text.lower()
+        if "confirm delete" in text_lower or "delete account" in text_lower:
+            return True
+        return bool(words.intersection(special_intent_keywords))
 
     def _get_user_family_id(self, user_uuid: UUID) -> UUID:
         """Synchronous database helper to fetch family_id."""
@@ -102,13 +111,26 @@ class AIOrchestrator:
             if text and status == "success":
                 try:
                     # Apply keyword heuristic bypass to avoid double Ollama calls for simple expense logs
-                    if self._is_query_or_export(text):
-                        query_service = QueryService()
-                        parsed_query = await query_service.parse_intent(text)
+                    if self._is_special_intent(text):
+                        if text.strip() == "CONFIRM DELETE":
+                            # Exact string match shortcut
+                            parsed_query = ParsedQueryIntent(intent="delete_account", timeframe="all_time")
+                        else:
+                            query_service = QueryService()
+                            parsed_query = await query_service.parse_intent(text)
                     else:
                         parsed_query = None
                     
-                    if parsed_query and parsed_query.intent == "export_data":
+                    if parsed_query and getattr(parsed_query, "intent", None) == "delete_account" and text.strip() == "CONFIRM DELETE":
+                        account_service = AccountService()
+                        success = await account_service.delete_account(user_uuid)
+                        if success:
+                            response_text = "✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using FamFin-AI! If you ever wish to return, simply send /start."
+                        else:
+                            response_text = "Failed to delete account. Please try again later."
+                    elif parsed_query and getattr(parsed_query, "intent", None) == "delete_account":
+                        response_text = "⚠️ Are you sure you want to permanently delete your account and all associated financial records? This action is irreversible.\n\nTo confirm, please reply with: <b>CONFIRM DELETE</b>"
+                    elif parsed_query and parsed_query.intent == "export_data":
                         # Handle Export
                         family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
                         export_format = parsed_query.export_format or "csv"

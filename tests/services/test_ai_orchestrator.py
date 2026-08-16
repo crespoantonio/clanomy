@@ -282,3 +282,40 @@ async def test_orchestrator_persistence_failure_rollback(orchestrator, monkeypat
     
     mock_send_message.assert_called_once()
     assert "Failed to save transaction" in mock_send_message.call_args[1]["text"] or "An unexpected error occurred" in mock_send_message.call_args[1]["text"]
+
+
+@pytest.mark.anyio
+async def test_orchestrator_delete_account_intent(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service("delete_account"))
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    await orchestrator.orchestrate(user_id=user_id, text="delete my account", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    assert "Are you sure you want to permanently delete your account" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_confirm_delete(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_delete = AsyncMock(return_value=True)
+    class MockAccountService:
+        delete_account = mock_delete
+    monkeypatch.setattr("src.services.ai_orchestrator.AccountService", MockAccountService)
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    await orchestrator.orchestrate(user_id=user_id, text="CONFIRM DELETE", audio_file_id=None, chat_id=12345)
+    
+    mock_delete.assert_called_once_with(UUID(user_id))
+    mock_send_message.assert_called_once()
+    assert "permanently deleted" in mock_send_message.call_args[1]["text"]

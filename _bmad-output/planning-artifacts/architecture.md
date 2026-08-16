@@ -338,3 +338,99 @@ Clear naming conventions and process patterns (like the 3s Audit) are establishe
 **First Implementation Priority:**
 Initialize Repository with Podman and FastAPI using the following dependencies:
 `pip install fastapi[all] sqlmodel cryptography ollama faster-whisper python-telegram-bot`
+
+## Epic 4 Technical Research & Design
+
+This section details the pre-implementation research conducted in preparation for **Epic 4: Data Portability & Rights**.
+
+### 1. Telegram Document Transmission API
+To support transaction history export (Story 4.1), the system must transmit generated CSV/JSON files to the Telegram Bot API. 
+The standard Telegram API endpoint is `https://api.telegram.org/bot<TOKEN>/sendDocument`.
+
+**API Specifications:**
+- **HTTP Method:** `POST`
+- **Content-Type:** `multipart/form-data`
+- **Required Parameters:**
+  - `chat_id`: Integer or string (target chat identifier).
+  - `document`: InputFile (the local file stream to upload).
+- **Optional Parameters:**
+  - `caption`: String (conversational message summary attached to the document, up to 1024 characters).
+  - `parse_mode`: String (`HTML` or `MarkdownV2`).
+
+**Proposed Implementation in `TelegramService`:**
+```python
+import os
+import httpx
+
+async def send_document(self, chat_id: int, file_path: str, caption: Optional[str] = None) -> None:
+    """Sends a local file to the user via Telegram Bot API's sendDocument."""
+    filename = os.path.basename(file_path)
+    try:
+        async with httpx.AsyncClient() as client:
+            with open(file_path, "rb") as file:
+                files = {"document": (filename, file, "application/octet-stream")}
+                data = {"chat_id": chat_id}
+                if caption:
+                    data["caption"] = caption
+                    data["parse_mode"] = "HTML"
+                
+                response = await client.post(
+                    f"{self.api_url}/sendDocument",
+                    data=data,
+                    files=files
+                )
+                response.raise_for_status()
+    except Exception as e:
+        logger.error(f"Failed to send telegram document to {chat_id}: {e}")
+        raise
+```
+
+### 2. Secure Temporary File & Cleanup Pipeline
+Because data exports contain raw, decrypted financial entries (PII), we must enforce a zero-leak storage pipeline. Files must never persist on the host server after transmission.
+
+**Design Strategy:**
+- Use standard `tempfile` to create unique, system-isolated file paths.
+- Enforce strict `try-finally` blocks or python context managers to guarantee physical deletion from host disk.
+- Avoid writing files in project-level paths; use the OS-specific system temporary directory.
+
+**Proposed Generation Pattern:**
+```python
+import os
+import tempfile
+
+# 1. Establish secure temp file path
+fd, path = tempfile.mkstemp(suffix=".csv", prefix=f"famfin_export_{user_id}_")
+try:
+    # 2. Open file descriptor and write decrypted CSV data
+    with os.fdopen(fd, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(["Date", "Amount", "Currency", "Concept", "Category"])
+        for tx in decrypted_transactions:
+            writer.writerow([tx.timestamp, tx.amount, tx.currency, tx.concept, tx.category])
+            
+    # 3. Deliver file through Telegram API
+    await telegram_service.send_document(chat_id, path, caption="Here is your requested export! 📊")
+finally:
+    # 4. Enforce cleanup (physical deletion)
+    if os.path.exists(path):
+        try:
+            os.unlink(path)
+            logger.info(f"Purged temp export file from disk: {path}")
+        except Exception as e:
+            logger.error(f"Failed to delete temp file {path}: {e}")
+```
+
+### 3. Multi-Tenant Cascade Deletes Validation
+For GDPR "Right to be Forgotten" (Story 4.2), account deletion must cascade delete all associated records (User and Transaction units) atomically.
+
+**ORM Mapping & Constraints:**
+- SQLModel/SQLAlchemy relations on `Family` and `User` models are configured with `sa_relationship_kwargs={"cascade": "all, delete-orphan"}`.
+- Foreign keys in `User` and `Transaction` models are marked with `ondelete="CASCADE"`.
+- This ensures that:
+  - Deleting a `Family` triggers SQLAlchemy to delete all dependent `User` and `Transaction` records in Python.
+  - Deleting a `User` triggers SQLAlchemy to delete all dependent `Transaction` records in Python.
+  - SQLite/PostgreSQL foreign keys act as secondary layers for database-level cascades on direct SQL executions.
+
+**Verification Status:**
+- Cascade delete operations have been verified with automated unit tests in `tests/db/test_models.py` (`test_cascade_delete_family` and `test_cascade_delete_user`), yielding a 100% pass rate in memory.
+

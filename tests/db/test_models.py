@@ -95,3 +95,55 @@ def test_transaction_requires_family(session: Session):
         t = Transaction(amount="10", concept="A", category="X")
         session.add(t)
         session.commit()
+
+def test_cascade_delete_family(session: Session):
+    family = Family(name="Cascade Family")
+    session.add(family)
+    session.commit()
+    
+    user1 = User(telegram_id=101, family_id=family.id)
+    user2 = User(telegram_id=102, family_id=family.id)
+    session.add(user1)
+    session.add(user2)
+    session.commit()
+    
+    t1 = Transaction(family_id=family.id, user_id=user1.id, amount="10", concept="A", category="X")
+    t2 = Transaction(family_id=family.id, user_id=user2.id, amount="20", concept="B", category="Y")
+    session.add(t1)
+    session.add(t2)
+    session.commit()
+    
+    # Verify records exist
+    assert len(session.exec(select(User).where(User.family_id == family.id)).all()) == 2
+    assert len(session.exec(select(Transaction).where(Transaction.family_id == family.id)).all()) == 2
+    
+    # Delete the family
+    session.delete(family)
+    session.commit()
+    
+    # Verify users and transactions are deleted due to relationship cascades
+    assert len(session.exec(select(User).where(User.family_id == family.id)).all()) == 0
+    assert len(session.exec(select(Transaction).where(Transaction.family_id == family.id)).all()) == 0
+
+def test_cascade_delete_user(session: Session):
+    family = Family(name="Cascade User Family")
+    session.add(family)
+    session.commit()
+    
+    user = User(telegram_id=201, family_id=family.id)
+    session.add(user)
+    session.commit()
+    
+    t1 = Transaction(family_id=family.id, user_id=user.id, amount="10", concept="A", category="X")
+    t2 = Transaction(family_id=family.id, user_id=user.id, amount="20", concept="B", category="Y")
+    session.add(t1)
+    session.add(t2)
+    session.commit()
+    
+    # Delete the user
+    session.delete(user)
+    session.commit()
+    
+    # Verify transactions for this user are deleted
+    assert len(session.exec(select(Transaction).where(Transaction.user_id == user.id)).all()) == 0
+

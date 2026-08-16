@@ -11,6 +11,15 @@ import datetime
 def orchestrator():
     return AIOrchestrator()
 
+def create_mock_query_service(intent="log_expense"):
+    mock_parse = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.intent = intent
+    mock_parse.return_value = mock_result
+    class MockQueryService:
+        parse_intent = mock_parse
+    return MockQueryService
+
 @pytest.mark.anyio
 async def test_orchestrator_success_text(orchestrator, monkeypatch):
     user_id = "00000000-0000-0000-0000-000000000000"
@@ -32,6 +41,7 @@ async def test_orchestrator_success_text(orchestrator, monkeypatch):
     class MockExtractionService:
         extract = mock_extract
 
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
     
     # Mock TelegramService
@@ -81,6 +91,7 @@ async def test_orchestrator_audio_success(orchestrator, monkeypatch):
 
     class MockExtractionService:
         extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
     
     # Mock TelegramService
@@ -137,6 +148,7 @@ async def test_orchestrator_extraction_timeout(orchestrator, monkeypatch):
     mock_extract = AsyncMock(side_effect=Exception("Ollama timed out"))
     class MockExtractionService:
         extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
     
     mock_send_message = AsyncMock()
@@ -163,6 +175,7 @@ async def test_orchestrator_callback_failure(orchestrator, monkeypatch):
     mock_extract.return_value = mock_extract_result
     class MockExtractionService:
         extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
     
     # Mock client post raising error in TelegramService
@@ -191,6 +204,7 @@ async def test_orchestrator_persistence_success(orchestrator, monkeypatch):
     
     class MockExtractionService:
         extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
 
     mock_send_message = AsyncMock()
@@ -242,6 +256,7 @@ async def test_orchestrator_persistence_failure_rollback(orchestrator, monkeypat
     mock_extract.return_value = mock_extract_result
     class MockExtractionService:
         extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
 
     mock_send_message = AsyncMock()

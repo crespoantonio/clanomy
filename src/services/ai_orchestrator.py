@@ -13,6 +13,8 @@ from src.db.session import engine
 from src.db.models import User, Transaction
 from src.core.encryption import EncryptionService
 from src.services.telegram_service import TelegramService
+from src.services.query_service import QueryService
+from src.services.export_service import ExportService
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,25 @@ class AIOrchestrator:
                 session.rollback()
                 raise e
 
+    def _is_query_or_export(self, text: str) -> bool:
+        """Heuristic to check if text is likely a query or export request."""
+        query_and_export_keywords = {
+            "export", "download", "csv", "json", "backup",
+            "how", "what", "spend", "spent", "total", "summary",
+            "breakdown", "history", "compare", "report", "chart",
+            "graph", "list", "show", "tell", "query"
+        }
+        words = set(text.lower().split())
+        return bool(words.intersection(query_and_export_keywords))
+
+    def _get_user_family_id(self, user_uuid: UUID) -> UUID:
+        """Synchronous database helper to fetch family_id."""
+        with Session(engine) as session:
+            user = session.get(User, user_uuid)
+            if not user or not user.family_id:
+                raise ValueError("User not associated with a family")
+            return user.family_id
+
     async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int):
         start_time = time.time()
         status = "success"
@@ -80,34 +101,62 @@ class AIOrchestrator:
             # 2. Extract Data if we have text and no previous error
             if text and status == "success":
                 try:
-                    extraction_service = ExtractionService()
-                    result = await extraction_service.extract(text=text)
-                    extracted_data = result.model_dump()
+                    # Apply keyword heuristic bypass to avoid double Ollama calls for simple expense logs
+                    if self._is_query_or_export(text):
+                        query_service = QueryService()
+                        parsed_query = await query_service.parse_intent(text)
+                    else:
+                        parsed_query = None
                     
-                    # Construct success message
-                    response_text = f"Saved {result.amount} {result.currency} for '{result.concept}' under category '{result.category}'."
+                    if parsed_query and parsed_query.intent == "export_data":
+                        # Handle Export
+                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        export_format = parsed_query.export_format or "csv"
+                        export_service = ExportService()
+                        await export_service.export_and_send(family_id, chat_id, export_format)
+                        # We don't need to send a regular message since we sent a document
+                        return {"status": "ok"}
+                    elif parsed_query and parsed_query.intent == "spending_summary":
+                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        user_name = None
+                        reference_time = datetime.datetime.now(datetime.timezone.utc)
+                        summary = await query_service.get_spending_summary(
+                            family_id=family_id,
+                            timeframe=parsed_query.timeframe,
+                            category=parsed_query.category,
+                            user_name=user_name,
+                            reference_time=reference_time
+                        )
+                        response_text = summary
+                    else:
+                        # Default: log expense
+                        extraction_service = ExtractionService()
+                        result = await extraction_service.extract(text=text)
+                        extracted_data = result.model_dump()
+                        
+                        # Construct success message
+                        response_text = f"Saved {result.amount} {result.currency} for '{result.concept}' under category '{result.category}'."
+                        
+                        try:
+                            # Persist Transaction
+                            encrypted_amount = self.encryption_service.encrypt(f"{result.amount} {result.currency}")
+                            encrypted_concept = self.encryption_service.encrypt(result.concept)
+                            
+                            await asyncio.to_thread(
+                                self._persist_transaction,
+                                user_uuid=user_uuid,
+                                amount=encrypted_amount,
+                                concept=encrypted_concept,
+                                category=result.category
+                            )
+                        except Exception as e:
+                            logger.error(f"Persistence failed: {e}")
+                            status = "error"
+                            response_text = "Failed to save transaction. Please try again later."
                 except Exception as e:
-                    logger.error(f"Extraction failed: {e}")
+                    logger.error(f"Extraction or routing failed: {e}")
                     status = "error"
                     response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
-                    
-                if status == "success":
-                    try:
-                        # Persist Transaction
-                        encrypted_amount = self.encryption_service.encrypt(f"{result.amount} {result.currency}")
-                        encrypted_concept = self.encryption_service.encrypt(result.concept)
-                        
-                        await asyncio.to_thread(
-                            self._persist_transaction,
-                            user_uuid=user_uuid,
-                            amount=encrypted_amount,
-                            concept=encrypted_concept,
-                            category=result.category
-                        )
-                    except Exception as e:
-                        logger.error(f"Persistence failed: {e}")
-                        status = "error"
-                        response_text = "Failed to save transaction. Please try again later."
             elif not text and status == "success":
                 status = "error"
                 response_text = "No message or audio was provided."

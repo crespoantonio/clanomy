@@ -21,6 +21,25 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Failed to send telegram message to {chat_id}: {e}")
 
+    async def send_document(self, chat_id: int, file_path: str, caption: str | None = None) -> None:
+        """Sends a document back to the user via Telegram Bot API."""
+        try:
+            with open(file_path, "rb") as f:
+                async with httpx.AsyncClient() as client:
+                    data = {"chat_id": chat_id, "parse_mode": "HTML"}
+                    if caption:
+                        data["caption"] = caption
+                        
+                    response = await client.post(
+                        f"{self.api_url}/sendDocument",
+                        data=data,
+                        files={"document": f}
+                    )
+                    response.raise_for_status()
+        except Exception as e:
+            logger.error(f"Failed to send telegram document to {chat_id}: {e}")
+            raise e
+
     async def get_file_url(self, file_id: str) -> str | None:
         """Resolves a file_id to its direct download URL."""
         try:

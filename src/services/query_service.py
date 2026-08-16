@@ -62,6 +62,7 @@ class ParsedQueryIntent(BaseModel):
     end_date: Optional[str] = None
     category: Optional[str] = None
     concept_keyword: Optional[str] = None
+    export_format: Optional[str] = "csv"
 
     @field_validator('category')
     @classmethod
@@ -500,17 +501,20 @@ class QueryService:
                 results.append(decrypted)
             return results
 
-    async def process_query(self, text: str, family_id: UUID, user_name: Optional[str] = None, generate_summary: bool = True, reference_time: Optional[datetime] = None) -> QueryResult:
+    async def parse_intent(self, text: str, reference_time: Optional[datetime] = None) -> ParsedQueryIntent:
         if not text or not text.strip():
             raise ValueError("Query string cannot be empty")
         
         ref_time = reference_time or datetime.now(timezone.utc)
         current_date_str = ref_time.strftime("%Y-%m-%d %H:%M:%S UTC")
         
-        start_exec_time = time.time()
-        
         system_prompt = f"""You are a financial query parser. Your task is to extract intent, timeframe, and filters from the user's plain English query.
 Current Date: {current_date_str}
+
+Intents:
+- "export_data": If the user wants to export or download data (e.g., "export my data", "export to csv"). Set `export_format` to "csv" or "json" based on the query.
+- "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week").
+- "log_expense": If the user is logging a new expense or purchase (e.g., "15 for coffee", "I bought shoes for 50", "Uber 20 dollars"). For this intent, timeframe and category can be null.
 
 Allowed canonical categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
 Map synonyms (e.g. "groceries" -> "Food/Drink", "utilities" -> "Rent/Bills") to these canonical categories.
@@ -531,12 +535,19 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             )
             intent_json = response.message.content
             intent = ParsedQueryIntent.model_validate_json(intent_json)
+            return intent
         except asyncio.TimeoutError as e:
             logger.error(f"Ollama query request timed out: {e}")
             raise QueryProcessingError(f"Ollama request timed out after 60.0 seconds: {e}")
         except Exception as e:
             logger.error(f"Error processing query with Ollama: {e}")
             raise QueryProcessingError(f"Failed to process query with Ollama: {e}")
+
+    async def process_query(self, text: str, family_id: UUID, user_name: Optional[str] = None, generate_summary: bool = True, reference_time: Optional[datetime] = None) -> QueryResult:
+        ref_time = reference_time or datetime.now(timezone.utc)
+        start_exec_time = time.time()
+        
+        intent = await self.parse_intent(text, reference_time)
 
         start_time, end_time = self._resolve_date_range(intent.timeframe, intent.start_date, intent.end_date, ref_time)
         

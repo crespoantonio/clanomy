@@ -101,3 +101,80 @@ def test_process_query_ollama_failure(query_service):
             await query_service.process_query("test", uuid4())
     import asyncio
     asyncio.run(_test())
+
+from src.services.query_service import (
+    aggregate_transactions,
+    _resolve_comparison_timeframe,
+    compute_period_comparison,
+    TimeAggregation,
+    PeriodComparison,
+    DecryptedTransaction
+)
+
+def test_aggregate_transactions_basic():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=10.0, currency="USD", concept="A", category="Other", timestamp=datetime(2023, 10, 5, 12, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=20.0, currency="USD", concept="B", category="Other", timestamp=datetime(2023, 10, 5, 14, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=15.0, currency="EUR", concept="C", category="Other", timestamp=datetime(2023, 10, 6, 12, 0, tzinfo=timezone.utc))
+    ]
+    
+    agg = aggregate_transactions(transactions, "this_week", primary_currency="USD")
+    assert agg.total_amount == 30.0
+    assert agg.transaction_count == 3
+    assert agg.currency_totals == {"USD": 30.0, "EUR": 15.0}
+    assert agg.daily_breakdown == {"2023-10-05": 30.0}
+
+def test_aggregate_transactions_empty():
+    agg = aggregate_transactions([], "this_month")
+    assert agg.total_amount == 0.0
+    assert agg.transaction_count == 0
+    assert agg.currency_totals == {}
+
+def test_aggregate_transactions_single_non_default_currency():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=45.0, currency="EUR", concept="Coffee", category="Food/Drink", timestamp=datetime(2023, 10, 5, 12, 0, tzinfo=timezone.utc))
+    ]
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    assert agg.total_amount == 45.0
+    assert agg.primary_currency == "EUR"
+    assert agg.daily_breakdown == {"2023-10-05": 45.0}
+
+def test_resolve_comparison_timeframe():
+    ref_time = datetime(2023, 10, 15, 12, 0, tzinfo=timezone.utc)
+    prev_tf, prev_start, prev_end = _resolve_comparison_timeframe("this_month", ref_time)
+    assert prev_tf == "last_month"
+    assert prev_start == datetime(2023, 9, 1, 0, 0, tzinfo=timezone.utc)
+    assert prev_end == datetime(2023, 9, 30, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+def test_compute_period_comparison():
+    agg = TimeAggregation(
+        timeframe="this_month", total_amount=150.0, currency_totals={"USD": 150.0},
+        transaction_count=2, average_per_transaction=75.0, daily_breakdown={}
+    )
+    prev_txs = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=100.0, currency="USD", concept="A", category="Other", timestamp=datetime(2023, 9, 5, 12, 0, tzinfo=timezone.utc))
+    ]
+    
+    comp = compute_period_comparison(agg, prev_txs, "last_month", None, None)
+    assert comp.difference_amount == 50.0
+    assert comp.percentage_change == 50.0
+
+@patch("src.services.query_service.Session")
+def test_get_time_aggregation(mock_session, query_service):
+    async def _test():
+        mock_session_inst = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_session_inst
+        
+        family_id = uuid4()
+        tx = Transaction(
+            id=uuid4(), family_id=family_id, user_id=uuid4(),
+            amount="15.0 USD", concept="Lunch", category="Food/Drink",
+            timestamp=datetime.now(timezone.utc)
+        )
+        mock_session_inst.exec.return_value.all.return_value = [tx]
+        
+        agg = await query_service.get_time_aggregation(family_id, "this_month")
+        assert agg.total_amount == 15.0
+        assert agg.transaction_count == 1
+    import asyncio
+    asyncio.run(_test())

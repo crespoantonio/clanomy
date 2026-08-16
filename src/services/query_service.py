@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from uuid import UUID
 
 import ollama
@@ -53,12 +53,34 @@ class DecryptedTransaction(BaseModel):
     category: str
     timestamp: datetime
 
+class PeriodComparison(BaseModel):
+    previous_timeframe: str
+    previous_start_time: Optional[datetime] = None
+    previous_end_time: Optional[datetime] = None
+    previous_total_amount: float
+    previous_transaction_count: int
+    difference_amount: float
+    percentage_change: Optional[float] = None
+
+class TimeAggregation(BaseModel):
+    timeframe: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    total_amount: float
+    primary_currency: str = "USD"
+    currency_totals: Dict[str, float]
+    transaction_count: int
+    average_per_transaction: float
+    daily_breakdown: Dict[str, float]
+    comparison: Optional[PeriodComparison] = None
+
 class QueryResult(BaseModel):
     intent: ParsedQueryIntent
     resolved_start_time: Optional[datetime] = None
     resolved_end_time: Optional[datetime] = None
     transactions: List[DecryptedTransaction] = []
     total_count: int = 0
+    aggregation: Optional[TimeAggregation] = None
 
 def _parse_amount_string(decrypted_str: str) -> tuple[float, str]:
     parts = decrypted_str.strip().split()
@@ -70,6 +92,102 @@ def _parse_amount_string(decrypted_str: str) -> tuple[float, str]:
         amount = 0.0
     currency = parts[1].upper() if len(parts) > 1 else "USD"
     return amount, currency
+
+def aggregate_transactions(
+    transactions: List[DecryptedTransaction],
+    timeframe: str,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    primary_currency: str = "USD",
+    calculate_daily: bool = True
+) -> TimeAggregation:
+    currency_totals: Dict[str, float] = {}
+    
+    for tx in transactions:
+        currency_totals[tx.currency] = currency_totals.get(tx.currency, 0.0) + tx.amount
+
+    effective_currency = primary_currency
+    if primary_currency not in currency_totals and len(currency_totals) == 1:
+        effective_currency = next(iter(currency_totals))
+
+    daily_breakdown: Dict[str, float] = {}
+    if calculate_daily:
+        for tx in transactions:
+            if tx.currency == effective_currency:
+                date_str = tx.timestamp.strftime("%Y-%m-%d")
+                daily_breakdown[date_str] = daily_breakdown.get(date_str, 0.0) + tx.amount
+
+    total_amount = currency_totals.get(effective_currency, 0.0)
+    tx_count = len(transactions)
+    avg = total_amount / tx_count if tx_count > 0 else 0.0
+
+    return TimeAggregation(
+        timeframe=timeframe,
+        start_time=start_time,
+        end_time=end_time,
+        total_amount=round(total_amount, 2),
+        primary_currency=effective_currency,
+        currency_totals={k: round(v, 2) for k, v in currency_totals.items()},
+        transaction_count=tx_count,
+        average_per_transaction=round(avg, 2),
+        daily_breakdown={k: round(v, 2) for k, v in daily_breakdown.items()}
+    )
+
+def _resolve_comparison_timeframe(timeframe: str, reference_time: Optional[datetime] = None) -> tuple[Optional[str], Optional[datetime], Optional[datetime]]:
+    ref_time = reference_time or datetime.now(timezone.utc)
+    
+    if timeframe == "this_week":
+        start_of_this_week = (ref_time - timedelta(days=ref_time.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        start_time = start_of_this_week - timedelta(days=7)
+        end_time = start_of_this_week - timedelta(microseconds=1)
+        return "last_week", start_time, end_time
+        
+    elif timeframe == "this_month":
+        if ref_time.month == 1:
+            prev_month = 12
+            prev_year = ref_time.year - 1
+        else:
+            prev_month = ref_time.month - 1
+            prev_year = ref_time.year
+            
+        start_time = ref_time.replace(year=prev_year, month=prev_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+        first_of_this_month = ref_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_time = first_of_this_month - timedelta(microseconds=1)
+        return "last_month", start_time, end_time
+        
+    elif timeframe == "today":
+        yesterday = ref_time - timedelta(days=1)
+        start_time = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return "yesterday", start_time, end_time
+        
+    return None, None, None
+
+def compute_period_comparison(
+    current_aggregation: TimeAggregation,
+    previous_transactions: List[DecryptedTransaction],
+    previous_timeframe: str,
+    prev_start: Optional[datetime],
+    prev_end: Optional[datetime]
+) -> PeriodComparison:
+    prev_total = sum(tx.amount for tx in previous_transactions if tx.currency == current_aggregation.primary_currency)
+    prev_count = len(previous_transactions)
+    
+    diff = current_aggregation.total_amount - prev_total
+    
+    pct_change = None
+    if prev_total > 0:
+        pct_change = (diff / prev_total) * 100
+        
+    return PeriodComparison(
+        previous_timeframe=previous_timeframe,
+        previous_start_time=prev_start,
+        previous_end_time=prev_end,
+        previous_total_amount=round(prev_total, 2),
+        previous_transaction_count=prev_count,
+        difference_amount=round(diff, 2),
+        percentage_change=round(pct_change, 2) if pct_change is not None else None
+    )
 
 class QueryService:
     _instance: Optional['QueryService'] = None
@@ -230,13 +348,77 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             logger.error(f"Database query error in process_query: {e}")
             raise QueryProcessingError(f"Database query failed: {e}")
 
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe=intent.timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=settings.DEFAULT_CURRENCY,
+            calculate_daily=True
+        )
+
+        prev_tf, prev_start, prev_end = _resolve_comparison_timeframe(intent.timeframe, ref_time)
+        if prev_tf:
+            prev_txs = await asyncio.to_thread(
+                self._fetch_and_decrypt_transactions,
+                family_id, prev_start, prev_end, intent.category, intent.concept_keyword
+            )
+            aggregation.comparison = compute_period_comparison(
+                current_aggregation=aggregation,
+                previous_transactions=prev_txs,
+                previous_timeframe=prev_tf,
+                prev_start=prev_start,
+                prev_end=prev_end
+            )
+
         elapsed = time.time() - start_exec_time
-        logger.info(f"[3s Audit] Query processing took {elapsed:.2f} seconds (model: {self.model}, family_id: {family_id})")
+        logger.info(f"[3s Audit] Aggregation query took {elapsed:.2f} seconds (timeframe: {intent.timeframe}, family_id: {family_id})")
 
         return QueryResult(
             intent=intent,
             resolved_start_time=start_time,
             resolved_end_time=end_time,
             transactions=transactions,
-            total_count=len(transactions)
+            total_count=len(transactions),
+            aggregation=aggregation
         )
+
+    async def get_time_aggregation(
+        self, family_id: UUID, timeframe: str = "this_month", 
+        primary_currency: Optional[str] = None, include_comparison: bool = False, 
+        reference_time: Optional[datetime] = None
+    ) -> TimeAggregation:
+        ref_time = reference_time or datetime.now(timezone.utc)
+        curr = primary_currency or settings.DEFAULT_CURRENCY
+        start_time, end_time = self._resolve_date_range(timeframe, None, None, ref_time)
+        
+        transactions = await asyncio.to_thread(
+            self._fetch_and_decrypt_transactions,
+            family_id, start_time, end_time, None, None
+        )
+        
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=curr,
+            calculate_daily=True
+        )
+        
+        if include_comparison:
+            prev_tf, prev_start, prev_end = _resolve_comparison_timeframe(timeframe, ref_time)
+            if prev_tf:
+                prev_txs = await asyncio.to_thread(
+                    self._fetch_and_decrypt_transactions,
+                    family_id, prev_start, prev_end, None, None
+                )
+                aggregation.comparison = compute_period_comparison(
+                    current_aggregation=aggregation,
+                    previous_transactions=prev_txs,
+                    previous_timeframe=prev_tf,
+                    prev_start=prev_start,
+                    prev_end=prev_end
+                )
+                
+        return aggregation

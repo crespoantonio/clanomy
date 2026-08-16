@@ -5,6 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     # Project Info
     PROJECT_NAME: str = "FamFin-AI"
+    DEFAULT_CURRENCY: str = "USD"
     
     # Database
     DATABASE_URL: str

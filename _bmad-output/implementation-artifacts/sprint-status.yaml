@@ -62,10 +62,10 @@ development_status:
   3-4-friendly-conversational-summary-generator: done
   epic-3-retrospective: done
 
-  epic-4: in-progress
+  epic-4: done
   4-1-financial-data-export-json-csv: done
   4-2-account-deletion-right-to-be-forgotten: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   epic-5: backlog
   5-1-family-group-creation-invite-link: backlog

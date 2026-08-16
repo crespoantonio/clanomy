@@ -265,6 +265,64 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ---
 
+### 🧪 Test 8: Financial Data Export (CSV/JSON)
+1. Send a query requesting data export to the bot:
+   ```text
+   export my data to csv
+   ```
+2. **Expected Output in Telegram:**
+   - The bot replies with a generated document file named `famfin_export_<uuid>.csv`.
+   - The file contains header: `Timestamp (UTC),Amount,Currency,Category,Concept` followed by your decrypted transactions.
+   - The file is accompanied by a friendly caption: `📊 Here is your exported transaction history (Total: X transactions).`
+3. Try exporting to JSON:
+   ```text
+   download my JSON data
+   ```
+4. **Expected Output in Telegram:**
+   - The bot replies with a generated document file named `famfin_export_<uuid>.json`.
+   - The file contains valid JSON with metadata (`family_id`, `exported_at`, `total_count`) and a `transactions` list of decrypted records.
+5. Check backend logs:
+   ```powershell
+   podman logs -f famfin-app
+   ```
+   You will see the secure cleanup verification logs:
+   ```text
+   INFO: [3s Audit] Data export took 0.05 seconds (format: csv, count: 12, family_id: ...)
+   INFO: Purged temp export file from disk: /tmp/famfin_export_...
+   ```
+
+---
+
+### 🧪 Test 9: Account Deletion & Right to be Forgotten
+1. Send a deletion request to the bot:
+   ```text
+   delete my account
+   ```
+2. **Expected Output in Telegram:**
+   - The bot responds with a prominent warning message:
+     > *"⚠️ Are you sure you want to permanently delete your account and all associated financial records? This action is irreversible.*
+     > 
+     > *To confirm, please reply with: CONFIRM DELETE"*
+3. Send any other text (e.g. `cancel` or `no`):
+   - The delete request is cancelled and your account remains untouched.
+4. Send the confirmation trigger exactly:
+   ```text
+   CONFIRM DELETE
+   ```
+5. **Expected Output in Telegram:**
+   - The bot replies with the farewell message:
+     > *"✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using FamFin-AI! If you ever wish to return, simply send /start."*
+6. Connect to PostgreSQL and query users and transactions:
+   ```sql
+   SELECT * FROM users WHERE id = '<deleted_user_id>';
+   SELECT * FROM transactions WHERE user_id = '<deleted_user_id>';
+   ```
+   - Verify that **0** records are returned (user, family, and transaction tables are completely purged).
+7. Send a message to the bot:
+   - The bot treats you as a new user requiring `/start` registration.
+
+---
+
 ## Step 7: Database & Encryption Verification
 
 Verify that data was stored and encrypted using AES-256:

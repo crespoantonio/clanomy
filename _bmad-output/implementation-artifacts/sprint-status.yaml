@@ -78,3 +78,10 @@ development_status:
   6-2-real-time-log-mirroring: done
   6-3-retry-mechanism-for-mirroring-failures: done
   epic-6-retrospective: done
+
+  epic-7: backlog
+  7-1-database-schema-expansion-for-subscriptions: ready-for-dev
+  7-2-quota-gating-and-upgrade-prompt: ready-for-dev
+  7-3-telegram-stars-invoice-generation: ready-for-dev
+  7-4-payment-verification-webhook-handler: ready-for-dev
+  epic-7-retrospective: optional

@@ -104,6 +104,10 @@ Enable multi-user collaboration. Families can create shared groups to track coll
 Integrate with external tools. Premium users can sync their local ledger to their Notion databases.
 **FRs covered:** FR12, FR13, NFR8.
 
+### Epic 7: Monetization & Subscriptions
+Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features.
+**FRs covered:** FR1, FR10, FR12 (Monetization gating for features).
+
 ## Epic 1: Privacy-First Foundation
 
 Establish the secure shell of the application. Users can register by simply starting a chat, and all subsequent data is protected by AES-256 encryption.
@@ -385,3 +389,59 @@ So that I never lose a record in my primary dashboard.
 **When** the sync is attempted via the native Python task
 **Then** the system uses Python's `tenacity` library or Celery task retry logic to retry the request (with exponential backoff).
 **And** logs failures to standard error for operational monitoring.
+
+## Epic 7: Monetization & Subscriptions
+
+Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features.
+
+### Story 7.1: Database Schema Expansion for Subscriptions
+
+As a Developer,
+I want to expand the `Family` table to support subscription tracking,
+So that we can manage quotas and active Pro plans.
+
+**Acceptance Criteria:**
+
+**Given** the `db/models.py` file
+**When** the `Family` model is updated
+**Then** it includes `plan_type` (default "free"), `subscription_status` (default "active"), and `monthly_tx_count` (default 0).
+**And** Alembic migrations (if used) or SQLModel schema generation successfully applies these to the database.
+
+### Story 7.2: Quota Gating & Upgrade Prompt
+
+As a Free User,
+I want to be notified when I hit my 30-transaction limit,
+So that I understand why my logs are blocked and how to upgrade.
+
+**Acceptance Criteria:**
+
+**Given** a free-tier user logging their 31st transaction in the current month
+**When** the `MessagingService` processes the request
+**Then** it blocks the transaction and replies with a warning message.
+**And** it prompts the user to type `/upgrade` to unlock unlimited logs.
+
+### Story 7.3: Telegram Stars Invoice Generation
+
+As a User,
+I want to trigger an upgrade invoice directly in chat,
+So that I can pay seamlessly using Telegram Stars (Apple/Google Pay).
+
+**Acceptance Criteria:**
+
+**Given** a user types `/upgrade` in the chat
+**When** the Telegram webhook receives the command
+**Then** it responds with a Telegram invoice (`sendInvoice` API) in `XTR` currency.
+**And** the invoice includes options for Solo Pro (150 Stars) and Family Pro (300 Stars).
+
+### Story 7.4: Payment Verification Webhook Handler
+
+As a System,
+I want to securely verify and process successful payments,
+So that users are automatically granted their Pro tier.
+
+**Acceptance Criteria:**
+
+**Given** a Telegram payment flow
+**When** the user attempts to pay
+**Then** the webhook successfully answers the `pre_checkout_query` within 10 seconds.
+**And** when `successful_payment` is received, the system updates the `Family` plan to the purchased tier.

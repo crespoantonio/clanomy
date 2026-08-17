@@ -13,7 +13,7 @@ from sqlmodel import Session, select
 from src.core.config import settings
 from src.core.encryption import EncryptionService
 from src.db.session import engine
-from src.db.models import Transaction
+from src.db.models import Transaction, User
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ class ParsedQueryIntent(BaseModel):
     export_format: Optional[str] = "csv"
     family_name: Optional[str] = None
     scope: Optional[str] = "family"
+    member_filter: Optional[str] = None
 
     @field_validator('category')
     @classmethod
@@ -75,6 +76,8 @@ class DecryptedTransaction(BaseModel):
     id: UUID
     family_id: UUID
     user_id: UUID
+    user_name: Optional[str] = None
+    user_handle: Optional[str] = None
     amount: float
     currency: str
     concept: str
@@ -109,6 +112,28 @@ class CategoryBreakdown(BaseModel):
     top_category: Optional[str] = None
     top_category_amount: Optional[float] = None
 
+class MemberSpending(BaseModel):
+    user_id: UUID
+    user_name: str
+    user_handle: Optional[str] = None
+    total_amount: float
+    primary_currency: str = "USD"
+    currency_totals: Dict[str, float]
+    transaction_count: int
+    percentage_of_total: Optional[float] = None
+    average_per_transaction: float
+    top_category: Optional[str] = None
+
+class MemberBreakdown(BaseModel):
+    timeframe: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    total_spending: float
+    primary_currency: str = "USD"
+    members: Dict[str, MemberSpending]
+    top_spender: Optional[str] = None
+    top_spender_amount: Optional[float] = None
+
 class TimeAggregation(BaseModel):
     timeframe: str
     start_time: Optional[datetime] = None
@@ -130,6 +155,7 @@ class QueryResult(BaseModel):
     total_count: int = 0
     aggregation: Optional[TimeAggregation] = None
     category_breakdown: Optional[CategoryBreakdown] = None
+    member_breakdown: Optional[MemberBreakdown] = None
     summary: Optional[str] = None
 
 def _parse_amount_string(decrypted_str: str) -> tuple[float, str]:
@@ -264,6 +290,109 @@ def aggregate_by_category(
         top_category_amount=top_category_amount
     )
 
+def aggregate_by_member(
+    transactions: List[DecryptedTransaction],
+    timeframe: str = "all_time",
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    primary_currency: str = "USD",
+    overall_total: Optional[float] = None
+) -> MemberBreakdown:
+    members_by_id: Dict[UUID, MemberSpending] = {}
+    
+    currency_totals_all: Dict[str, float] = {}
+    for tx in transactions:
+        currency_totals_all[tx.currency] = currency_totals_all.get(tx.currency, 0.0) + tx.amount
+
+    effective_currency = primary_currency
+    if primary_currency not in currency_totals_all and len(currency_totals_all) == 1:
+        effective_currency = next(iter(currency_totals_all))
+
+    if overall_total is None:
+        overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
+        
+    category_totals_per_user_id: Dict[UUID, Dict[str, float]] = {}
+    
+    for tx in transactions:
+        u_id = tx.user_id
+        display_name = tx.user_name or "User"
+        if u_id not in members_by_id:
+            members_by_id[u_id] = MemberSpending(
+                user_id=u_id,
+                user_name=display_name,
+                user_handle=tx.user_handle,
+                total_amount=0.0,
+                primary_currency=effective_currency,
+                currency_totals={},
+                transaction_count=0,
+                percentage_of_total=None,
+                average_per_transaction=0.0,
+                top_category=None
+            )
+            
+        m = members_by_id[u_id]
+        m.currency_totals[tx.currency] = m.currency_totals.get(tx.currency, 0.0) + tx.amount
+        if tx.currency == effective_currency:
+            m.total_amount += tx.amount
+        m.transaction_count += 1
+        
+        if u_id not in category_totals_per_user_id:
+            category_totals_per_user_id[u_id] = {}
+        if tx.currency == effective_currency:
+            category_totals_per_user_id[u_id][tx.category] = category_totals_per_user_id[u_id].get(tx.category, 0.0) + tx.amount
+
+    for u_id, m in members_by_id.items():
+        if overall_total > 0:
+            m.percentage_of_total = round((m.total_amount / overall_total) * 100, 2)
+        else:
+            m.percentage_of_total = None
+            
+        if m.transaction_count > 0:
+            m.average_per_transaction = round(m.total_amount / m.transaction_count, 2)
+        else:
+            m.average_per_transaction = 0.0
+            
+        m.total_amount = round(m.total_amount, 2)
+        m.currency_totals = {k: round(v, 2) for k, v in m.currency_totals.items()}
+        
+        cats = category_totals_per_user_id.get(u_id, {})
+        if cats:
+            m.top_category = max(cats.items(), key=lambda x: x[1])[0]
+
+    members_dict: Dict[str, MemberSpending] = {}
+    name_counts: Dict[str, int] = {}
+    for m in members_by_id.values():
+        name_counts[m.user_name] = name_counts.get(m.user_name, 0) + 1
+        
+    for m in sorted(members_by_id.values(), key=lambda item: item.total_amount, reverse=True):
+        if name_counts[m.user_name] > 1:
+            if m.user_handle:
+                key_name = f"{m.user_name} ({m.user_handle})"
+            else:
+                key_name = f"{m.user_name} ({str(m.user_id)[:6]})"
+        else:
+            key_name = m.user_name
+        members_dict[key_name] = m
+
+    top_spender = None
+    top_spender_amount = None
+    
+    if members_dict:
+        top_spender_key = next(iter(members_dict))
+        top_spender = top_spender_key
+        top_spender_amount = members_dict[top_spender_key].total_amount
+        
+    return MemberBreakdown(
+        timeframe=timeframe,
+        start_time=start_time,
+        end_time=end_time,
+        total_spending=round(overall_total, 2),
+        primary_currency=effective_currency,
+        members=members_dict,
+        top_spender=top_spender,
+        top_spender_amount=top_spender_amount
+    )
+
 def _resolve_comparison_timeframe(timeframe: str, reference_time: Optional[datetime] = None) -> tuple[Optional[str], Optional[datetime], Optional[datetime]]:
     ref_time = reference_time or datetime.now(timezone.utc)
     
@@ -360,10 +489,19 @@ def _build_summary_prompt_context(
         pct_str = f" ({pct:.1f}% of total)" if pct is not None else ""
         ctx.append(f"Top spending category: {top_cat}: {top_amt:.2f} {cb.primary_currency}{pct_str}")
 
+    if query_result.member_breakdown and len(query_result.member_breakdown.members) > 1:
+        mb = query_result.member_breakdown
+        ctx.append("Member Breakdown:")
+        for name, m in mb.members.items():
+            pct = f", {m.percentage_of_total:.1f}% of total" if m.percentage_of_total is not None else ""
+            top = f", Top category: {m.top_category}" if m.top_category else ""
+            ctx.append(f"- {name}: {m.total_amount:.2f} {m.primary_currency} ({m.transaction_count} transactions{pct}{top})")
+
     if query_result.transactions:
         samples = []
         for tx in query_result.transactions[:5]: # Take up to 5 concepts
-            samples.append(f"{tx.concept} ({tx.amount:.2f} {tx.currency})")
+            contributor = f" by {tx.user_name}" if tx.user_name else ""
+            samples.append(f"{tx.concept} ({tx.amount:.2f} {tx.currency}{contributor})")
         ctx.append("Sample transactions: " + ", ".join(samples))
         
     return "\n".join(ctx)
@@ -378,15 +516,23 @@ def generate_fallback_summary(
     tf = query_result.intent.timeframe.replace('_', ' ')
     
     is_family_query = (query_result.intent.scope == "family") or (family_name is not None) or (member_names is not None)
-    if family_name:
+    
+    if query_result.intent.member_filter:
+        subject = query_result.intent.member_filter
+        has_spent = "has"
+        hasn_t = "hasn't"
+    elif family_name:
         subject = f"Your family ({family_name})"
+        has_spent = "has"
+        hasn_t = "hasn't"
     elif is_family_query:
         subject = "Your family"
+        has_spent = "has"
+        hasn_t = "hasn't"
     else:
         subject = "You"
-        
-    has_spent = "has" if is_family_query else "have"
-    hasn_t = "hasn't" if is_family_query else "haven't"
+        has_spent = "have"
+        hasn_t = "haven't"
     
     if query_result.total_count == 0:
         curr = query_result.aggregation.primary_currency if query_result.aggregation else "USD"
@@ -415,7 +561,13 @@ def generate_fallback_summary(
             more_less = "more" if comp.difference_amount > 0 else "less"
             comp_str = f" That's {abs(comp.difference_amount):.2f} {agg.primary_currency} ({abs(comp.percentage_change):.2f}%) {more_less} than {comp.previous_timeframe.replace('_', ' ')} ({comp.previous_total_amount:.2f} {agg.primary_currency})!"
             
-    return f"{greeting}{subject} {has_spent} spent {total_str} across {agg.transaction_count} transactions this {tf}{top_cat_str}.{comp_str}"
+    member_str = ""
+    if query_result.member_breakdown and len(query_result.member_breakdown.members) > 1 and not query_result.intent.member_filter:
+        mb = query_result.member_breakdown
+        member_parts = [f"{name}: {m.total_amount:.2f}" for name, m in mb.members.items()]
+        member_str = f" ({'; '.join(member_parts)})"
+            
+    return f"{greeting}{subject} {has_spent} spent {total_str} across {agg.transaction_count} transactions this {tf}{member_str}{top_cat_str}.{comp_str}"
 
 class QueryService:
     _instance: Optional['QueryService'] = None
@@ -484,7 +636,7 @@ class QueryService:
         
         return None, None
 
-    def _decrypt_transaction(self, tx: Transaction) -> Optional[DecryptedTransaction]:
+    def _decrypt_transaction(self, tx: Transaction, user_name: Optional[str] = None, user_handle: Optional[str] = None) -> Optional[DecryptedTransaction]:
         amount_str = self.encryption_service.decrypt(tx.amount)
         if not amount_str:
             return None
@@ -497,6 +649,8 @@ class QueryService:
             id=tx.id,
             family_id=tx.family_id,
             user_id=tx.user_id,
+            user_name=user_name,
+            user_handle=user_handle,
             amount=amount,
             currency=currency,
             concept=concept_str,
@@ -504,8 +658,11 @@ class QueryService:
             timestamp=tx.timestamp
         )
 
-    def _fetch_and_decrypt_transactions(self, family_id: UUID, start_time: Optional[datetime], end_time: Optional[datetime], category: Optional[str], concept_keyword: Optional[str]) -> List[DecryptedTransaction]:
+    def _fetch_and_decrypt_transactions(self, family_id: UUID, start_time: Optional[datetime], end_time: Optional[datetime], category: Optional[str], concept_keyword: Optional[str], member_filter: Optional[str] = None) -> List[DecryptedTransaction]:
         with Session(engine) as session:
+            users = session.exec(select(User).where(User.family_id == family_id)).all()
+            user_map = {u.id: (u.full_name or u.username or "User", f"@{u.username}" if u.username else None) for u in users}
+
             query = select(Transaction).where(Transaction.family_id == family_id)
             if start_time:
                 query = query.where(Transaction.timestamp >= start_time)
@@ -519,11 +676,18 @@ class QueryService:
             
             results = []
             for tx in db_transactions:
-                decrypted = self._decrypt_transaction(tx)
+                u_name, u_handle = user_map.get(tx.user_id, ("User", None))
+                decrypted = self._decrypt_transaction(tx, u_name, u_handle)
                 if not decrypted:
                     continue
                 if concept_keyword:
                     if concept_keyword.lower() not in decrypted.concept.lower():
+                        continue
+                if member_filter:
+                    target = member_filter.strip().lower().lstrip("@")
+                    name_match = (decrypted.user_name and target in decrypted.user_name.lower())
+                    handle_match = (decrypted.user_handle and target in decrypted.user_handle.lower())
+                    if not (name_match or handle_match):
                         continue
                 results.append(decrypted)
             return results
@@ -540,7 +704,7 @@ Current Date: {current_date_str}
 
 Intents:
 - "export_data": If the user wants to export or download data (e.g., "export my data", "export to csv"). Set `export_format` to "csv" or "json" based on the query.
-- "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week", "family total", "how much did we spend?", "our expenses", "what did the family spend on groceries?"). Set `scope` to "family" if it's a family query.
+- "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week", "family total", "how much did we spend?", "our expenses", "what did the family spend on groceries?"). Set `scope` to "family" if it's a family query. Extract target member names into `member_filter` for questions like "Who spent what this month?", "What did Maria spend this week?", "Who spent the most today?", "Show me Tony's expenses", "Breakdown by family member", "Who bought coffee?".
 - "log_expense": If the user is logging a new expense or purchase (e.g., "15 for coffee", "I bought shoes for 50", "Uber 20 dollars"). For this intent, timeframe and category can be null.
 - "delete_account": If the user wants to permanently delete their account and data (e.g., "delete my account", "remove my data", "delete all my transactions", "erase my account", "forget me").
 - "create_family": If the user wants to create a new family group or rename theirs (e.g., "create family The Smiths", "/createfamily vacation"). Extract the name into `family_name`.
@@ -594,7 +758,7 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
         try:
             transactions = await asyncio.to_thread(
                 self._fetch_and_decrypt_transactions,
-                family_id, start_time, end_time, intent.category, intent.concept_keyword
+                family_id, start_time, end_time, intent.category, intent.concept_keyword, intent.member_filter
             )
         except Exception as e:
             logger.error(f"Database query error in process_query: {e}")
@@ -632,6 +796,15 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             overall_total=aggregation.total_amount
         )
 
+        member_breakdown = aggregate_by_member(
+            transactions=transactions,
+            timeframe=intent.timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=settings.DEFAULT_CURRENCY,
+            overall_total=aggregation.total_amount
+        )
+
         elapsed = time.time() - start_exec_time
         logger.info(f"[3s Audit] Aggregation query took {elapsed:.2f} seconds (timeframe: {intent.timeframe}, family_id: {family_id})")
         logger.info(f"[3s Audit] Category query took {elapsed:.2f} seconds (category: {intent.category}, timeframe: {intent.timeframe}, family_id: {family_id})")
@@ -643,7 +816,8 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             transactions=transactions,
             total_count=len(transactions),
             aggregation=aggregation,
-            category_breakdown=category_breakdown
+            category_breakdown=category_breakdown,
+            member_breakdown=member_breakdown
         )
         
         if generate_summary:
@@ -670,7 +844,7 @@ Use appropriate, tasteful emojis (e.g., ☕ for food/drink, 🚗 for transport, 
 STRICT FACTUAL FIDELITY: You must strictly reflect ONLY the numbers, categories, dates, and concepts provided in the prompt context. NEVER invent dollar amounts, merchants, or comparison percentages.
 Conciseness: Keep the summary between 2 and 4 sentences.
 If total spending is 0, provide a friendly, reassuring message.
-If summarizing family or group spending, frame the summary from a collective perspective (e.g. "The Smith Family has spent..." or "Together, you have spent...")."""
+If summarizing family or group spending, frame the summary from a collective perspective (e.g. "The Smith Family has spent..." or "Together, you have spent..."). Provide empathetic, transparent per-member attribution when multiple contributors exist (e.g. "This month, your family spent $205.50 across 5 transactions. Tony contributed $120.00 (mostly on Shopping) and Maria spent $85.50 on Groceries.")."""
 
         context_data = _build_summary_prompt_context(query_result, user_name, family_name, member_names)
         user_prompt = f"Please summarize the following spending data:\n{context_data}"
@@ -725,7 +899,7 @@ If summarizing family or group spending, frame the summary from a collective per
         
         transactions = await asyncio.to_thread(
             self._fetch_and_decrypt_transactions,
-            family_id, start_time, end_time, intent.category, intent.concept_keyword
+            family_id, start_time, end_time, intent.category, intent.concept_keyword, None
         )
         
         aggregation = aggregate_transactions(
@@ -741,7 +915,7 @@ If summarizing family or group spending, frame the summary from a collective per
         if prev_tf:
             prev_txs = await asyncio.to_thread(
                 self._fetch_and_decrypt_transactions,
-                family_id, prev_start, prev_end, intent.category, intent.concept_keyword
+                family_id, prev_start, prev_end, intent.category, intent.concept_keyword, None
             )
             aggregation.comparison = compute_period_comparison(
                 current_aggregation=aggregation,
@@ -760,6 +934,11 @@ If summarizing family or group spending, frame the summary from a collective per
             overall_total=aggregation.total_amount
         )
         
+        member_breakdown = aggregate_by_member(
+            transactions=transactions,
+            overall_total=aggregation.total_amount
+        )
+        
         qr = QueryResult(
             intent=intent,
             resolved_start_time=start_time,
@@ -767,7 +946,8 @@ If summarizing family or group spending, frame the summary from a collective per
             transactions=transactions,
             total_count=len(transactions),
             aggregation=aggregation,
-            category_breakdown=category_breakdown
+            category_breakdown=category_breakdown,
+            member_breakdown=member_breakdown
         )
         
         return await self.generate_summary(qr, user_name=user_name, use_llm=True, family_name=family_name, member_names=member_names)
@@ -783,7 +963,7 @@ If summarizing family or group spending, frame the summary from a collective per
         
         transactions = await asyncio.to_thread(
             self._fetch_and_decrypt_transactions,
-            family_id, start_time, end_time, None, None
+            family_id, start_time, end_time, None, None, None
         )
         
         aggregation = aggregate_transactions(
@@ -800,7 +980,7 @@ If summarizing family or group spending, frame the summary from a collective per
             if prev_tf:
                 prev_txs = await asyncio.to_thread(
                     self._fetch_and_decrypt_transactions,
-                    family_id, prev_start, prev_end, None, None
+                    family_id, prev_start, prev_end, None, None, None
                 )
                 aggregation.comparison = compute_period_comparison(
                     current_aggregation=aggregation,

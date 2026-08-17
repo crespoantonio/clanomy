@@ -83,7 +83,11 @@ def test_process_query_success(mock_session, query_service):
             amount="15.0 USD", concept="Lunch", category="Food/Drink",
             timestamp=datetime.now(timezone.utc)
         )
-        mock_session_inst.exec.return_value.all.return_value = [tx]
+        def mock_exec(query):
+            res = MagicMock()
+            res.all.return_value = [tx] if "transaction" in str(query).lower() else []
+            return res
+        mock_session_inst.exec.side_effect = mock_exec
 
         result = await query_service.process_query("How much did I spend on food today?", family_id)
         
@@ -174,7 +178,11 @@ def test_get_time_aggregation(mock_session, query_service):
             amount="15.0 USD", concept="Lunch", category="Food/Drink",
             timestamp=datetime.now(timezone.utc)
         )
-        mock_session_inst.exec.return_value.all.return_value = [tx]
+        def mock_exec(query):
+            res = MagicMock()
+            res.all.return_value = [tx] if "transaction" in str(query).lower() else []
+            return res
+        mock_session_inst.exec.side_effect = mock_exec
         
         agg = await query_service.get_time_aggregation(family_id, "this_month")
         assert agg.total_amount == 15.0
@@ -237,7 +245,11 @@ def test_get_category_aggregation(mock_session, query_service):
             amount="15.0 USD", concept="Lunch", category="Food/Drink",
             timestamp=datetime.now(timezone.utc)
         )
-        mock_session_inst.exec.return_value.all.return_value = [tx]
+        def mock_exec(query):
+            res = MagicMock()
+            res.all.return_value = [tx] if "transaction" in str(query).lower() else []
+            return res
+        mock_session_inst.exec.side_effect = mock_exec
         
         breakdown = await query_service.get_category_aggregation(family_id, "groceries", "this_month")
         assert breakdown.top_category == "Food/Drink"
@@ -404,4 +416,117 @@ def test_process_query_with_summary(mock_session, query_service):
     import asyncio
     asyncio.run(_test())
 
+def test_decrypted_transaction_with_user_info():
+    tx = DecryptedTransaction(
+        id=uuid4(), family_id=uuid4(), user_id=uuid4(),
+        user_name="Tony Stark", user_handle="@ironman",
+        amount=10.0, currency="USD", concept="A", category="Other", timestamp=datetime.now(timezone.utc)
+    )
+    assert tx.user_name == "Tony Stark"
+    assert tx.user_handle == "@ironman"
 
+def test_aggregate_by_member():
+    from src.services.query_service import aggregate_by_member
+    user_a = uuid4()
+    user_b = uuid4()
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=user_a, user_name="Alice", user_handle="@alice", amount=10.0, currency="USD", concept="A", category="Food/Drink", timestamp=datetime.now(timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=user_a, user_name="Alice", user_handle="@alice", amount=20.0, currency="USD", concept="B", category="Food/Drink", timestamp=datetime.now(timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=user_b, user_name="Bob", user_handle=None, amount=10.0, currency="EUR", concept="C", category="Transport", timestamp=datetime.now(timezone.utc))
+    ]
+    breakdown = aggregate_by_member(transactions, "this_month", None, None, "USD", 30.0)
+    assert breakdown.top_spender == "Alice"
+    assert breakdown.top_spender_amount == 30.0
+    assert "Alice" in breakdown.members
+    assert breakdown.members["Alice"].total_amount == 30.0
+    assert breakdown.members["Alice"].transaction_count == 2
+    assert breakdown.members["Bob"].transaction_count == 1
+    assert breakdown.members["Bob"].currency_totals == {"EUR": 10.0}
+
+def test_aggregate_by_member_empty():
+    from src.services.query_service import aggregate_by_member
+    breakdown = aggregate_by_member([], "this_month", None, None, "USD", 0.0)
+    assert breakdown.total_spending == 0.0
+    assert breakdown.top_spender is None
+    assert breakdown.members == {}
+
+def test_parse_intent_with_member_filter():
+    from src.services.query_service import ParsedQueryIntent
+    intent = ParsedQueryIntent(intent="query", member_filter="Tony")
+    assert intent.member_filter == "Tony"
+
+@patch("src.services.query_service.Session")
+def test_fetch_and_decrypt_with_member_filter(mock_session, query_service):
+    async def _test():
+        from src.db.models import User, Transaction
+        mock_session_inst = MagicMock()
+        mock_session.return_value.__enter__.return_value = mock_session_inst
+        
+        family_id = uuid4()
+        user_id = uuid4()
+        tx = Transaction(
+            id=uuid4(), family_id=family_id, user_id=user_id,
+            amount="15.0 USD", concept="Lunch", category="Food/Drink",
+            timestamp=datetime.now(timezone.utc)
+        )
+        
+        user = User(id=user_id, family_id=family_id, telegram_id=123, username="tony", full_name="Tony Stark")
+
+        def mock_exec(query):
+            res = MagicMock()
+            if "transaction" in str(query).lower():
+                res.all.return_value = [tx]
+            else:
+                res.all.return_value = [user]
+            return res
+            
+        mock_session_inst.exec.side_effect = mock_exec
+        
+        txs = query_service._fetch_and_decrypt_transactions(family_id, None, None, None, None, member_filter="Tony")
+        assert len(txs) == 1
+        assert txs[0].user_name == "Tony Stark"
+        
+        txs_no = query_service._fetch_and_decrypt_transactions(family_id, None, None, None, None, member_filter="Maria")
+        assert len(txs_no) == 0
+    import asyncio
+    asyncio.run(_test())
+
+def test_build_summary_prompt_context_with_members():
+    from src.services.query_service import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown, MemberBreakdown, MemberSpending, DecryptedTransaction
+    
+    intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
+    agg = TimeAggregation(timeframe="this_week", total_amount=205.5, primary_currency="USD", currency_totals={"USD": 205.5}, transaction_count=5, average_per_transaction=41.1, daily_breakdown={})
+    
+    ms_tony = MemberSpending(user_id=uuid4(), user_name="Tony", total_amount=120.0, primary_currency="USD", currency_totals={"USD": 120.0}, transaction_count=3, percentage_of_total=58.4, average_per_transaction=40.0, top_category="Shopping")
+    ms_maria = MemberSpending(user_id=uuid4(), user_name="Maria", total_amount=85.5, primary_currency="USD", currency_totals={"USD": 85.5}, transaction_count=2, percentage_of_total=41.6, average_per_transaction=42.75, top_category="Food/Drink")
+    
+    mb = MemberBreakdown(timeframe="this_week", total_spending=205.5, primary_currency="USD", members={"Tony": ms_tony, "Maria": ms_maria}, top_spender="Tony", top_spender_amount=120.0)
+    
+    tx1 = DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), user_name="Tony", user_handle="@tony", amount=40.0, currency="USD", concept="Shoes", category="Shopping", timestamp=datetime.now(timezone.utc))
+    
+    qr = QueryResult(intent=intent, total_count=5, aggregation=agg, member_breakdown=mb, transactions=[tx1])
+    
+    ctx = _build_summary_prompt_context(qr, user_name="Tony")
+    assert "Member Breakdown:" in ctx
+    assert "Tony: 120.00 USD (3 transactions, 58.4% of total, Top category: Shopping)" in ctx
+    assert "Shoes (40.00 USD by Tony)" in ctx
+
+def test_generate_fallback_summary_with_members():
+    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation, MemberBreakdown, MemberSpending
+    intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
+    agg = TimeAggregation(timeframe="this_week", total_amount=205.5, primary_currency="USD", currency_totals={"USD": 205.5}, transaction_count=5, average_per_transaction=41.1, daily_breakdown={})
+    ms_tony = MemberSpending(user_id=uuid4(), user_name="Tony", total_amount=120.0, primary_currency="USD", currency_totals={"USD": 120.0}, transaction_count=3, percentage_of_total=58.4, average_per_transaction=40.0, top_category="Shopping")
+    ms_maria = MemberSpending(user_id=uuid4(), user_name="Maria", total_amount=85.5, primary_currency="USD", currency_totals={"USD": 85.5}, transaction_count=2, percentage_of_total=41.6, average_per_transaction=42.75, top_category="Food/Drink")
+    mb = MemberBreakdown(timeframe="this_week", total_spending=205.5, primary_currency="USD", members={"Tony": ms_tony, "Maria": ms_maria}, top_spender="Tony", top_spender_amount=120.0)
+    qr = QueryResult(intent=intent, total_count=5, aggregation=agg, member_breakdown=mb)
+    
+    res = generate_fallback_summary(qr, family_name="The Smiths")
+    assert "(Tony: 120.00; Maria: 85.50)" in res
+
+def test_generate_fallback_summary_member_filter():
+    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None, member_filter="Maria")
+    agg = TimeAggregation(timeframe="this_week", total_amount=85.5, primary_currency="USD", currency_totals={"USD": 85.5}, transaction_count=2, average_per_transaction=42.75, daily_breakdown={})
+    qr = QueryResult(intent=intent, total_count=2, aggregation=agg)
+    res = generate_fallback_summary(qr)
+    assert "Maria has spent 85.50 USD across 2 transactions" in res

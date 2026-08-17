@@ -60,6 +60,12 @@ To connect Telegram with the FastAPI backend:
 3. Send a message to your Telegram bot.
 4. Watch the backend terminal logs to see the "3-second rule" async processing, transcription, Ollama extraction, and encryption!
 
+### Usage Examples
+You can query your family expenses using natural language:
+- **General Summary**: "What did we spend this month?"
+- **Per-Member Filter**: "How much did Tony spend on groceries this week?"
+- **Comparisons**: "Did we spend more this month than last month?"
+
 ---
 
 ## 🛠 Development Commands

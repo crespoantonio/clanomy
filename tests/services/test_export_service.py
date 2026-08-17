@@ -58,6 +58,7 @@ def create_mock_transactions():
         id=uuid4(),
         family_id=uuid4(),
         user_id=uuid4(),
+        user_name="user1",
         timestamp=datetime.now(timezone.utc),
         amount=15.50,
         currency="USD",
@@ -68,6 +69,7 @@ def create_mock_transactions():
         id=uuid4(),
         family_id=uuid4(),
         user_id=uuid4(),
+        user_name="user2",
         timestamp=datetime.now(timezone.utc),
         amount=100.0,
         currency="EUR",
@@ -90,11 +92,13 @@ async def test_generate_csv(tmp_path, session):
         rows = list(reader)
         
     assert len(rows) == 3 # header + 2 records
-    assert rows[0] == ["Timestamp (UTC)", "Amount", "Currency", "Category", "Concept"]
+    assert rows[0] == ["Timestamp (UTC)", "Amount", "Currency", "Category", "Concept", "Logged By"]
     assert rows[1][1] == "15.5"
     assert rows[1][2] == "USD"
     assert rows[1][4] == "Coffee with friends"
+    assert rows[1][5] == "user1"
     assert rows[2][4] == 'Sneakers "Nike", cool' # quotes handling
+    assert rows[2][5] == "user2"
 
 @pytest.mark.anyio
 async def test_generate_json(tmp_path, session):
@@ -111,10 +115,12 @@ async def test_generate_json(tmp_path, session):
         
     assert data["family_id"] == str(family_id)
     assert "exported_at" in data
-    assert data["total_count"] == 2
+    assert "transactions" in data
     assert len(data["transactions"]) == 2
     assert data["transactions"][0]["amount"] == 15.5
-    assert data["transactions"][0]["currency"] == "USD"
+    assert data["transactions"][0]["concept"] == "Coffee with friends"
+    assert data["transactions"][0]["logged_by"] == "user1"
+    assert "user_id" in data["transactions"][0]
 
 @pytest.mark.anyio
 async def test_export_data_isolation(session, encryption_service, test_family, test_user):

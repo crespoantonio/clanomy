@@ -35,7 +35,7 @@ class ExportService:
                 cls._instance.engine = db_engine
             return cls._instance
 
-    def _decrypt_transaction(self, tx: Transaction) -> Optional[DecryptedTransaction]:
+    def _decrypt_transaction(self, tx: Transaction, user_name: Optional[str] = None) -> Optional[DecryptedTransaction]:
         """Decrypts a single transaction."""
         try:
             decrypted_amount_str = self.encryption_service.decrypt(tx.amount)
@@ -49,6 +49,7 @@ class ExportService:
                 id=tx.id,
                 family_id=tx.family_id,
                 user_id=tx.user_id,
+                user_name=user_name,
                 timestamp=tx.timestamp,
                 amount=amount,
                 currency=currency,
@@ -63,14 +64,15 @@ class ExportService:
         """Generates a CSV file from a list of decrypted transactions."""
         with open(file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["Timestamp (UTC)", "Amount", "Currency", "Category", "Concept"])
+            writer.writerow(["Timestamp (UTC)", "Amount", "Currency", "Category", "Concept", "Logged By"])
             for tx in transactions:
                 writer.writerow([
                     tx.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
                     tx.amount,
                     tx.currency,
                     tx.category,
-                    tx.concept
+                    tx.concept,
+                    tx.user_name or "User"
                 ])
 
     def generate_json(self, transactions: List[DecryptedTransaction], family_id: UUID, file_path: str) -> None:
@@ -86,7 +88,9 @@ class ExportService:
                     "amount": tx.amount,
                     "currency": tx.currency,
                     "category": tx.category,
-                    "concept": tx.concept
+                    "concept": tx.concept,
+                    "logged_by": tx.user_name or "User",
+                    "user_id": str(tx.user_id)
                 }
                 for tx in transactions
             ]
@@ -100,12 +104,17 @@ class ExportService:
         
         def fetch_and_process():
             with Session(self.engine) as session:
+                from src.db.models import User
+                users = session.exec(select(User).where(User.family_id == family_id)).all()
+                user_map = {u.id: u.full_name or u.username or "User" for u in users}
+                
                 statement = select(Transaction).where(Transaction.family_id == family_id).order_by(Transaction.timestamp.desc())
                 results = session.exec(statement).all()
                 
                 decrypted = []
                 for tx in results:
-                    dtx = self._decrypt_transaction(tx)
+                    uname = user_map.get(tx.user_id, "User")
+                    dtx = self._decrypt_transaction(tx, uname)
                     if dtx:
                         decrypted.append(dtx)
                 

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-08-16 23:21:00
+last_updated: 2026-08-16 23:29:00
 project: FamFin-AI
 tracking_system: file-system
 story_location: {implementation_artifacts}
@@ -71,7 +71,7 @@ development_status:
   5-1-family-group-creation-invite-link: done
   5-2-shared-budget-visibility: done
   5-3-per-member-spending-attribution: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 
   epic-6: backlog
   6-1-notion-workspace-connection: backlog

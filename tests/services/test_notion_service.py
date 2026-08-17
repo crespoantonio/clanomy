@@ -1,6 +1,6 @@
 import pytest
 from uuid import uuid4
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from src.services.notion_service import NotionService, NotionAuthError, NotionDatabaseNotFoundError, NotionServiceError
 from src.db.models import Family
 from src.core.encryption import EncryptionService
@@ -116,3 +116,113 @@ def test_get_status(notion_service, family, session):
     status = notion_service.get_family_notion_status(family.id)
     assert status["is_connected"] is True
     assert status["database_id"] == "db_abc"
+
+@pytest.mark.anyio
+async def test_mirror_transaction_not_connected(notion_service, family):
+    # Family without Notion connected
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=50.0,
+        currency="USD",
+        concept="Groceries",
+        category="Food",
+        timestamp=datetime.now(timezone.utc)
+    )
+    assert result is None
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_mirror_transaction_success(mock_client_cls, notion_service, family, session):
+    # Setup family with Notion connected
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    # Mock database details to provide schema
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {
+            "Concept": {"type": "title"},
+            "Amount": {"type": "number"},
+            "Category": {"type": "select"},
+            "Date": {"type": "date"}
+        }
+    })
+
+    async def mock_create(**kwargs):
+        return {"id": "page_123", "url": "http://notion.so/page_123"}
+    mock_notion.pages.create.side_effect = mock_create
+
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=50.0,
+        currency="USD",
+        concept="Groceries",
+        category="Food",
+        timestamp=datetime.now(timezone.utc)
+    )
+    assert result is not None
+    assert result["page_id"] == "page_123"
+    assert result["status"] == "mirrored"
+    mock_notion.pages.create.assert_called_once()
+
+def test_build_page_properties(notion_service):
+    schema = {
+        "Name": {"type": "title"},
+        "Cost": {"type": "number"},
+        "Tags": {"type": "multi_select"},
+        "When": {"type": "date"},
+        "Who": {"type": "select"}
+    }
+    
+    timestamp = datetime.now(timezone.utc)
+    props = notion_service._build_page_properties(
+        schema=schema,
+        concept="Dinner",
+        amount=100.50,
+        currency="EUR",
+        category="Dining",
+        timestamp=timestamp,
+        user_name="Alice"
+    )
+    
+    assert "Name" in props
+    assert props["Name"]["title"][0]["text"]["content"] == "Dinner"
+    assert "Cost" in props
+    assert props["Cost"]["number"] == 100.50
+    assert "Tags" in props
+    assert props["Tags"]["multi_select"][0]["name"] == "Dining"
+    assert "When" in props
+    assert props["When"]["date"]["start"] == timestamp.isoformat()
+    assert "Who" in props
+    assert props["Who"]["select"]["name"] == "Alice"
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_test_connection_mirror(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    family.notion_database_name = "My DB"
+    session.add(family)
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "title": "My DB",
+        "properties_schema": {"Name": {"type": "title"}}
+    })
+
+    async def mock_create(**kwargs):
+        return {"id": "page_456", "url": "http://notion.so/page_456"}
+    mock_notion.pages.create.side_effect = mock_create
+
+    result = await notion_service.test_connection_mirror(family.id)
+    assert result["database_name"] == "My DB"
+    assert result["page_url"] == "http://notion.so/page_456"

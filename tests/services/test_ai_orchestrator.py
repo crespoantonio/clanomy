@@ -231,7 +231,7 @@ async def test_orchestrator_persistence_success(orchestrator, monkeypatch):
 
     await orchestrator.orchestrate(user_id=user_id, text="15 for Starbucks", audio_file_id=None, chat_id=12345)
 
-    mock_session.get.assert_called_once_with(User, UUID(user_id))
+    mock_session.get.assert_called_with(User, UUID(user_id))
     
     mock_session.add.assert_called_once()
     added_transaction = mock_session.add.call_args[0][0]
@@ -492,3 +492,142 @@ async def test_orchestrator_notion_commands(mock_notion_cls, orchestrator, monke
 
     await orchestrator.orchestrate(user_id=user_id, text="/notion status", audio_file_id=None, chat_id=12345)
     assert "Connected" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+@patch("src.services.ai_orchestrator.NotionService")
+async def test_orchestrator_expense_mirroring(mock_notion_cls, orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+    
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.amount = 15.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Starbucks"
+    mock_extract_result.category = "Food/Drink"
+    mock_extract_result.model_dump.return_value = {"amount": 15.0}
+    mock_extract.return_value = mock_extract_result
+    
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service("log_expense"))
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony", username="tony")
+    mock_session.get.return_value = mock_user
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"encrypted_{text}"
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+    
+    # Enable Notion status mock
+    mock_notion = mock_notion_cls.return_value
+    mock_notion.get_family_notion_status.return_value = {"is_connected": True}
+    mock_notion.mirror_transaction = AsyncMock(return_value={"status": "mirrored"})
+    
+    # Mock create_task to await directly for test
+    import asyncio
+    original_create_task = asyncio.create_task
+    def mock_create_task(coro):
+        return original_create_task(coro)
+    monkeypatch.setattr(asyncio, "create_task", mock_create_task)
+
+    await orchestrator.orchestrate(user_id=user_id, text="15 for Starbucks", audio_file_id=None, chat_id=12345)
+    
+    # Allow background tasks to run
+    await asyncio.sleep(0.1)
+
+    mock_notion.mirror_transaction.assert_called_once()
+    kwargs = mock_notion.mirror_transaction.call_args[1]
+    assert kwargs["amount"] == 15.0
+    assert kwargs["concept"] == "Starbucks"
+    assert kwargs["user_name"] == "Tony"
+
+@pytest.mark.anyio
+@patch("src.services.ai_orchestrator.NotionService")
+async def test_orchestrator_expense_mirroring_error(mock_notion_cls, orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+    
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.amount = 15.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Starbucks"
+    mock_extract_result.category = "Food/Drink"
+    mock_extract_result.model_dump.return_value = {"amount": 15.0}
+    mock_extract.return_value = mock_extract_result
+    
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service("log_expense"))
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony")
+    mock_session.get.return_value = mock_user
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"encrypted_{text}"
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+    
+    mock_notion = mock_notion_cls.return_value
+    mock_notion.get_family_notion_status.return_value = {"is_connected": True}
+    mock_notion.mirror_transaction = AsyncMock(side_effect=Exception("API Error"))
+    
+    import asyncio
+    
+    await orchestrator.orchestrate(user_id=user_id, text="15 for Starbucks", audio_file_id=None, chat_id=12345)
+    await asyncio.sleep(0.1)
+    
+    # Should not crash and should send telegram message
+    mock_send_message.assert_called_once()
+    mock_session.commit.assert_called_once()
+
+@pytest.mark.anyio
+@patch("src.services.ai_orchestrator.NotionService")
+async def test_orchestrator_notion_test_sync_commands(mock_notion_cls, orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_query_service = create_mock_query_service("notion_manage")
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", mock_query_service)
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", lambda x: UUID("11111111-1111-1111-1111-111111111111"))
+    
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    
+    mock_notion = mock_notion_cls.return_value
+    mock_notion.get_family_notion_status.return_value = {"is_connected": True}
+    mock_notion.test_connection_mirror = AsyncMock(return_value={"database_name": "My DB", "page_url": "http://notion"})
+    
+    await orchestrator.orchestrate(user_id=user_id, text="/notion test", audio_file_id=None, chat_id=12345)
+    assert "Test Successful" in mock_send_message.call_args[1]["text"]
+
+    await orchestrator.orchestrate(user_id=user_id, text="/notion sync", audio_file_id=None, chat_id=12345)
+    assert "Real-time mirroring is active" in mock_send_message.call_args[1]["text"]

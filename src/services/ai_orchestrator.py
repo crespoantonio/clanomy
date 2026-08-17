@@ -17,6 +17,7 @@ from src.services.query_service import QueryService, ParsedQueryIntent
 from src.services.export_service import ExportService
 from src.services.account_service import AccountService
 from src.services.family_service import FamilyService
+from src.services.notion_service import NotionService
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,34 @@ class AIOrchestrator:
             if not user or not user.family_id:
                 raise ValueError("User not associated with a family")
             return user.family_id
+
+    def _get_user_info(self, user_uuid: UUID) -> dict:
+        """Synchronous database helper to fetch user info for mirroring."""
+        with Session(engine) as session:
+            user = session.get(User, user_uuid)
+            if not user:
+                raise ValueError("User not found")
+            return {
+                "family_id": user.family_id, 
+                "display_name": user.full_name or user.username
+            }
+
+    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str]):
+        """Background task for Notion Mirroring. Fails silently with logs."""
+        try:
+            with Session(engine) as session:
+                notion_service = NotionService(session)
+                await notion_service.mirror_transaction(
+                    family_id=family_id,
+                    amount=amount,
+                    currency=currency,
+                    concept=concept,
+                    category=category,
+                    timestamp=timestamp,
+                    user_name=user_name
+                )
+        except Exception as e:
+            logger.error(f"[Notion Mirror] Uncaught error in background task: {e}")
 
     async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int):
         start_time = time.time()
@@ -207,7 +236,6 @@ class AIOrchestrator:
                         members = ", ".join([m.get("full_name") or m.get("username") or "User" for m in info["members"]])
                         response_text = f"👪 <b>Family Info: {info['name']}</b>\nMembers: {members}\nTransactions: {info['transactions_count']}\nActive Invites: {info['active_invites_count']}"
                     elif parsed_query and parsed_query.intent == "notion_manage":
-                        from src.services.notion_service import NotionService
                         family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
                         raw_text = text.strip()
                         raw_lower = raw_text.lower()
@@ -297,6 +325,25 @@ class AIOrchestrator:
                             elif raw_lower == "/notion disconnect" or raw_lower == "disconnect notion":
                                 notion_service.disconnect_workspace(family_id)
                                 response_text = "🔌 <b>Notion Disconnected</b>\nYour Notion workspace connection has been removed. Transaction mirroring is now disabled."
+                            elif raw_lower == "/notion test" or raw_lower == "notion test":
+                                status = notion_service.get_family_notion_status(family_id)
+                                if not status["is_connected"]:
+                                    response_text = "⚠️ <b>Notion is not connected.</b>\nPlease run <code>/notion</code> to connect your workspace first."
+                                else:
+                                    try:
+                                        res = await notion_service.test_connection_mirror(family_id)
+                                        if res:
+                                            response_text = f"✅ <b>Notion Mirror Test Successful!</b>\nCreated test record in database: <b>{res['database_name']}</b>\n🔗 <a href=\"{res['page_url']}\">View in Notion</a>"
+                                        else:
+                                            response_text = "⚠️ <b>Test Failed:</b> Could not verify connection."
+                                    except Exception as e:
+                                        response_text = f"⚠️ <b>Test Failed:</b> {e}"
+                            elif raw_lower == "/notion sync" or raw_lower == "notion sync":
+                                status = notion_service.get_family_notion_status(family_id)
+                                if status["is_connected"]:
+                                    response_text = "✅ <b>Notion Sync is Active!</b>\nReal-time mirroring is active. All new transactions will be mirrored to your Notion database automatically."
+                                else:
+                                    response_text = "⚠️ <b>Notion is not connected.</b>\nPlease run <code>/notion</code> to connect your workspace first."
                             else:
                                 response_text = "Unknown Notion command."
                     else:
@@ -320,6 +367,21 @@ class AIOrchestrator:
                                 concept=encrypted_concept,
                                 category=result.category
                             )
+                            
+                            # Trigger background notion mirroring safely without affecting transaction response
+                            try:
+                                user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
+                                asyncio.create_task(self._safe_mirror_to_notion(
+                                    family_id=user_info["family_id"],
+                                    amount=result.amount,
+                                    currency=result.currency,
+                                    concept=result.concept,
+                                    category=result.category,
+                                    timestamp=datetime.datetime.now(datetime.timezone.utc),
+                                    user_name=user_info["display_name"]
+                                ))
+                            except Exception as mirror_err:
+                                logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")
                         except Exception as e:
                             logger.error(f"Persistence failed: {e}")
                             status = "error"

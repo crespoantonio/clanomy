@@ -710,6 +710,7 @@ Intents:
 - "create_family": If the user wants to create a new family group or rename theirs (e.g., "create family The Smiths", "/createfamily vacation"). Extract the name into `family_name`.
 - "generate_invite": If the user wants to invite someone to their family group (e.g., "invite family member", "generate invite link").
 - "family_info": If the user wants to see information about their family group (e.g., "my family", "family info").
+- "notion_manage": If the user wants to connect, disconnect, or check the status of their Notion workspace (e.g., "connect notion", "notion status", "disconnect notion").
 
 Allowed canonical categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
 Map synonyms (e.g. "groceries" -> "Food/Drink", "utilities" -> "Rent/Bills") to these canonical categories.

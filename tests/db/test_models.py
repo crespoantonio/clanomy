@@ -22,6 +22,23 @@ def test_create_family(session: Session):
     assert isinstance(family.id, uuid.UUID)
     assert family.name == "Test Family"
 
+def test_family_notion_fields(session: Session):
+    family = Family(
+        name="Notion Family",
+        notion_api_key="encrypted_key",
+        notion_database_id="db_id_123",
+        notion_database_name="Budget DB",
+        notion_connected_at=datetime.now(timezone.utc)
+    )
+    session.add(family)
+    session.commit()
+    session.refresh(family)
+
+    assert family.notion_api_key == "encrypted_key"
+    assert family.notion_database_id == "db_id_123"
+    assert family.notion_database_name == "Budget DB"
+    assert family.notion_connected_at is not None
+
 def test_create_user_in_family(session: Session):
     family = Family(name="Smiths")
     session.add(family)

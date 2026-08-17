@@ -71,6 +71,8 @@ class AIOrchestrator:
             return True
         if "/familytotal" in text_lower or "family total" in text_lower or "family spending" in text_lower or "our spending" in text_lower or "how much did we spend" in text_lower:
             return True
+        if "notion" in text_lower:
+            return True
         return bool(words.intersection(special_intent_keywords))
 
     def _get_user_family_id(self, user_uuid: UUID) -> UUID:
@@ -204,6 +206,99 @@ class AIOrchestrator:
                         info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
                         members = ", ".join([m.get("full_name") or m.get("username") or "User" for m in info["members"]])
                         response_text = f"👪 <b>Family Info: {info['name']}</b>\nMembers: {members}\nTransactions: {info['transactions_count']}\nActive Invites: {info['active_invites_count']}"
+                    elif parsed_query and parsed_query.intent == "notion_manage":
+                        from src.services.notion_service import NotionService
+                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        raw_text = text.strip()
+                        raw_lower = raw_text.lower()
+                        parts = raw_text.split()
+                        
+                        with Session(engine) as session:
+                            notion_service = NotionService(session)
+                            
+                            if raw_lower == "/notion" or raw_lower == "connect notion":
+                                response_text = (
+                                    "🔗 <b>Connect your Notion Workspace</b>\n\n"
+                                    "Follow these quick steps:\n"
+                                    "1. Go to https://www.notion.so/my-integrations and create an <b>Internal Integration</b>.\n"
+                                    "2. Copy the <b>Internal Integration Secret</b> (token).\n"
+                                    "3. Open your Notion expenses database, click <b>•••</b> (top right) -> <b>Add connections</b>, and select your integration.\n"
+                                    "4. Reply here with:\n"
+                                    "   <code>/notion connect &lt;your_secret_token&gt;</code>"
+                                )
+                            elif raw_lower.startswith("/notion connect") or raw_lower.startswith("notion connect"):
+                                if len(parts) < 3:
+                                    response_text = "Please provide the secret token. Usage: <code>/notion connect &lt;your_secret_token&gt;</code>"
+                                else:
+                                    token = parts[2]
+                                    db_id = parts[3] if len(parts) > 3 else None
+                                    is_valid = await notion_service.validate_token(token)
+                                    if not is_valid:
+                                        response_text = "⚠️ <b>Invalid Token!</b> Please check your Integration Secret and try again."
+                                    elif db_id:
+                                        try:
+                                            res = await notion_service.connect_database(family_id, token, db_id)
+                                            response_text = f"✅ <b>Notion Workspace Connected!</b>\n\n📁 <b>Database:</b> {res['database_name']}\n🆔 <b>ID:</b> <code>{res['database_id']}</code>\n\nYour transactions are now linked and ready for automatic mirroring!"
+                                        except Exception as e:
+                                            response_text = f"⚠️ <b>Failed to connect database:</b> {e}"
+                                    else:
+                                        dbs = await notion_service.search_databases(token)
+                                        if not dbs:
+                                            response_text = (
+                                                "⚠️ <b>No databases found!</b>\n"
+                                                "Your Notion token is valid, but no databases have been shared with this integration yet.\n\n"
+                                                "Please open your Notion database, click <b>•••</b> -> <b>Add connections</b>, select your integration, and run <code>/notion connect &lt;token&gt;</code> again."
+                                            )
+                                        else:
+                                            family = session.get(Family, family_id)
+                                            family.notion_api_key = self.encryption_service.encrypt(token)
+                                            family.notion_database_id = None
+                                            family.notion_database_name = None
+                                            session.add(family)
+                                            session.commit()
+                                            
+                                            db_list = "\n".join([f"{i+1}. 📊 <b>{db['title']}</b> (ID: <code>{db['id']}</code>)" for i, db in enumerate(dbs)])
+                                            response_text = (
+                                                f"📋 <b>Found {len(dbs)} Notion Database(s):</b>\n\n{db_list}\n\n"
+                                                "Reply with: <code>/notion setdb &lt;number or ID&gt;</code> (e.g. <code>/notion setdb 1</code>)"
+                                            )
+                            elif raw_lower.startswith("/notion setdb") or raw_lower.startswith("notion setdb"):
+                                if len(parts) < 3:
+                                    response_text = "Please provide the database number or ID. Usage: <code>/notion setdb &lt;number or ID&gt;</code>"
+                                else:
+                                    target = parts[2]
+                                    status = notion_service.get_family_notion_status(family_id)
+                                    if not status["has_valid_token"]:
+                                        response_text = "No Notion token found. Please run <code>/notion connect &lt;token&gt;</code> first."
+                                    else:
+                                        family = session.get(Family, family_id)
+                                        token = self.encryption_service.decrypt(family.notion_api_key)
+                                        dbs = await notion_service.search_databases(token)
+                                        selected_db = None
+                                        if target.isdigit():
+                                            idx = int(target) - 1
+                                            if 0 <= idx < len(dbs):
+                                                selected_db = dbs[idx]
+                                        else:
+                                            selected_db = next((db for db in dbs if db["id"] == target), None)
+                                        
+                                        if not selected_db:
+                                            response_text = "Database not found."
+                                        else:
+                                            res = await notion_service.connect_database(family_id, token, selected_db["id"], selected_db["title"])
+                                            response_text = f"✅ <b>Notion Workspace Connected!</b>\n\n📁 <b>Database:</b> {res['database_name']}\n🆔 <b>ID:</b> <code>{res['database_id']}</code>\n\nYour transactions are now linked and ready for automatic mirroring!"
+                            elif raw_lower == "/notion status" or raw_lower == "notion status":
+                                status = notion_service.get_family_notion_status(family_id)
+                                if status["is_connected"]:
+                                    dt_str = status['connected_at'].strftime('%Y-%m-%d %H:%M UTC') if status.get('connected_at') else "N/A"
+                                    response_text = f"📊 <b>Notion Connection Status:</b> Connected ✅\n📁 <b>Target Database:</b> {status['database_name']}\n🆔 <b>Database ID:</b> <code>{status['database_id']}</code>\n📅 <b>Connected:</b> {dt_str}"
+                                else:
+                                    response_text = "📊 <b>Notion Connection Status:</b> Not Connected ❌"
+                            elif raw_lower == "/notion disconnect" or raw_lower == "disconnect notion":
+                                notion_service.disconnect_workspace(family_id)
+                                response_text = "🔌 <b>Notion Disconnected</b>\nYour Notion workspace connection has been removed. Transaction mirroring is now disabled."
+                            else:
+                                response_text = "Unknown Notion command."
                     else:
                         # Default: log expense
                         extraction_service = ExtractionService()

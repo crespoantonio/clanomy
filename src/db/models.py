@@ -13,6 +13,11 @@ class Family(SQLModel, table=True):
     name: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    notion_api_key: Optional[str] = Field(default=None)
+    notion_database_id: Optional[str] = Field(default=None, index=True)
+    notion_database_name: Optional[str] = Field(default=None)
+    notion_connected_at: Optional[datetime] = Field(default=None)
+
     # Relationships
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     transactions: List["Transaction"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})

@@ -1,6 +1,6 @@
 import pytest
 import httpx
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from src.services.ai_orchestrator import AIOrchestrator
 from src.core.config import settings
 from src.db.models import Transaction, User
@@ -454,3 +454,41 @@ async def test_orchestrator_familytotal_command(orchestrator, monkeypatch):
     call_args = mock_get_spending_summary.call_args
     assert call_args[1]["timeframe"] == "this_week"
     assert call_args[1]["family_name"] == "Test Family"
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.NotionService")
+async def test_orchestrator_notion_commands(mock_notion_cls, orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_query_service = create_mock_query_service("notion_manage")
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", mock_query_service)
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", lambda x: UUID("11111111-1111-1111-1111-111111111111"))
+    
+    # Mock Session so it doesn't try to access real DB
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    
+    mock_notion = mock_notion_cls.return_value
+    mock_notion.validate_token = AsyncMock(return_value=True)
+    mock_notion.search_databases = AsyncMock(return_value=[{"id": "db1", "title": "Budget"}])
+    mock_notion.get_family_notion_status.return_value = {
+        "is_connected": True, 
+        "database_name": "Budget", 
+        "database_id": "db1",
+        "connected_at": datetime.datetime.now(),
+        "has_valid_token": True
+    }
+    
+    await orchestrator.orchestrate(user_id=user_id, text="/notion", audio_file_id=None, chat_id=12345)
+    assert "Connect your Notion Workspace" in mock_send_message.call_args[1]["text"]
+
+    await orchestrator.orchestrate(user_id=user_id, text="/notion status", audio_file_id=None, chat_id=12345)
+    assert "Connected" in mock_send_message.call_args[1]["text"]

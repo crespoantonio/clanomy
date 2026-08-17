@@ -55,6 +55,9 @@ class Transaction(SQLModel, table=True):
     category: str = Field(index=True)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
+    notion_page_id: Optional[str] = Field(default=None, nullable=True, index=True)
+    notion_synced_at: Optional[datetime] = Field(default=None, nullable=True)
+
     # Relationships
     family: Family = Relationship(back_populates="transactions")
     user: User = Relationship(back_populates="transactions")

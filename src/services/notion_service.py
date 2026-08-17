@@ -3,13 +3,35 @@ import logging
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from sqlmodel import Session
+from sqlmodel import Session, select
 from notion_client import AsyncClient, APIResponseError
+import httpx
+from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential, retry_if_exception, before_sleep_log
 
-from src.db.models import Family
+from src.db.models import Family, Transaction, User
 from src.core.encryption import EncryptionService
 
 logger = logging.getLogger(__name__)
+
+def _is_transient_notion_error(exc: BaseException) -> bool:
+    """
+    Determines if an exception is transient and should be retried.
+    Permanent errors (401 unauthorized, 404 not found, 400 validation error) are NOT retried.
+    """
+    if isinstance(exc, (httpx.RequestError, httpx.TimeoutException)):
+        return True
+    
+    if isinstance(exc, APIResponseError):
+        # Retry on rate limiting
+        if exc.code == "rate_limited" or exc.status == 429:
+            return True
+        # Retry on Notion server side errors
+        if exc.code in ("service_unavailable", "internal_server_error") or (exc.status and exc.status >= 500):
+            return True
+        # Do not retry on client/auth errors (400, 401, 403, 404)
+        return False
+        
+    return False
 
 class NotionAuthError(Exception):
     """Raised when the provided Notion API token is invalid or unauthorized."""
@@ -209,6 +231,20 @@ class NotionService:
 
         return payload
 
+    async def _create_page_with_retry(self, notion: AsyncClient, database_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=1, max=10),
+            retry=retry_if_exception(_is_transient_notion_error),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True
+        ):
+            with attempt:
+                return await notion.pages.create(
+                    parent={"database_id": database_id},
+                    properties=properties
+                )
+
     async def mirror_transaction(
         self,
         family_id: UUID,
@@ -217,7 +253,8 @@ class NotionService:
         concept: str,
         category: str,
         timestamp: datetime,
-        user_name: Optional[str] = None
+        user_name: Optional[str] = None,
+        transaction_id: Optional[UUID] = None
     ) -> Optional[Dict[str, Any]]:
         family = self.session.get(Family, family_id)
         if not family or not family.notion_api_key or not family.notion_database_id:
@@ -240,10 +277,20 @@ class NotionService:
                     user_name=user_name
                 )
                 
-                page = await notion.pages.create(
-                    parent={"database_id": database_id},
+                page = await self._create_page_with_retry(
+                    notion=notion,
+                    database_id=database_id,
                     properties=properties_payload
                 )
+                
+                if transaction_id:
+                    transaction = self.session.get(Transaction, transaction_id)
+                    if transaction:
+                        transaction.notion_page_id = page["id"]
+                        transaction.notion_synced_at = datetime.now(timezone.utc)
+                        self.session.add(transaction)
+                        self.session.commit()
+
                 logger.info(f"[Notion Mirror] Mirrored transaction to page {page['id']} for family {family_id}")
                 return {"page_id": page["id"], "url": page.get("url"), "status": "mirrored"}
             except Exception as e:
@@ -286,3 +333,70 @@ class NotionService:
             except Exception as e:
                 logger.error(f"[Notion Mirror] Failed to create test entry for family {family_id}: {e}")
                 raise NotionServiceError(f"Test entry failed: {str(e)}")
+
+    async def sync_pending_transactions(self, family_id: UUID, limit: int = 50) -> Dict[str, Any]:
+        family = self.session.get(Family, family_id)
+        if not family or not family.notion_api_key or not family.notion_database_id:
+            return {"status": "not_connected", "synced": 0, "failed": 0, "total_pending": 0}
+
+        statement = (
+            select(Transaction)
+            .where(Transaction.family_id == family_id)
+            .where(Transaction.notion_page_id == None)  # noqa: E711
+            .order_by(Transaction.timestamp.asc())
+            .limit(limit)
+        )
+        pending_txs = self.session.exec(statement).all()
+        if not pending_txs:
+            return {"status": "completed", "synced": 0, "failed": 0, "total_pending": 0}
+
+        synced_count = 0
+        failed_count = 0
+
+        for tx in pending_txs:
+            try:
+                # Refresh transaction to ensure real-time background task hasn't mirrored it in parallel
+                self.session.refresh(tx)
+                if tx.notion_page_id:
+                    continue
+
+                # Decrypt ciphertext
+                decrypted_amount_str = self.encryption.decrypt(tx.amount)
+                decrypted_concept = self.encryption.decrypt(tx.concept)
+                
+                # Parse amount & currency safely
+                parts = decrypted_amount_str.split()
+                try:
+                    amount_val = float(parts[0]) if parts else 0.0
+                except (ValueError, IndexError):
+                    amount_val = 0.0
+                currency_val = parts[1] if len(parts) > 1 else "USD"
+
+                # Get user display name
+                user = self.session.get(User, tx.user_id) if tx.user_id else None
+                user_name = (user.full_name or user.username) if user else None
+
+                res = await self.mirror_transaction(
+                    family_id=family_id,
+                    amount=amount_val,
+                    currency=currency_val,
+                    concept=decrypted_concept,
+                    category=tx.category,
+                    timestamp=tx.timestamp,
+                    user_name=user_name,
+                    transaction_id=tx.id
+                )
+                if res and res.get("status") == "mirrored":
+                    synced_count += 1
+                else:
+                    failed_count += 1
+            except Exception as e:
+                logger.error(f"[Notion Mirror] Failed to catch-up sync transaction {tx.id}: {e}")
+                failed_count += 1
+
+        return {
+            "status": "completed",
+            "synced": synced_count,
+            "failed": failed_count,
+            "total_pending": len(pending_txs)
+        }

@@ -226,3 +226,207 @@ async def test_test_connection_mirror(mock_client_cls, notion_service, family, s
     result = await notion_service.test_connection_mirror(family.id)
     assert result["database_name"] == "My DB"
     assert result["page_url"] == "http://notion.so/page_456"
+
+import httpx
+from notion_client.errors import APIResponseError
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_mirror_transaction_retry_success(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {"Name": {"type": "title"}}
+    })
+
+    mock_notion.pages.create = AsyncMock()
+    mock_notion.pages.create.side_effect = [
+        httpx.ConnectTimeout("Timeout 1"),
+        APIResponseError(code="rate_limited", status=429, message="Rate limited", headers=httpx.Headers(), raw_body_text=""),
+        {"id": "page_123", "url": "http://notion.so/page_123"}
+    ]
+
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=50.0,
+        currency="USD",
+        concept="Groceries",
+        category="Food",
+        timestamp=datetime.now(timezone.utc)
+    )
+    assert result is not None
+    assert result["page_id"] == "page_123"
+    assert mock_notion.pages.create.call_count == 3
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_mirror_transaction_retry_exhaustion(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {"Name": {"type": "title"}}
+    })
+
+    mock_notion.pages.create = AsyncMock()
+    mock_notion.pages.create.side_effect = [
+        APIResponseError(code="service_unavailable", status=503, message="Unavailable", headers=httpx.Headers(), raw_body_text="")
+    ] * 3
+
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=50.0,
+        currency="USD",
+        concept="Groceries",
+        category="Food",
+        timestamp=datetime.now(timezone.utc)
+    )
+    assert result is None
+    assert mock_notion.pages.create.call_count == 3
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_mirror_transaction_permanent_error(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {"Name": {"type": "title"}}
+    })
+
+    mock_notion.pages.create = AsyncMock()
+    mock_notion.pages.create.side_effect = [
+        APIResponseError(code="object_not_found", status=404, message="Not found", headers=httpx.Headers(), raw_body_text="")
+    ]
+
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=50.0,
+        currency="USD",
+        concept="Groceries",
+        category="Food",
+        timestamp=datetime.now(timezone.utc)
+    )
+    assert result is None
+    assert mock_notion.pages.create.call_count == 1
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_mirror_transaction_with_transaction_id(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+    
+    from src.db.models import User, Transaction
+    user = User(telegram_id=123, family_id=family.id)
+    session.add(user)
+    session.commit()
+    
+    tx = Transaction(
+        family_id=family.id,
+        user_id=user.id,
+        amount="enc",
+        concept="enc",
+        category="Food",
+        timestamp=datetime.now(timezone.utc)
+    )
+    session.add(tx)
+    session.commit()
+    session.refresh(tx)
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {"Name": {"type": "title"}}
+    })
+
+    # mock create
+    async def mock_create(**kwargs):
+        return {"id": "page_456", "url": "url"}
+    mock_notion.pages.create.side_effect = mock_create
+
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=50.0,
+        currency="USD",
+        concept="Groceries",
+        category="Food",
+        timestamp=datetime.now(timezone.utc),
+        transaction_id=tx.id
+    )
+    assert result is not None
+    assert result["page_id"] == "page_456"
+    
+    session.refresh(tx)
+    assert tx.notion_page_id == "page_456"
+    assert tx.notion_synced_at is not None
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_sync_pending_transactions(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+    
+    from src.db.models import User, Transaction
+    user = User(telegram_id=456, family_id=family.id)
+    session.add(user)
+    session.commit()
+    
+    amount_enc = notion_service.encryption.encrypt("50.0 USD")
+    concept_enc = notion_service.encryption.encrypt("Groceries")
+    
+    tx1 = Transaction(family_id=family.id, user_id=user.id, amount=amount_enc, concept=concept_enc, category="Food", timestamp=datetime.now(timezone.utc))
+    tx2 = Transaction(family_id=family.id, user_id=user.id, amount=amount_enc, concept=concept_enc, category="Food", timestamp=datetime.now(timezone.utc))
+    tx3_synced = Transaction(family_id=family.id, user_id=user.id, amount=amount_enc, concept=concept_enc, category="Food", timestamp=datetime.now(timezone.utc), notion_page_id="page_already")
+    
+    session.add_all([tx1, tx2, tx3_synced])
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {"Name": {"type": "title"}}
+    })
+
+    async def mock_create(**kwargs):
+        return {"id": "page_new", "url": "url"}
+    mock_notion.pages.create.side_effect = mock_create
+
+    res = await notion_service.sync_pending_transactions(family.id)
+    assert res["status"] == "completed"
+    assert res["total_pending"] == 2
+    assert res["synced"] == 2
+    assert res["failed"] == 0
+    
+    assert mock_notion.pages.create.call_count == 2
+    
+    session.refresh(tx1)
+    session.refresh(tx2)
+    assert tx1.notion_page_id == "page_new"
+    assert tx2.notion_page_id == "page_new"

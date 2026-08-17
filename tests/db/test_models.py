@@ -87,7 +87,33 @@ def test_create_transaction(session: Session):
     assert transaction.amount == encrypted_amount
     assert transaction.family_id == family.id
     assert transaction.user_id == user.id
-    
+
+def test_transaction_notion_fields(session: Session):
+    family = Family(name="Notion Sync Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=888, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    synced_time = datetime.now(timezone.utc)
+    transaction = Transaction(
+        family_id=family.id,
+        user_id=user.id,
+        amount="enc_amount",
+        concept="enc_concept",
+        category="Transport",
+        notion_page_id="page_12345",
+        notion_synced_at=synced_time
+    )
+    session.add(transaction)
+    session.commit()
+    session.refresh(transaction)
+
+    assert transaction.notion_page_id == "page_12345"
+    assert transaction.notion_synced_at.replace(tzinfo=timezone.utc) == synced_time
+
 def test_family_transaction_relationship(session: Session):
     family = Family(name="Relation Family")
     session.add(family)

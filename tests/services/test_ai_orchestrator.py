@@ -552,6 +552,7 @@ async def test_orchestrator_expense_mirroring(mock_notion_cls, orchestrator, mon
     assert kwargs["amount"] == 15.0
     assert kwargs["concept"] == "Starbucks"
     assert kwargs["user_name"] == "Tony"
+    assert "transaction_id" in kwargs
 
 @pytest.mark.anyio
 @patch("src.services.ai_orchestrator.NotionService")
@@ -629,5 +630,15 @@ async def test_orchestrator_notion_test_sync_commands(mock_notion_cls, orchestra
     await orchestrator.orchestrate(user_id=user_id, text="/notion test", audio_file_id=None, chat_id=12345)
     assert "Test Successful" in mock_send_message.call_args[1]["text"]
 
+    mock_notion.sync_pending_transactions = AsyncMock(return_value={"status": "completed", "synced": 2, "failed": 0, "total_pending": 2})
     await orchestrator.orchestrate(user_id=user_id, text="/notion sync", audio_file_id=None, chat_id=12345)
-    assert "Real-time mirroring is active" in mock_send_message.call_args[1]["text"]
+    assert "Successfully synchronized" in mock_send_message.call_args[1]["text"]
+    assert "2" in mock_send_message.call_args[1]["text"]
+
+    mock_notion.sync_pending_transactions = AsyncMock(return_value={"status": "completed", "synced": 0, "failed": 0, "total_pending": 0})
+    await orchestrator.orchestrate(user_id=user_id, text="/notion sync", audio_file_id=None, chat_id=12345)
+    assert "Up to Date" in mock_send_message.call_args[1]["text"]
+
+    mock_notion.sync_pending_transactions = AsyncMock(return_value={"status": "completed", "synced": 0, "failed": 1, "total_pending": 1})
+    await orchestrator.orchestrate(user_id=user_id, text="/notion sync", audio_file_id=None, chat_id=12345)
+    assert "Sync Failed" in mock_send_message.call_args[1]["text"]

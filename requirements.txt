@@ -9,3 +9,4 @@ pydantic-settings>=2.14.1
 pytest
 httpx
 psycopg[binary]
+tenacity>=9.0.0

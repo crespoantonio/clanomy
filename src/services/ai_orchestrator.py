@@ -25,7 +25,7 @@ class AIOrchestrator:
     def __init__(self):
         self.encryption_service = EncryptionService()
 
-    def _persist_transaction(self, user_uuid: UUID, amount: str, concept: str, category: str) -> None:
+    def _persist_transaction(self, user_uuid: UUID, amount: str, concept: str, category: str) -> UUID:
         """
         Synchronous helper to write the transaction to the database.
         Runs inside a separate thread via asyncio.to_thread to keep the event loop unblocked.
@@ -48,6 +48,8 @@ class AIOrchestrator:
                 )
                 session.add(transaction)
                 session.commit()
+                session.refresh(transaction)
+                return transaction.id
             except Exception as e:
                 session.rollback()
                 raise e
@@ -95,7 +97,7 @@ class AIOrchestrator:
                 "display_name": user.full_name or user.username
             }
 
-    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str]):
+    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None):
         """Background task for Notion Mirroring. Fails silently with logs."""
         try:
             with Session(engine) as session:
@@ -107,7 +109,8 @@ class AIOrchestrator:
                     concept=concept,
                     category=category,
                     timestamp=timestamp,
-                    user_name=user_name
+                    user_name=user_name,
+                    transaction_id=transaction_id
                 )
         except Exception as e:
             logger.error(f"[Notion Mirror] Uncaught error in background task: {e}")
@@ -341,7 +344,18 @@ class AIOrchestrator:
                             elif raw_lower == "/notion sync" or raw_lower == "notion sync":
                                 status = notion_service.get_family_notion_status(family_id)
                                 if status["is_connected"]:
-                                    response_text = "✅ <b>Notion Sync is Active!</b>\nReal-time mirroring is active. All new transactions will be mirrored to your Notion database automatically."
+                                    res = await notion_service.sync_pending_transactions(family_id)
+                                    synced = res.get("synced", 0)
+                                    failed = res.get("failed", 0)
+                                    db_name = status.get("database_name", "Notion")
+                                    if synced > 0:
+                                        response_text = f"✅ <b>Notion Sync Complete!</b>\nSuccessfully synchronized <b>{synced}</b> pending transaction(s) to <b>{db_name}</b>."
+                                        if failed > 0:
+                                            response_text += f"\n\n⚠️ Could not sync {failed} transaction(s)."
+                                    elif synced == 0 and failed == 0:
+                                        response_text = f"✅ <b>Notion Sync is Up to Date!</b>\nAll transactions are already synchronized with your Notion database <b>{db_name}</b>."
+                                    elif synced == 0 and failed > 0:
+                                        response_text = f"⚠️ <b>Notion Sync Failed:</b> Could not reach Notion API for {failed} transaction(s). The system will retry on your next sync or message."
                                 else:
                                     response_text = "⚠️ <b>Notion is not connected.</b>\nPlease run <code>/notion</code> to connect your workspace first."
                             else:
@@ -360,7 +374,7 @@ class AIOrchestrator:
                             encrypted_amount = self.encryption_service.encrypt(f"{result.amount} {result.currency}")
                             encrypted_concept = self.encryption_service.encrypt(result.concept)
                             
-                            await asyncio.to_thread(
+                            tx_id = await asyncio.to_thread(
                                 self._persist_transaction,
                                 user_uuid=user_uuid,
                                 amount=encrypted_amount,
@@ -378,7 +392,8 @@ class AIOrchestrator:
                                     concept=result.concept,
                                     category=result.category,
                                     timestamp=datetime.datetime.now(datetime.timezone.utc),
-                                    user_name=user_info["display_name"]
+                                    user_name=user_info["display_name"],
+                                    transaction_id=tx_id
                                 ))
                             except Exception as mirror_err:
                                 logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")

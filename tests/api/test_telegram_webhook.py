@@ -128,3 +128,41 @@ def test_webhook_transaction_processing(monkeypatch):
     assert response.status_code == 200
     res_data = response.json()
     assert res_data["status"] == "ok"
+
+def test_webhook_join_family_via_invite(monkeypatch):
+    monkeypatch.setattr(settings, "MESSAGING_WEBHOOK_SECRET", "valid-secret")
+    
+    # Mock TelegramService
+    messages_sent = []
+    class MockTelegramService:
+        async def send_message(self, chat_id, text):
+            messages_sent.append((chat_id, text))
+    monkeypatch.setattr("src.api.routes.telegram.TelegramService", MockTelegramService)
+    
+    # Mock FamilyService
+    class MockFamilyService:
+        def join_family_via_invite(self, token, user_id):
+            return True, "Welcome to the family", type("MockFamily", (), {"name": "Test Fam"})()
+    monkeypatch.setattr("src.api.routes.telegram.FamilyService", MockFamilyService)
+    
+    payload = {
+        "message": {
+            "chat": {"id": 12345, "type": "private"},
+            "from": {
+                "id": 12345,
+                "username": "joiner_test",
+                "first_name": "Joiner"
+            },
+            "text": "/start join_token123"
+        }
+    }
+    
+    response = client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    assert response.status_code == 200
+    assert len(messages_sent) > 0
+    assert "Welcome to the family" in messages_sent[0][1]

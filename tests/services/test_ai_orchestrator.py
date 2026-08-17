@@ -309,6 +309,33 @@ async def test_orchestrator_confirm_delete(orchestrator, monkeypatch):
         delete_account = mock_delete
     monkeypatch.setattr("src.services.ai_orchestrator.AccountService", MockAccountService)
     
+
+
+@pytest.mark.anyio
+async def test_orchestrator_delete_account_intent(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service("delete_account"))
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    await orchestrator.orchestrate(user_id=user_id, text="delete my account", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    assert "Are you sure you want to permanently delete your account" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_confirm_delete(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_delete = AsyncMock(return_value=True)
+    class MockAccountService:
+        delete_account = mock_delete
+    monkeypatch.setattr("src.services.ai_orchestrator.AccountService", MockAccountService)
+    
     mock_send_message = AsyncMock()
     class MockTelegramService:
         send_message = mock_send_message
@@ -319,3 +346,79 @@ async def test_orchestrator_confirm_delete(orchestrator, monkeypatch):
     mock_delete.assert_called_once_with(UUID(user_id))
     mock_send_message.assert_called_once()
     assert "permanently deleted" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_create_family(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_query_service = create_mock_query_service("create_family")
+    mock_query_service.parse_intent.return_value.family_name = "New Fam"
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", mock_query_service)
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    class MockFamilyService:
+        def create_family(self, uid, name):
+            pass
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+    
+    await orchestrator.orchestrate(user_id=user_id, text="create family New Fam", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    assert "New Fam" in mock_send_message.call_args[1]["text"]
+    assert "created" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_generate_invite(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service("generate_invite"))
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+        async def get_bot_username(self):
+            return "bot"
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    class MockFamilyService:
+        def create_invite(self, fid, uid, bot_username=None):
+            return type("Invite", (), {}), f"https://t.me/{bot_username or 'bot'}?start=join_xyz"
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+    
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", lambda x: UUID("11111111-1111-1111-1111-111111111111"))
+    
+    await orchestrator.orchestrate(user_id=user_id, text="invite link", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    assert "https://t.me/bot?start=join_xyz" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_family_info(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service("family_info"))
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    class MockFamilyService:
+        def get_family_info(self, uid):
+            return {
+                "name": "Test Family",
+                "members": [{"full_name": "Tony", "username": "tony"}],
+                "transactions_count": 5,
+                "active_invites_count": 1
+            }
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+    
+    await orchestrator.orchestrate(user_id=user_id, text="family info", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    assert "Test Family" in mock_send_message.call_args[1]["text"]
+    assert "Tony" in mock_send_message.call_args[1]["text"]

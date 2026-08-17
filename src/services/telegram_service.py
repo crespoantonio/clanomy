@@ -57,3 +57,25 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Failed to resolve file_id {file_id}: {e}")
             return None
+
+    async def get_bot_username(self) -> str:
+        """Cache bot username or fetch via Telegram getMe."""
+        if hasattr(self, '_bot_username'):
+            return self._bot_username
+            
+        if settings.TELEGRAM_BOT_USERNAME:
+            self._bot_username = settings.TELEGRAM_BOT_USERNAME
+            return self._bot_username
+            
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{self.api_url}/getMe")
+                response.raise_for_status()
+                data = response.json()
+                if data.get("ok"):
+                    self._bot_username = data["result"]["username"]
+                    return self._bot_username
+        except Exception as e:
+            logger.error(f"Failed to fetch bot username via getMe: {e}")
+            
+        return "UnknownBot"

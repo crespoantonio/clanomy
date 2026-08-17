@@ -16,6 +16,7 @@ class Family(SQLModel, table=True):
     # Relationships
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     transactions: List["Transaction"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    invites: List["FamilyInvite"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class User(SQLModel, table=True):
     """
@@ -31,6 +32,7 @@ class User(SQLModel, table=True):
     # Relationships
     family: Family = Relationship(back_populates="users")
     transactions: List["Transaction"] = Relationship(back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    created_invites: List["FamilyInvite"] = Relationship(back_populates="creator", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class Transaction(SQLModel, table=True):
     """
@@ -51,3 +53,15 @@ class Transaction(SQLModel, table=True):
     # Relationships
     family: Family = Relationship(back_populates="transactions")
     user: User = Relationship(back_populates="transactions")
+
+class FamilyInvite(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
+    created_by_user_id: UUID = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    token: str = Field(unique=True, index=True)
+    expires_at: datetime = Field(index=True)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    family: "Family" = Relationship(back_populates="invites")
+    creator: "User" = Relationship(back_populates="created_invites")

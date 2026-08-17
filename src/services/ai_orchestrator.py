@@ -16,6 +16,7 @@ from src.services.telegram_service import TelegramService
 from src.services.query_service import QueryService, ParsedQueryIntent
 from src.services.export_service import ExportService
 from src.services.account_service import AccountService
+from src.services.family_service import FamilyService
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +61,13 @@ class AIOrchestrator:
             "how", "what", "spend", "spent", "total", "summary",
             "breakdown", "history", "compare", "report", "chart",
             "graph", "list", "show", "tell", "query",
-            "delete", "remove", "erase", "forget", "purge", "confirm delete"
+            "delete", "remove", "erase", "forget", "purge", "confirm delete",
+            "family", "invite", "join"
         }
         words = set(text.lower().split())
         # We also check if "confirm delete" or "delete account" is in the text directly
         text_lower = text.lower()
-        if "confirm delete" in text_lower or "delete account" in text_lower:
+        if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "invite link" in text_lower:
             return True
         return bool(words.intersection(special_intent_keywords))
 
@@ -112,9 +114,21 @@ class AIOrchestrator:
                 try:
                     # Apply keyword heuristic bypass to avoid double Ollama calls for simple expense logs
                     if self._is_special_intent(text):
-                        if text.strip() == "CONFIRM DELETE":
+                        raw_text = text.strip()
+                        raw_lower = raw_text.lower()
+                        if raw_text == "CONFIRM DELETE":
                             # Exact string match shortcut
                             parsed_query = ParsedQueryIntent(intent="delete_account", timeframe="all_time")
+                        elif raw_lower.startswith("/createfamily") or raw_lower.startswith("create family"):
+                            if raw_lower.startswith("/createfamily"):
+                                name = raw_text[13:].strip()
+                            else:
+                                name = raw_text[13:].strip()
+                            parsed_query = ParsedQueryIntent(intent="create_family", family_name=name)
+                        elif raw_text == "/invite" or raw_lower in ["invite family member", "generate invite link", "generate invite", "invite to family"]:
+                            parsed_query = ParsedQueryIntent(intent="generate_invite")
+                        elif raw_text == "/family" or raw_lower in ["my family", "family info", "family members"]:
+                            parsed_query = ParsedQueryIntent(intent="family_info")
                         else:
                             query_service = QueryService()
                             parsed_query = await query_service.parse_intent(text)
@@ -150,6 +164,24 @@ class AIOrchestrator:
                             reference_time=reference_time
                         )
                         response_text = summary
+                    elif parsed_query and parsed_query.intent == "create_family":
+                        family_service = FamilyService()
+                        name = parsed_query.family_name or "My Family"
+                        await asyncio.to_thread(family_service.create_family, user_uuid, name)
+                        response_text = f"✅ Family group '{name}' has been created! To invite others, just ask me to 'generate an invite link'."
+                    elif parsed_query and parsed_query.intent == "generate_invite":
+                        family_service = FamilyService()
+                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        # Fetch bot username dynamically
+                        telegram_service = TelegramService()
+                        bot_username = await telegram_service.get_bot_username()
+                        invite, link = await asyncio.to_thread(family_service.create_invite, family_id, user_uuid, bot_username)
+                        response_text = f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 48 hours."
+                    elif parsed_query and parsed_query.intent == "family_info":
+                        family_service = FamilyService()
+                        info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
+                        members = ", ".join([m.get("full_name") or m.get("username") or "User" for m in info["members"]])
+                        response_text = f"👪 <b>Family Info: {info['name']}</b>\nMembers: {members}\nTransactions: {info['transactions_count']}\nActive Invites: {info['active_invites_count']}"
                     else:
                         # Default: log expense
                         extraction_service = ExtractionService()

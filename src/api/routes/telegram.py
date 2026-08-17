@@ -5,6 +5,7 @@ from src.core.config import settings
 from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
+from src.services.family_service import FamilyService
 from src.db.session import get_session
 from sqlmodel import Session
 import logging
@@ -61,7 +62,20 @@ async def telegram_webhook(
     voice = message.get("voice")
     
     # Process /start command
-    if text == "/start":
+    if text and text.startswith("/start"):
+        parts = text.split(maxsplit=1)
+        if len(parts) > 1:
+            payload_arg = parts[1].strip()
+            if payload_arg.startswith("join_"):
+                token = payload_arg[5:]
+            else:
+                token = payload_arg
+            
+            family_service = FamilyService()
+            success, msg, _ = family_service.join_family_via_invite(token, user.id)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=msg)
+            return {"status": "ok"}
+
         welcome_text = (
             f"Welcome to {settings.PROJECT_NAME}, {from_user.get('first_name') or 'User'}!\n\n"
             "Your account is ready. You can now log your first expense by simply typing it, "

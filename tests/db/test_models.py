@@ -147,3 +147,53 @@ def test_cascade_delete_user(session: Session):
     # Verify transactions for this user are deleted
     assert len(session.exec(select(Transaction).where(Transaction.user_id == user.id)).all()) == 0
 
+def test_create_family_invite(session: Session):
+    family = Family(name="Invite Family")
+    session.add(family)
+    session.commit()
+    
+    user = User(telegram_id=301, family_id=family.id)
+    session.add(user)
+    session.commit()
+    
+    from src.db.models import FamilyInvite
+    invite = FamilyInvite(
+        family_id=family.id,
+        created_by_user_id=user.id,
+        token="test_token_123",
+        expires_at=datetime.now(timezone.utc)
+    )
+    session.add(invite)
+    session.commit()
+    session.refresh(invite)
+    
+    assert invite.id is not None
+    assert invite.token == "test_token_123"
+    assert invite.family_id == family.id
+    assert invite.created_by_user_id == user.id
+
+def test_cascade_delete_family_invites(session: Session):
+    family = Family(name="Invite Cascade Family")
+    session.add(family)
+    session.commit()
+    
+    user = User(telegram_id=302, family_id=family.id)
+    session.add(user)
+    session.commit()
+    
+    from src.db.models import FamilyInvite
+    invite = FamilyInvite(
+        family_id=family.id,
+        created_by_user_id=user.id,
+        token="test_token_cascade",
+        expires_at=datetime.now(timezone.utc)
+    )
+    session.add(invite)
+    session.commit()
+    
+    # Delete the family
+    session.delete(family)
+    session.commit()
+    
+    # Verify invite is deleted
+    assert len(session.exec(select(FamilyInvite).where(FamilyInvite.family_id == family.id)).all()) == 0

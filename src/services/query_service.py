@@ -63,6 +63,7 @@ class ParsedQueryIntent(BaseModel):
     category: Optional[str] = None
     concept_keyword: Optional[str] = None
     export_format: Optional[str] = "csv"
+    family_name: Optional[str] = None
 
     @field_validator('category')
     @classmethod
@@ -516,6 +517,9 @@ Intents:
 - "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week").
 - "log_expense": If the user is logging a new expense or purchase (e.g., "15 for coffee", "I bought shoes for 50", "Uber 20 dollars"). For this intent, timeframe and category can be null.
 - "delete_account": If the user wants to permanently delete their account and data (e.g., "delete my account", "remove my data", "delete all my transactions", "erase my account", "forget me").
+- "create_family": If the user wants to create a new family group or rename theirs (e.g., "create family The Smiths", "/createfamily vacation"). Extract the name into `family_name`.
+- "generate_invite": If the user wants to invite someone to their family group (e.g., "invite family member", "generate invite link").
+- "family_info": If the user wants to see information about their family group (e.g., "my family", "family info").
 
 Allowed canonical categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
 Map synonyms (e.g. "groceries" -> "Food/Drink", "utilities" -> "Rent/Bills") to these canonical categories.

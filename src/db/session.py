@@ -1,6 +1,6 @@
 from sqlmodel import create_engine, Session, SQLModel
 from src.core.config import settings
-from src.db.models import Family, User, Transaction # Ensure models are registered
+from src.db.models import Family, User, Transaction, FamilyInvite # Ensure models are registered
 
 # Create engine
 # Note: check_same_thread is only needed for SQLite

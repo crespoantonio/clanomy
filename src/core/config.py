@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     # Security
     ENCRYPTION_KEY: str
     TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_BOT_USERNAME: Optional[str] = None
     MESSAGING_WEBHOOK_SECRET: str = ""
     
     # Whisper settings

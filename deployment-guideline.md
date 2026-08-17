@@ -1,187 +1,113 @@
-# Always-Free Deployment Guide: FamFin-AI (50+ Users)
+# Deployment Guide: FamFin-AI (Cloud-Native & Always-Free)
 
-This guide provides step-by-step instructions to deploy **FamFin-AI** to the cloud on an **Always-Free ($0.00/month)** architecture capable of supporting **50 to 500+ active users** with sub-second response times.
+This guide provides step-by-step instructions to deploy **FamFin-AI** to the cloud on an **Always-Free ($0.00/month)** architecture. It is designed for beginners. If you follow these instructions exactly, you will have a fully functioning AI financial bot capable of supporting 500+ users for free.
 
----
-
-## 🏗️ Architecture Options Overview
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                  OPTION 1: Cloud-Native Micro Stack (Easiest)                │
-│                                                                              │
-│  [ Telegram ] ──► [ Render / Koyeb (FastAPI) ] ──► [ Supabase (PostgreSQL) ] │
-│                             │                                                │
-│                             ▼                                                │
-│                     [ Groq Cloud API ]                                       │
-│              (Whisper Large v3 + Llama 3.1 8B)                               │
-│                   14,400 Free Requests/Day                                   │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                  OPTION 2: Dedicated Free VPS (Full Control)                 │
-│                                                                              │
-│  [ Telegram ] ──► [ Oracle Cloud Free VM (4 CPUs, 24GB RAM, 200GB SSD) ]    │
-│                        ├─► [ FamFin FastAPI Container ]                      │
-│                        ├─► [ PostgreSQL Container ]                          │
-│                        ├─► [ Ollama / Local LLM Container ]                  │
-│                        └─► [ Faster-Whisper Container ]                      │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+## 🏗️ The Architecture (How it works)
+* **Telegram:** The chat app where users interact with the bot.
+* **Render:** The cloud provider that runs our application code 24/7.
+* **Supabase:** The database that stores the encrypted financial records.
+* **Groq:** The AI "brain" that transcribes voice notes and extracts data.
 
 ---
 
-## 📊 Comparison of Always-Free Strategies
+## 🛠️ Step 1: Create the Telegram Bot (BotFather)
+First, we need to create the actual bot account on Telegram to get your secret token.
 
-| Feature | Option 1: Cloud-Native Micro Stack | Option 2: Oracle Cloud Free VPS |
-|---|---|---|
-| **Setup Time** | **15 minutes** | **30–45 minutes** |
-| **Monthly Cost** | **$0.00 / month forever** | **$0.00 / month forever** |
-| **Compute Limit** | 512 MB RAM (Render / Koyeb) | **24 GB RAM, 4 OCPUs** |
-| **AI Inference** | Groq Cloud Free API (0.3s latency) | Self-hosted Ollama (1.5s latency) |
-| **STT (Voice)** | Groq Whisper Large-v3 | Local Faster-Whisper |
-| **Database** | Supabase / Neon (Free PostgreSQL) | Self-hosted PostgreSQL |
-| **Maintenance** | Zero maintenance (Serverless) | OS updates & Docker/Podman maintenance |
-| **Capacity** | **500+ users** (14,400 req/day) | **500+ users** |
+1. Open the Telegram app on your phone or computer.
+2. Search for `@BotFather` (look for the one with the official blue checkmark).
+3. Send the message `/newbot`.
+4. BotFather will ask for a name. Send a display name (e.g., `FamFin AI`).
+5. BotFather will ask for a username. It must end in "bot" (e.g., `FamFinTrackerBot`).
+6. BotFather will reply with a long string of text called the **HTTP API Token** (it looks something like `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`). 
+7. **Copy this Token and save it in a notepad.** We will need it later. It will be called `TELEGRAM_BOT_TOKEN`.
 
 ---
 
-# 🚀 Strategy 1: Cloud-Native Micro Stack (Recommended)
+## 💾 Step 2: Set Up the Database (Supabase)
+We need a place to securely store your data. Supabase gives you a generous free database.
 
-This strategy splits the architecture across the best generous free-tier cloud providers so you never hit resource limits.
-
-### 1. Services & Free Quotas
-
-1. **AI Inference & Audio Transcription:** **[Groq Cloud](https://console.groq.com)**
-   * **Free Tier Quota:** 14,400 requests/day, 30 requests/min.
-   * **Models:** Llama 3.3 70B / Llama 3.1 8B + Whisper Large-v3.
-   * **Speed:** ~0.3 seconds per response.
-2. **Managed Database:** **[Supabase](https://supabase.com)** or **[Neon](https://neon.tech)**
-   * **Free Tier Quota:** 500 MB persistent PostgreSQL (enough for 200,000+ encrypted transactions).
-   * **Backups:** Automatic daily backups included.
-3. **Application Hosting:** **[Render](https://render.com)** or **[Koyeb](https://koyeb.com)**
-   * **Free Tier Quota:** 512 MB RAM, free public HTTPS domain.
+1. Go to [https://supabase.com](https://supabase.com) and click **Start your project** (sign in with GitHub).
+2. Click **New Project** and choose a default organization.
+3. Give your project a name (e.g., `famfin-db`).
+4. **Create a strong Database Password and save it in your notepad.** You cannot recover this later.
+5. Choose a region closest to you and click **Create new project**. (It takes a few minutes to set up).
+6. Once the project dashboard loads, look at the left sidebar menu. Click the **⚙️ Project Settings** (gear icon) at the very bottom.
+7. Click **Database** in the settings menu.
+8. Scroll down to **Connection string** and click the **URI** tab.
+9. Copy the URI string provided. It will look like this:
+   `postgresql://postgres.xxxx:YOUR_PASSWORD@aws-0-region.pooler.supabase.com:6543/postgres`
+10. Paste this into your notepad. **Replace the `[YOUR-PASSWORD]` part in that string with the password you created in step 4.**
+11. This final string is your `DATABASE_URL`.
 
 ---
 
-### Step-by-Step Deployment Instructions (Strategy 1)
+## 🧠 Step 3: Get the AI Brain (Groq)
+Groq provides blazing-fast AI inference for free.
 
-#### Step 1.1: Obtain Free Groq API Key
-1. Go to [https://console.groq.com](https://console.groq.com) and create a free account.
-2. Navigate to **API Keys** and click **Create API Key**.
-3. Copy the key (e.g. `gsk_xxxxxxxxxxxxxxxxxxxx`).
+1. Go to [https://console.groq.com](https://console.groq.com) and log in (you can use your Google or GitHub account).
+2. On the left sidebar, click **API Keys**.
+3. Click the **Create API Key** button.
+4. Give it a name (e.g., `famfin-key`) and click Submit.
+5. **Copy the key immediately.** (It usually starts with `gsk_`). 
+6. Paste it into your notepad. This is your `GROQ_API_KEY`.
 
-#### Step 1.2: Create Free PostgreSQL Database on Supabase
-1. Go to [https://supabase.com](https://supabase.com) and create a new free project.
-2. Set your database password.
-3. Navigate to **Project Settings > Database** and copy your **Connection String (URI)**.
-   * Format: `postgresql+psycopg://postgres.xxxx:your_password@aws-0-region.pooler.supabase.com:6543/postgres`
+---
 
-#### Step 1.3: Generate Application Encryption Key
-Generate your AES-256 Fernet key in your local terminal:
-```powershell
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
+## 🔐 Step 4: Create Security Keys
+To ensure all financial data is encrypted and secure, we need two secret keys.
 
-#### Step 1.4: Deploy to Render (or Koyeb)
-1. Push your repository to **GitHub**.
-2. Log in to [Render Dashboard](https://dashboard.render.com).
-3. Click **New + > Web Service** and connect your GitHub repository.
-4. Set the build parameters:
-   * **Runtime:** `Python 3` (or `Docker` using `Containerfile`)
+1. **Encryption Key:** We need a strong random key to lock the database.
+   * Go to this secure generator: [https://asecuritysite.com/encryption/keygen](https://asecuritysite.com/encryption/keygen) (or generate a 32-byte base64 string). 
+   * Alternatively, if you have Python installed locally, run this in your terminal: 
+     `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+   * Save the output in your notepad as `ENCRYPTION_KEY`.
+2. **Webhook Secret:** This proves that messages are actually coming from Telegram.
+   * Just mash your keyboard to make a random string (e.g., `my_super_secret_telegram_string_2026`). No spaces.
+   * Save this in your notepad as `MESSAGING_WEBHOOK_SECRET`.
+
+---
+
+## 🚀 Step 5: Deploy the Code (Render)
+Now we will put the code on a server that runs 24/7 for free.
+
+1. Log into your GitHub account and make sure the FamFin-AI code is pushed to a repository on your account.
+2. Go to [https://dashboard.render.com](https://dashboard.render.com) and create a free account (sign up with GitHub).
+3. Click the **New +** button at the top right and select **Web Service**.
+4. Select **Build and deploy from a Git repository** and click Next.
+5. Connect your GitHub account and select your `FamFin-AI` repository.
+6. Fill out the deployment details:
+   * **Name:** `famfin-ai-bot`
+   * **Region:** (Pick the one closest to your Supabase region)
+   * **Runtime:** `Python 3`
    * **Build Command:** `pip install -r requirements.txt`
    * **Start Command:** `uvicorn src.main:app --host 0.0.0.0 --port 10000`
-   * **Instance Type:** `Free`
-5. Under **Environment Variables**, add:
-   ```env
-   DATABASE_URL=postgresql+psycopg://postgres.xxxx:your_password@aws-0-region.pooler.supabase.com:6543/postgres
-   ENCRYPTION_KEY=your_generated_fernet_key
-   MESSAGING_WEBHOOK_SECRET=your_super_secret_webhook_token
-   TELEGRAM_BOT_TOKEN=your_telegram_bot_token_from_botfather
-   GROQ_API_KEY=gsk_your_groq_key_here
-   DEFAULT_CURRENCY=USD  # Optional: Primary currency code (defaults to USD)
-   ```
-6. Click **Deploy Web Service**. Render will give you a public HTTPS URL (e.g. `https://famfin-ai.onrender.com`).
-
-#### Step 1.5: Register Telegram Webhook
-Point Telegram directly to your deployed service (one-time setup in your browser or terminal):
-```text
-https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook?url=https://famfin-ai.onrender.com/api/v1/telegram/webhook&secret_token=<YOUR_MESSAGING_WEBHOOK_SECRET>
-```
+   * **Instance Type:** Select the **Free** tier.
+7. Scroll down to the **Environment Variables** section and click **Add Environment Variable**. Add all the secrets from your notepad:
+   * Key: `DATABASE_URL` | Value: (Your Supabase URI with the password)
+   * Key: `ENCRYPTION_KEY` | Value: (Your Fernet key)
+   * Key: `TELEGRAM_BOT_TOKEN` | Value: (Your BotFather token)
+   * Key: `MESSAGING_WEBHOOK_SECRET` | Value: (Your random keyboard mash)
+   * Key: `GROQ_API_KEY` | Value: (Your `gsk_...` key)
+   * Key: `DEFAULT_CURRENCY` | Value: `USD`
+8. Click **Deploy Web Service** at the bottom.
+9. Render will start building the app. Wait 5-10 minutes. When it says "Live" in green, look at the top left under your app name. You will see a URL (e.g., `https://famfin-ai-bot.onrender.com`). **Copy this URL to your notepad.**
 
 ---
 
-# 🖥️ Strategy 2: Oracle Cloud Always-Free Dedicated VPS
+## 🔗 Step 6: Connect Telegram to Your Server
+Finally, we need to tell Telegram to send messages to your Render server.
 
-If you want **100% self-hosted privacy** with all containers (FastAPI, Ollama, Whisper, PostgreSQL) running on a single dedicated virtual machine without third-party AI APIs.
+1. Open a new tab in your web browser.
+2. You need to build a special URL by filling in the brackets with your actual data from the notepad. Do not include the `<` or `>` brackets.
 
-### 1. Free Quota from Oracle
-* **VM Shape:** Ampere A1 (ARM64)
-* **Specs:** **4 OCPUs, 24 GB RAM, 200 GB NVMe Storage**
-* **Price:** **$0.00 / month for life**
+**The Template:**
+`https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<RENDER_URL>/telegram/webhook&secret_token=<MESSAGING_WEBHOOK_SECRET>`
 
----
+**Example of what it should look like:**
+`https://api.telegram.org/bot1234567890:ABCdefGHI/setWebhook?url=https://famfin-ai-bot.onrender.com/telegram/webhook&secret_token=my_super_secret_telegram_string_2026`
 
-### Step-by-Step Deployment Instructions (Strategy 2)
+3. Paste your customized URL into the address bar of your browser and hit Enter.
+4. If successful, you will see a white screen with text like: `{"ok":true,"result":true,"description":"Webhook was set"}`.
 
-#### Step 2.1: Provision Oracle Cloud VM
-1. Sign up at [https://www.oracle.com/cloud/free/](https://www.oracle.com/cloud/free/).
-2. In the Oracle Console, go to **Compute > Instances > Create Instance**.
-3. Under **Image and shape**:
-   * Image: `Ubuntu 22.04 LTS (AArch64)`
-   * Shape: `Ampere VM.Standard.A1.Flex` (Allocate `4 OCPUs` and `24 GB RAM`).
-4. Add your SSH Key and click **Create**.
-
-#### Step 2.2: Configure Firewall & Ports
-In the Oracle Cloud Console (and in `iptables` inside Ubuntu):
-* Open ingress ports: `80` (HTTP), `443` (HTTPS), `22` (SSH).
-
-#### Step 2.3: Install Podman and Git
-Connect to your VPS via SSH:
-```bash
-ssh ubuntu@YOUR_VM_IP
-sudo apt update && sudo apt install -y podman podman-compose git caddy
-```
-
-#### Step 2.4: Deploy FamFin-AI Stack
-```bash
-git clone https://github.com/your-username/FamFin-AI.git
-cd FamFin-AI
-cp .env.example .env
-nano .env  # Fill in DB passwords, Fernet key, and Telegram Bot Token
-podman-compose up -d --build
-podman exec -it famfin-ollama ollama pull llama3.2
-```
-
-#### Step 2.5: Setup Automatic Free SSL with Caddy
-Configure `/etc/caddy/Caddyfile`:
-```caddy
-yourdomain.com {
-    reverse_proxy localhost:8000
-}
-```
-Reload Caddy:
-```bash
-sudo systemctl restart caddy
-```
-*(Caddy automatically provisions and auto-renews free Let's Encrypt SSL certificates).*
-
----
-
-## 🔒 Security & Privacy Best Practices for Production
-
-1. **Fernet Key Backup:**
-   * Store your `ENCRYPTION_KEY` in a secure password manager (e.g. 1Password/Bitwarden). If this key is lost, all database ciphertext cannot be recovered.
-2. **Secret Header Validation:**
-   * Always enforce `MESSAGING_WEBHOOK_SECRET` / Telegram secret token on incoming webhooks to reject spoofed requests.
-3. **Database Isolation:**
-   * Disable public PostgreSQL access once deployed or restrict IP allowlists to the application host.
-
----
-
-## 📈 Capacity & Scaling Math for 50 Users
-
-* **Daily Volume:** 50 users × 4 messages/day = **200 transactions / day**.
-* **Monthly DB Storage:** 200 tx/day × 30 days × 1 KB/tx = **~6 MB / month** (Years of storage on a 500 MB free database).
-* **AI API Quota Consumption:** 200 / 14,400 daily limit = **~1.4% of free tier utilized**.
-* **Total Cost:** **$0.00**
+## 🎉 You're Done!
+Open Telegram, search for your bot, and click **Start**. Try sending it a message like "I spent $5 on coffee." It should reply instantly!

@@ -422,3 +422,35 @@ async def test_orchestrator_family_info(orchestrator, monkeypatch):
     mock_send_message.assert_called_once()
     assert "Test Family" in mock_send_message.call_args[1]["text"]
     assert "Tony" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_familytotal_command(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    
+    class MockFamilyService:
+        def get_family_info(self, uid):
+            return {
+                "id": UUID("11111111-1111-1111-1111-111111111111"),
+                "name": "Test Family",
+                "members": [{"full_name": "Tony", "username": "tony"}]
+            }
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+
+    mock_get_spending_summary = AsyncMock(return_value="Family summary")
+    class MockQueryService:
+        get_spending_summary = mock_get_spending_summary
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", MockQueryService)
+
+    await orchestrator.orchestrate(user_id=user_id, text="/familytotal this_week", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    assert "Family summary" in mock_send_message.call_args[1]["text"]
+    
+    call_args = mock_get_spending_summary.call_args
+    assert call_args[1]["timeframe"] == "this_week"
+    assert call_args[1]["family_name"] == "Test Family"

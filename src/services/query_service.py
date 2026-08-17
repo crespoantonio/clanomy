@@ -64,6 +64,7 @@ class ParsedQueryIntent(BaseModel):
     concept_keyword: Optional[str] = None
     export_format: Optional[str] = "csv"
     family_name: Optional[str] = None
+    scope: Optional[str] = "family"
 
     @field_validator('category')
     @classmethod
@@ -319,9 +320,18 @@ def compute_period_comparison(
         percentage_change=round(pct_change, 2) if pct_change is not None else None
     )
 
-def _build_summary_prompt_context(query_result: QueryResult, user_name: Optional[str] = None) -> str:
+def _build_summary_prompt_context(
+    query_result: QueryResult, 
+    user_name: Optional[str] = None,
+    family_name: Optional[str] = None,
+    member_names: Optional[List[str]] = None
+) -> str:
     ctx = []
-    if user_name:
+    if family_name:
+        ctx.append(f"Family Group: {family_name}")
+    if member_names:
+        ctx.append(f"Family Members: {', '.join(member_names)}")
+    elif user_name:
         ctx.append(f"User: {user_name}")
     ctx.append(f"Timeframe: {query_result.intent.timeframe}")
     if query_result.aggregation:
@@ -358,13 +368,29 @@ def _build_summary_prompt_context(query_result: QueryResult, user_name: Optional
         
     return "\n".join(ctx)
 
-def generate_fallback_summary(query_result: QueryResult, user_name: Optional[str] = None) -> str:
+def generate_fallback_summary(
+    query_result: QueryResult, 
+    user_name: Optional[str] = None,
+    family_name: Optional[str] = None,
+    member_names: Optional[List[str]] = None
+) -> str:
     greeting = f"Hi {user_name}! " if user_name else ""
     tf = query_result.intent.timeframe.replace('_', ' ')
     
+    is_family_query = (query_result.intent.scope == "family") or (family_name is not None) or (member_names is not None)
+    if family_name:
+        subject = f"Your family ({family_name})"
+    elif is_family_query:
+        subject = "Your family"
+    else:
+        subject = "You"
+        
+    has_spent = "has" if is_family_query else "have"
+    hasn_t = "hasn't" if is_family_query else "haven't"
+    
     if query_result.total_count == 0:
         curr = query_result.aggregation.primary_currency if query_result.aggregation else "USD"
-        return f"{greeting}You haven't logged any expenses for {tf} yet (Total: 0.00 {curr})."
+        return f"{greeting}{subject} {hasn_t} logged any expenses for {tf} yet (Total: 0.00 {curr})."
         
     if not query_result.aggregation:
         return f"{greeting}Here are your results for {tf}."
@@ -389,7 +415,7 @@ def generate_fallback_summary(query_result: QueryResult, user_name: Optional[str
             more_less = "more" if comp.difference_amount > 0 else "less"
             comp_str = f" That's {abs(comp.difference_amount):.2f} {agg.primary_currency} ({abs(comp.percentage_change):.2f}%) {more_less} than {comp.previous_timeframe.replace('_', ' ')} ({comp.previous_total_amount:.2f} {agg.primary_currency})!"
             
-    return f"{greeting}You've spent {total_str} across {agg.transaction_count} transactions this {tf}{top_cat_str}.{comp_str}"
+    return f"{greeting}{subject} {has_spent} spent {total_str} across {agg.transaction_count} transactions this {tf}{top_cat_str}.{comp_str}"
 
 class QueryService:
     _instance: Optional['QueryService'] = None
@@ -514,7 +540,7 @@ Current Date: {current_date_str}
 
 Intents:
 - "export_data": If the user wants to export or download data (e.g., "export my data", "export to csv"). Set `export_format` to "csv" or "json" based on the query.
-- "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week").
+- "spending_summary": If the user is asking a question about their spending (e.g., "how much did I spend", "summary of last week", "family total", "how much did we spend?", "our expenses", "what did the family spend on groceries?"). Set `scope` to "family" if it's a family query.
 - "log_expense": If the user is logging a new expense or purchase (e.g., "15 for coffee", "I bought shoes for 50", "Uber 20 dollars"). For this intent, timeframe and category can be null.
 - "delete_account": If the user wants to permanently delete their account and data (e.g., "delete my account", "remove my data", "delete all my transactions", "erase my account", "forget me").
 - "create_family": If the user wants to create a new family group or rename theirs (e.g., "create family The Smiths", "/createfamily vacation"). Extract the name into `family_name`.
@@ -548,7 +574,16 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
             logger.error(f"Error processing query with Ollama: {e}")
             raise QueryProcessingError(f"Failed to process query with Ollama: {e}")
 
-    async def process_query(self, text: str, family_id: UUID, user_name: Optional[str] = None, generate_summary: bool = True, reference_time: Optional[datetime] = None) -> QueryResult:
+    async def process_query(
+        self, 
+        text: str, 
+        family_id: UUID, 
+        user_name: Optional[str] = None, 
+        generate_summary: bool = True, 
+        reference_time: Optional[datetime] = None,
+        family_name: Optional[str] = None,
+        member_names: Optional[List[str]] = None
+    ) -> QueryResult:
         ref_time = reference_time or datetime.now(timezone.utc)
         start_exec_time = time.time()
         
@@ -612,13 +647,20 @@ Extract `concept_keyword` if the user asks about a specific place or item (e.g.,
         )
         
         if generate_summary:
-            result.summary = await self.generate_summary(result, user_name=user_name, use_llm=True)
+            result.summary = await self.generate_summary(result, user_name=user_name, use_llm=True, family_name=family_name, member_names=member_names)
             
         return result
 
-    async def generate_summary(self, query_result: QueryResult, user_name: Optional[str] = None, use_llm: bool = True) -> str:
+    async def generate_summary(
+        self, 
+        query_result: QueryResult, 
+        user_name: Optional[str] = None, 
+        use_llm: bool = True,
+        family_name: Optional[str] = None,
+        member_names: Optional[List[str]] = None
+    ) -> str:
         if not use_llm:
-            return generate_fallback_summary(query_result, user_name)
+            return generate_fallback_summary(query_result, user_name, family_name, member_names)
             
         start_exec_time = time.time()
         
@@ -627,9 +669,10 @@ Your job is to generate a conversational summary of the user's spending based EX
 Use appropriate, tasteful emojis (e.g., ☕ for food/drink, 🚗 for transport, 📉/📈 for comparison, 🎉 for under budget, 💡 for insights).
 STRICT FACTUAL FIDELITY: You must strictly reflect ONLY the numbers, categories, dates, and concepts provided in the prompt context. NEVER invent dollar amounts, merchants, or comparison percentages.
 Conciseness: Keep the summary between 2 and 4 sentences.
-If total spending is 0, provide a friendly, reassuring message."""
+If total spending is 0, provide a friendly, reassuring message.
+If summarizing family or group spending, frame the summary from a collective perspective (e.g. "The Smith Family has spent..." or "Together, you have spent...")."""
 
-        context_data = _build_summary_prompt_context(query_result, user_name)
+        context_data = _build_summary_prompt_context(query_result, user_name, family_name, member_names)
         user_prompt = f"Please summarize the following spending data:\n{context_data}"
         
         llm_used = False
@@ -653,18 +696,28 @@ If total spending is 0, provide a friendly, reassuring message."""
             logger.warning(f"Ollama summary generation failed or timed out: {e}")
             
         if not summary:
-            summary = generate_fallback_summary(query_result, user_name)
+            summary = generate_fallback_summary(query_result, user_name, family_name, member_names)
             
         elapsed = time.time() - start_exec_time
         logger.info(f"[3s Audit] Conversational summary generation took {elapsed:.2f} seconds (llm_used: {llm_used})")
         
         return summary
         
-    async def get_spending_summary(self, family_id: UUID, timeframe: str = "this_month", category: Optional[str] = None, user_name: Optional[str] = None, reference_time: Optional[datetime] = None) -> str:
+    async def get_spending_summary(
+        self, 
+        family_id: UUID, 
+        timeframe: str = "this_month", 
+        category: Optional[str] = None, 
+        user_name: Optional[str] = None, 
+        reference_time: Optional[datetime] = None,
+        family_name: Optional[str] = None,
+        member_names: Optional[List[str]] = None
+    ) -> str:
         intent = ParsedQueryIntent(
             intent="query",
             timeframe=timeframe,
-            category=category
+            category=category,
+            scope="family" if family_name else "individual"
         )
         
         ref_time = reference_time or datetime.now(timezone.utc)
@@ -717,7 +770,7 @@ If total spending is 0, provide a friendly, reassuring message."""
             category_breakdown=category_breakdown
         )
         
-        return await self.generate_summary(qr, user_name=user_name, use_llm=True)
+        return await self.generate_summary(qr, user_name=user_name, use_llm=True, family_name=family_name, member_names=member_names)
 
     async def get_time_aggregation(
         self, family_id: UUID, timeframe: str = "this_month", 

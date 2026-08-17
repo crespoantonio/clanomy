@@ -189,6 +189,7 @@ class FamilyService:
                 
             self._log_3s_audit("get_family_info", start_time)
             return {
+                "id": family.id,
                 "name": family.name,
                 "members": members,
                 "transactions_count": txs_count,

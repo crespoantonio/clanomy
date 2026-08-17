@@ -69,6 +69,8 @@ class AIOrchestrator:
         text_lower = text.lower()
         if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "invite link" in text_lower:
             return True
+        if "/familytotal" in text_lower or "family total" in text_lower or "family spending" in text_lower or "our spending" in text_lower or "how much did we spend" in text_lower:
+            return True
         return bool(words.intersection(special_intent_keywords))
 
     def _get_user_family_id(self, user_uuid: UUID) -> UUID:
@@ -129,6 +131,17 @@ class AIOrchestrator:
                             parsed_query = ParsedQueryIntent(intent="generate_invite")
                         elif raw_text == "/family" or raw_lower in ["my family", "family info", "family members"]:
                             parsed_query = ParsedQueryIntent(intent="family_info")
+                        elif raw_lower.startswith("/familytotal"):
+                            parts = raw_lower.split()
+                            timeframe = "this_month"
+                            category = None
+                            valid_timeframes = {"this_week", "last_week", "this_month", "last_month", "today", "yesterday", "all_time"}
+                            for part in parts[1:]:
+                                if part in valid_timeframes:
+                                    timeframe = part
+                                elif category is None:
+                                    category = part
+                            parsed_query = ParsedQueryIntent(intent="spending_summary", timeframe=timeframe, category=category, scope="family")
                         else:
                             query_service = QueryService()
                             parsed_query = await query_service.parse_intent(text)
@@ -153,15 +166,24 @@ class AIOrchestrator:
                         # We don't need to send a regular message since we sent a document
                         return {"status": "ok"}
                     elif parsed_query and parsed_query.intent == "spending_summary":
-                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        family_service = FamilyService()
+                        family_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
+                        family_id = family_info["id"]
+                        
+                        family_name = family_info["name"] if parsed_query.scope == "family" else None
+                        member_names = [m.get("full_name") or m.get("username") or "User" for m in family_info["members"]] if parsed_query.scope == "family" else None
+                        
                         user_name = None
                         reference_time = datetime.datetime.now(datetime.timezone.utc)
+                        query_service = QueryService()
                         summary = await query_service.get_spending_summary(
                             family_id=family_id,
                             timeframe=parsed_query.timeframe,
                             category=parsed_query.category,
                             user_name=user_name,
-                            reference_time=reference_time
+                            reference_time=reference_time,
+                            family_name=family_name,
+                            member_names=member_names
                         )
                         response_text = summary
                     elif parsed_query and parsed_query.intent == "create_family":

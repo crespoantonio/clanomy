@@ -323,6 +323,169 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ---
 
+### 🧪 Test 10: Family Group Creation & Invite Links
+1. Send the family creation command to the bot in Telegram:
+   ```text
+   /createfamily
+   ```
+2. **Expected Output:**
+   - The bot replies:
+     > `✅ Family group created successfully!`
+     > `Invite your partner/roommates using this link:`
+     > `https://t.me/<bot_username>?start=join_<token>`
+     > `This link is valid for 48 hours.`
+3. Note the generated link containing the secret joining token.
+
+---
+
+### 🧪 Test 11: Multi-Member Family Shared Ledgers & Attribution
+1. Open a second Telegram client or simulate a second user starting a conversation with the bot by clicking the invite link: `https://t.me/<bot_username>?start=join_<token>`.
+2. **Expected Output:**
+   - The bot replies confirming the join:
+     > `✅ You have successfully joined the family group!`
+   - *(Database Verification)*: Verify that the joining user's previous single-member family record has been cleaned up/purged from the database to avoid orphan records.
+3. As the second user, log an expense:
+   ```text
+   Spent 30 on pizza
+   ```
+4. As the first user, log an expense:
+   ```text
+   Spent 15 on coffee
+   ```
+5. Query the family spending:
+   ```text
+   /family
+   ```
+   or ask in natural language:
+   ```text
+   How much did our family spend this week?
+   ```
+6. **Expected Output in Telegram:**
+   - The bot sums transactions from ALL users belonging to the same family and displays the breakdown:
+     > `📊 Family Spending Summary:`
+     > `Total spending: 45.00 USD`
+     > `• [User 1 Name]: 15.00 USD`
+     > `• [User 2 Name]: 30.00 USD`
+7. Request a data export as either user:
+   ```text
+   export my data to csv
+   ```
+8. Verify in the exported CSV that a `"Logged By"` column exists, showing which family member logged each transaction.
+
+---
+
+### 🧪 Test 12: Notion Workspace Connection (Discovery & Configuration)
+1. Prepare your Notion integration:
+   - Go to `https://www.notion.so/my-integrations` and create an **Internal Integration**.
+   - Copy the **Internal Integration Secret**.
+   - Open a target database in Notion, click `•••` (top right) -> `Add connections`, and add your integration.
+2. Send the setup command to the bot:
+   ```text
+   /notion
+   ```
+3. **Expected Output:**
+   - The bot replies with step-by-step setup guidance.
+4. Connect the workspace:
+   ```text
+   /notion connect <your_integration_secret>
+   ```
+5. **Expected Output:**
+   - The bot validates the token, queries the Notion API, and displays a numbered list of available databases:
+     > `📋 Found X Notion Database(s):`
+     > `1. 📊 Family Expenses (ID: abc...)`
+     > `2. 💰 Personal Ledgers (ID: def...)`
+     > `Reply with: /notion setdb <number or ID>`
+6. Select your target database:
+   ```text
+   /notion setdb 1
+   ```
+7. **Expected Output:**
+   - The bot binds the database to the family and replies:
+     > `✅ Notion workspace connected!`
+     > `📁 Target Database: Family Expenses`
+     > `Your transactions are now ready to be mirrored!`
+8. Send status query:
+   ```text
+   /notion status
+   ```
+9. **Expected Output:**
+   - The bot replies with current connection status:
+     > `📊 Notion Connection Status: Connected ✅`
+     > `📁 Target Database: Family Expenses`
+     > `Connected: [Timestamp]`
+10. Verify disconnection:
+    - Send: `/notion disconnect`
+    - Bot replies: `🔌 Notion disconnected successfully.`
+
+---
+
+### 🧪 Test 13: Notion Real-Time Mirroring & Adaptive Mapping
+1. Connect the Notion database again using `/notion connect` and `/notion setdb`.
+2. Run a diagnostic test to verify the write connection:
+   ```text
+   /notion test
+   ```
+3. **Expected Output:**
+   - The bot replies:
+     > `✅ Notion Mirror Test Successful!`
+     > `Created test record in database: Family Expenses`
+     > `🔗 View in Notion (clickable link)`
+   - Open the link in a browser and verify a test row with `FamFin Test Entry` was created under the `Test` category with `0.00` amount.
+4. Send a real transaction message:
+   ```text
+   Spent 55 USD for dinner at Olive Garden under Food
+   ```
+5. **Expected Output:**
+   - The bot responds instantly (< 3s) confirming the local save.
+   - Mirroring is triggered asynchronously in the background.
+6. Open the Notion database and verify the row was created:
+   - Check the adaptive mapping columns. The system dynamically maps:
+     - **Title** (Concept/Name/Title/Expense) -> `dinner at Olive Garden`
+     - **Amount** (Amount/Cost/Price/Value) -> `55.00`
+     - **Currency** (Currency) -> `USD`
+     - **Category** (Category/Tag/Tags) -> `Food`
+     - **Member** (Member/User/Logged By) -> `[Your Telegram display name]`
+     - **Date** (Date/Timestamp) -> `[Current Date]`
+
+---
+
+### 🧪 Test 14: Notion Resilience (Retry & Catch-Up Sync)
+1. **Test Transient Retry:**
+   - Block network access or mock a transient Notion API failure (such as rate limits or server errors).
+   - Log a new transaction:
+     ```text
+     Spent 12.00 for Netflix
+     ```
+   - Verify Telegram reply is still sent instantly.
+   - Check backend container logs:
+     ```powershell
+     podman logs famfin-app
+     ```
+     Verify that `[Notion Mirror] [Retry]` warnings are printed, attempting retries with exponential wait times.
+   - Restore connection. The system eventually completes mirroring successfully, updating `notion_page_id` in the local database.
+2. **Test Catch-Up Sync:**
+   - Simulate a prolonged Notion outage (e.g. disconnect token).
+   - Log a couple of new transactions:
+     ```text
+     10 for apps
+     15 for games
+     ```
+   - Verify in the database that these transactions are persisted locally but have `notion_page_id = NULL`:
+     ```sql
+     SELECT id, concept, notion_page_id FROM transactions WHERE notion_page_id IS NULL;
+     ```
+   - Restore connection.
+   - Send:
+     ```text
+     /notion sync
+     ```
+   - **Expected Output:**
+     The bot performs a catch-up sync, updating local transactions and mirroring them to Notion:
+     > `✅ Notion Sync Complete!`
+     > `Successfully synchronized 2 pending transaction(s) to Family Expenses.`
+
+---
+
 ## Step 7: Database & Encryption Verification
 
 Verify that data was stored and encrypted using AES-256:

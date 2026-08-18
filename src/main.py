@@ -3,6 +3,7 @@ from fastapi import FastAPI, Depends
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db
 from src.core.config import settings
+from src.core.http_client import HTTPClientManager
 from src.api.routes.telegram import router as telegram_router
 
 @asynccontextmanager
@@ -13,7 +14,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"CRITICAL: Database initialization failed: {e}")
         # In a real production app, we might want to retry or exit
+        
+    # Initialize HTTP client pool
+    HTTPClientManager().init()
+    
     yield
+    
+    # Close HTTP client pool
+    await HTTPClientManager().close()
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 

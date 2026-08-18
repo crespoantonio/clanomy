@@ -23,10 +23,22 @@ class Settings(BaseSettings):
     WHISPER_MODEL_SIZE: str = "base"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
+    WHISPER_BEAM_SIZE: int = 5
+    WHISPER_TEMPERATURE: float = 0.0
+    WHISPER_VAD_FILTER: bool = False
+    WHISPER_MAX_CONCURRENT: int = 1
     
     # Ollama settings
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
+    OLLAMA_MAX_RETRIES: int = 3
+    OLLAMA_RETRY_BACKOFF_MIN: float = 0.5
+    OLLAMA_RETRY_BACKOFF_MAX: float = 4.0
+
+    # HTTP Client Pool Settings
+    HTTP_POOL_MAX_CONNECTIONS: int = 50
+    HTTP_POOL_MAX_KEEPALIVE: int = 20
+    HTTP_TIMEOUT: float = 30.0
     
     # Callback (Removed n8n)    
     @field_validator("WHISPER_DEVICE")

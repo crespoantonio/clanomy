@@ -92,15 +92,19 @@ async def test_extract_timeout(service, mock_ollama_client):
     # Mocking call to hang and raise TimeoutError
     mock_ollama_client.chat.side_effect = asyncio.TimeoutError()
 
-    with pytest.raises(ExtractionError, match="Ollama request timed out"):
-        await service.extract("test")
+    # The service will catch the timeout and attempt fallback on the text
+    result = await service.extract("I paid $15.50 for lunch")
+    assert result.amount == 15.50
+    assert result.category == "Other"
+    assert result.currency == "USD"
 
 @pytest.mark.anyio
 async def test_extract_network_error(service, mock_ollama_client):
     mock_ollama_client.chat.side_effect = ollama.RequestError("Connection failed")
 
-    with pytest.raises(ExtractionError, match="Failed to communicate with Ollama"):
-        await service.extract("test")
+    result = await service.extract("100 euros for shopping")
+    assert result.amount == 100.0
+    assert result.currency == "EUR"
 
 @pytest.mark.anyio
 async def test_extract_invalid_json(service, mock_ollama_client):
@@ -108,8 +112,9 @@ async def test_extract_invalid_json(service, mock_ollama_client):
     mock_response.message.content = 'invalid json'
     mock_ollama_client.chat.return_value = mock_response
 
-    with pytest.raises(ExtractionError, match="Failed to parse extraction result"):
-        await service.extract("test")
+    result = await service.extract("Spent £50 on a gift")
+    assert result.amount == 50.0
+    assert result.currency == "GBP"
 
 @pytest.mark.anyio
 async def test_extract_empty_response(service, mock_ollama_client):

@@ -2,10 +2,12 @@ import time
 import logging
 import threading
 import asyncio
+import re
 from typing import Optional, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationError
 import ollama
 from src.core.config import settings
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,6 @@ class ExtractionResult(BaseModel):
         allowed = {"Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other"}
         cleaned = v.strip()
         
-        # Check title case
         if cleaned.title() == "Food/Drink":
             return "Food/Drink"
             
@@ -38,18 +39,9 @@ class ExtractionResult(BaseModel):
     @classmethod
     def validate_currency(cls, v: str) -> str:
         mapping = {
-            "dollar": "USD",
-            "dollars": "USD",
-            "usd": "USD",
-            "$": "USD",
-            "euro": "EUR",
-            "euros": "EUR",
-            "eur": "EUR",
-            "€": "EUR",
-            "pound": "GBP",
-            "pounds": "GBP",
-            "gbp": "GBP",
-            "£": "GBP"
+            "dollar": "USD", "dollars": "USD", "usd": "USD", "$": "USD",
+            "euro": "EUR", "euros": "EUR", "eur": "EUR", "€": "EUR",
+            "pound": "GBP", "pounds": "GBP", "gbp": "GBP", "£": "GBP"
         }
         cleaned = v.strip().lower()
         if cleaned in mapping:
@@ -76,7 +68,53 @@ class ExtractionService:
             self.client = ollama.AsyncClient(host=settings.OLLAMA_BASE_URL)
             self.model = settings.OLLAMA_MODEL
             self._initialized = True
+
+    def _fallback_regex_extract(self, text: str) -> ExtractionResult:
+        """Attempt to extract amount and concept via regex as a last resort."""
+        # Look for numbers (e.g. 15.50 or $15)
+        amount_match = re.search(r'\b\d+(?:\.\d{1,2})?\b', text)
+        if not amount_match:
+            raise ExtractionError("Fallback failed: No amount found in text.")
+        
+        amount = float(amount_match.group(0))
+        
+        currency = "USD"
+        if "eur" in text.lower() or "€" in text:
+            currency = "EUR"
+        elif "gbp" in text.lower() or "£" in text:
+            currency = "GBP"
             
+        return ExtractionResult(
+            amount=amount,
+            category="Other",
+            concept=text.strip(),
+            currency=currency
+        )
+            
+    @retry(
+        stop=stop_after_attempt(settings.OLLAMA_MAX_RETRIES),
+        wait=wait_exponential(multiplier=settings.OLLAMA_RETRY_BACKOFF_MIN, max=settings.OLLAMA_RETRY_BACKOFF_MAX),
+        retry=retry_if_exception_type((ollama.ResponseError, ollama.RequestError, asyncio.TimeoutError, ConnectionError, OSError)),
+        reraise=True
+    )
+    async def _call_ollama(self, system_prompt: str, text: str) -> str:
+        logger.info(f"Calling Ollama model {self.model} for extraction...")
+        response = await asyncio.wait_for(
+            self.client.chat(
+                model=self.model,
+                messages=[
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': f"Extract transaction details from this text: '{text}'"}
+                ],
+                format=ExtractionResult.model_json_schema(),
+            ),
+            timeout=60.0
+        )
+        content = response.message.content
+        if not content:
+            raise ExtractionError("Received empty response from Ollama")
+        return content
+
     async def extract(self, text: str) -> ExtractionResult:
         if not text or not text.strip():
             raise ValueError("Input text is empty or contains only whitespace")
@@ -95,31 +133,18 @@ Return ONLY the JSON matching the provided schema.'''
         start_time = time.time()
         
         try:
-            response = await asyncio.wait_for(
-                self.client.chat(
-                    model=self.model,
-                    messages=[
-                        {'role': 'system', 'content': system_prompt},
-                        {'role': 'user', 'content': f"Extract transaction details from this text: '{text}'"}
-                    ],
-                    format=ExtractionResult.model_json_schema(),
-                ),
-                timeout=60.0
-            )
+            content = await self._call_ollama(system_prompt, text)
             
-            content = response.message.content
-            if not content:
-                raise ExtractionError("Received empty response from Ollama")
+            try:
+                result = ExtractionResult.model_validate_json(content)
+                return result
+            except ValidationError as ve:
+                logger.warning(f"Pydantic validation failed on Ollama output: {ve}. Attempting fallback regex parser.")
+                return self._fallback_regex_extract(text)
                 
-            result = ExtractionResult.model_validate_json(content)
-            return result
-            
-        except asyncio.TimeoutError as e:
-            logger.error(f"Ollama request timed out: {e}")
-            raise ExtractionError("Ollama request timed out after 60.0 seconds")
-        except (ollama.ResponseError, ollama.RequestError, ConnectionError, OSError) as e:
-            logger.error(f"Ollama connection/API error: {e}")
-            raise ExtractionError(f"Failed to communicate with Ollama: {e}")
+        except (ollama.ResponseError, ollama.RequestError, asyncio.TimeoutError, ConnectionError, OSError) as e:
+            logger.error(f"Ollama connection/API error after retries: {e}. Attempting fallback regex parser.")
+            return self._fallback_regex_extract(text)
         except Exception as e:
             logger.error(f"Extraction error: {e}")
             if isinstance(e, ExtractionError):
@@ -127,4 +152,4 @@ Return ONLY the JSON matching the provided schema.'''
             raise ExtractionError(f"Failed to parse extraction result: {e}")
         finally:
             duration = time.time() - start_time
-            logger.info(f"[3s Audit] Ollama extraction took {duration:.2f} seconds (model: {self.model})")
+            logger.info(f"[3s Audit] Ollama extraction (including retries) took {duration:.2f} seconds")

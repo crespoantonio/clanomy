@@ -398,11 +398,11 @@ class AIOrchestrator:
                             except Exception as mirror_err:
                                 logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")
                         except Exception as e:
-                            logger.error(f"Persistence failed: {e}")
+                            logger.error(f"Persistence failed for user {user_id}. (Exception details omitted for security)")
                             status = "error"
                             response_text = "Failed to save transaction. Please try again later."
                 except Exception as e:
-                    logger.error(f"Extraction or routing failed: {e}")
+                    logger.error(f"Extraction or routing failed for user {user_id}. (Exception details omitted for security)")
                     status = "error"
                     response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
             elif not text and status == "success":
@@ -410,7 +410,7 @@ class AIOrchestrator:
                 response_text = "No message or audio was provided."
                 
         except Exception as e:
-            logger.error(f"Unexpected error in orchestrator: {e}")
+            logger.error(f"Unexpected error in orchestrator for user {user_id}. (Exception details omitted for security)")
             status = "error"
             response_text = "An unexpected error occurred while processing your request."
             

@@ -10,7 +10,7 @@ from src.core.config import settings
 from src.services.whisper_service import WhisperService
 from src.services.extraction_service import ExtractionService
 from src.db.session import engine
-from src.db.models import User, Transaction
+from src.db.models import User, Transaction, Family
 from src.core.encryption import EncryptionService
 from src.services.telegram_service import TelegramService
 from src.services.query_service import QueryService, ParsedQueryIntent
@@ -70,7 +70,7 @@ class AIOrchestrator:
         words = set(text.lower().split())
         # We also check if "confirm delete" or "delete account" is in the text directly
         text_lower = text.lower()
-        if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "invite link" in text_lower:
+        if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "/createfamily" in text_lower or "invite" in text_lower or "/join_" in text_lower:
             return True
         if "/familytotal" in text_lower or "family total" in text_lower or "family spending" in text_lower or "our spending" in text_lower or "how much did we spend" in text_lower:
             return True
@@ -402,7 +402,7 @@ class AIOrchestrator:
                             status = "error"
                             response_text = "Failed to save transaction. Please try again later."
                 except Exception as e:
-                    logger.error(f"Extraction or routing failed for user {user_id}. (Exception details omitted for security)")
+                    logger.error(f"Extraction or routing failed for user {user_id}. (Exception details omitted for security)", exc_info=True)
                     status = "error"
                     response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
             elif not text and status == "success":

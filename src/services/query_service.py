@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Literal
 from uuid import UUID
 
 import ollama
@@ -56,7 +56,7 @@ def resolve_category_alias(input_category: Optional[str]) -> Optional[str]:
 
 
 class ParsedQueryIntent(BaseModel):
-    intent: str
+    intent: Literal["spending_summary", "query_comparison", "export_data", "delete_account", "notion_manage", "generate_invite", "create_family", "join_family", "log_expense", "query", "query_spending", "family_info"]
     timeframe: Optional[str] = "this_month"
     start_date: Optional[str] = None
     end_date: Optional[str] = None
@@ -889,10 +889,10 @@ If summarizing family or group spending, frame the summary from a collective per
         member_names: Optional[List[str]] = None
     ) -> str:
         intent = ParsedQueryIntent(
-            intent="query",
+            intent="spending_summary",
             timeframe=timeframe,
             category=category,
-            scope="family" if family_name else "individual"
+            scope="family" if family_name else "personal"
         )
         
         ref_time = reference_time or datetime.now(timezone.utc)

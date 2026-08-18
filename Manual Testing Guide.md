@@ -29,18 +29,24 @@ This guide walks you through building, configuring, and testing the **FamFin-AI*
 If you have **nothing set up**, follow these initial steps:
 
 ### 1.1 Ensure Podman is Running
+
 On Windows, make sure your Podman machine is running:
+
 ```powershell
 podman machine start
 ```
+
 Verify Podman is accessible:
+
 ```powershell
 podman version
 podman-compose --version
 ```
-*(Note: You can use either `podman-compose` or `podman compose`.)*
+
+_(Note: You can use either `podman-compose` or `podman compose`.)_
 
 ### 1.2 Create your Telegram Bot
+
 1. Open the Telegram app on your phone or desktop.
 2. Search for `@BotFather` and click **Start**.
 3. Send the command:
@@ -58,6 +64,7 @@ podman-compose --version
 ## Step 2: Environment Configuration (`.env`)
 
 1. In the project root, copy `.env.example` to `.env`:
+
    ```powershell
    Copy-Item .env.example .env
    ```
@@ -73,6 +80,7 @@ podman-compose --version
      ```
 
 3. Open `.env` and fill in the values:
+
    ```env
    # Database Configuration
    POSTGRES_USER=famfin_user
@@ -102,14 +110,17 @@ podman-compose --version
 ## Step 3: Build & Start Containers with Podman
 
 1. Build and start the services (`db`, `app`, `ollama`):
+
    ```powershell
    podman-compose up -d --build
    ```
 
 2. Verify all containers are running and healthy:
+
    ```powershell
    podman ps
    ```
+
    You should see:
    - `famfin-db` (Port `5433->5432`)
    - `famfin-app` (Port `8000->8000`)
@@ -135,7 +146,7 @@ The Ollama container starts without downloaded weights. Pull `llama3` inside the
    podman exec -it famfin-ollama ollama list
    ```
 
-*(Note: Faster-Whisper downloads its `base` model automatically on the first audio request and caches it in the `whisper_model_cache` volume).*
+_(Note: Faster-Whisper downloads its `base` model automatically on the first audio request and caches it in the `whisper_model_cache` volume)._
 
 ---
 
@@ -152,15 +163,16 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 3. **Register the Webhook with Telegram:**
    Run the following `curl` command to link Telegram to your ngrok URL. Make sure to replace `<YOUR_BOT_TOKEN>`, `<YOUR_NGROK_URL>`, and `<YOUR_SECRET_TOKEN>`:
    ```powershell
-   curl.exe -F "url=https://<YOUR_NGROK_URL>/api/v1/telegram/webhook" -F "secret_token=<YOUR_SECRET_TOKEN>" https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook
+   curl.exe -F "url=https://b2aa-181-105-82-108.ngrok-free.app/api/v1/telegram/webhook" -F "secret_token=your_messaging_secret_token_here" https://api.telegram.org/bot8635507855:AAGC-sD9ZB_ar_1JExEu2oLAGE9fJFTeoJc/setWebhook
    ```
-   *Note: `YOUR_SECRET_TOKEN` must perfectly match the `MESSAGING_WEBHOOK_SECRET` in your `.env` file.*
+   _Note: `YOUR_SECRET_TOKEN` must perfectly match the `MESSAGING_WEBHOOK_SECRET` in your `.env` file._
 
 ---
 
 ## Step 6: Step-by-Step Testing Scenarios
 
 ### 🧪 Test 1: Start Command
+
 1. Open your bot on Telegram.
 2. Click **Start** or send:
    ```text
@@ -168,11 +180,12 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 3. **Expected Output:**
    Bot immediately replies:
-   > *"Welcome to FamFin-AI, [Your Name]! Your account is ready. You can now log your first expense by simply typing it, for example: '50 for lunch' or '100 for groceries'."*
+   > _"Welcome to FamFin-AI, [Your Name]! Your account is ready. You can now log your first expense by simply typing it, for example: '50 for lunch' or '100 for groceries'."_
 
 ---
 
 ### 🧪 Test 2: Text Expense Logging
+
 1. Send a text message in Telegram:
    ```text
    Spent 45.50 on groceries at Walmart
@@ -188,13 +201,14 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 3. **Expected Output in Telegram:**
    Bot replies:
-   > *"Saved 45.50 USD for 'groceries at Walmart' under category 'Food & Groceries'."*
+   > _"Saved 45.50 USD for 'groceries at Walmart' under category 'Food & Groceries'."_
 
 ---
 
 ### 🧪 Test 3: Voice Note Expense Logging
+
 1. In Telegram, record and send a voice message:
-   > 🎙️ *"I paid twenty four dollars and fifty cents for an Uber ride to the airport."*
+   > 🎙️ _"I paid twenty four dollars and fifty cents for an Uber ride to the airport."_
 2. Check backend logs:
    ```powershell
    podman logs -f famfin-app
@@ -207,11 +221,12 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 3. **Expected Output in Telegram:**
    Bot replies:
-   > *"Saved 24.50 USD for 'Uber ride to the airport' under category 'Transportation'."*
+   > _"Saved 24.50 USD for 'Uber ride to the airport' under category 'Transportation'."_
 
 ---
 
 ### 🧪 Test 4: Time-Based Aggregation Queries
+
 1. Send a text message to your bot asking about your spending:
    ```text
    How much did I spend this week?
@@ -227,45 +242,49 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 3. **Expected Output in Telegram:**
    Bot replies with a friendly conversational summary:
-   > *"Hi [Name]! You've spent 69.98 USD across 2 transactions this week. Your top spending category was groceries at Walmart!"*
+   > _"Hi [Name]! You've spent 69.98 USD across 2 transactions this week. Your top spending category was groceries at Walmart!"_
 
 ---
 
 ### 🧪 Test 5: Category-Filtered Queries
+
 1. Send a query specifically targeting a category or alias:
    ```text
    What have I spent on groceries this month?
    ```
 2. **Expected Output in Telegram:**
    Bot filters down to the `Food/Drink` category (resolving the "groceries" alias) and replies:
-   > *"You've spent 45.50 USD on Food/Drink this month. This was from your transaction at Walmart."*
+   > _"You've spent 45.50 USD on Food/Drink this month. This was from your transaction at Walmart."_
 
 ---
 
 ### 🧪 Test 6: Period-Over-Period Comparison Queries
+
 1. Ask the bot to compare spending between periods:
    ```text
    Compare my spending this week to last week
    ```
 2. **Expected Output in Telegram:**
    Bot fetches the current week's total and compares it to last week's total, calculating the percentage difference:
-   > *"You've spent 69.98 USD across 2 transactions this week. That's 15.30 USD (17.9%) less than last week (85.28 USD)!"*
+   > _"You've spent 69.98 USD across 2 transactions this week. That's 15.30 USD (17.9%) less than last week (85.28 USD)!"_
 
 ---
 
 ### 🧪 Test 7: Zero-Spending Fallback Response
+
 1. Ask the bot for a timeframe where you have not logged any expenses:
    ```text
    How much did I spend yesterday?
    ```
-   *(Assuming no expenses were logged for yesterday)*
+   _(Assuming no expenses were logged for yesterday)_
 2. **Expected Output in Telegram:**
    Bot responds with a warm, encouraging zero-spending message:
-   > *"You haven't logged any expenses for yesterday yet! You're sitting pretty at 0.00 USD."*
+   > _"You haven't logged any expenses for yesterday yet! You're sitting pretty at 0.00 USD."_
 
 ---
 
 ### 🧪 Test 8: Financial Data Export (CSV/JSON)
+
 1. Send a query requesting data export to the bot:
    ```text
    export my data to csv
@@ -294,15 +313,16 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 ---
 
 ### 🧪 Test 9: Account Deletion & Right to be Forgotten
+
 1. Send a deletion request to the bot:
    ```text
    delete my account
    ```
 2. **Expected Output in Telegram:**
    - The bot responds with a prominent warning message:
-     > *"⚠️ Are you sure you want to permanently delete your account and all associated financial records? This action is irreversible.*
-     > 
-     > *To confirm, please reply with: CONFIRM DELETE"*
+     > _"⚠️ Are you sure you want to permanently delete your account and all associated financial records? This action is irreversible._
+     >
+     > _To confirm, please reply with: CONFIRM DELETE"_
 3. Send any other text (e.g. `cancel` or `no`):
    - The delete request is cancelled and your account remains untouched.
 4. Send the confirmation trigger exactly:
@@ -311,12 +331,13 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 5. **Expected Output in Telegram:**
    - The bot replies with the farewell message:
-     > *"✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using FamFin-AI! If you ever wish to return, simply send /start."*
+     > _"✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using FamFin-AI! If you ever wish to return, simply send /start."_
 6. Connect to PostgreSQL and query users and transactions:
    ```sql
    SELECT * FROM users WHERE id = '<deleted_user_id>';
    SELECT * FROM transactions WHERE user_id = '<deleted_user_id>';
    ```
+
    - Verify that **0** records are returned (user, family, and transaction tables are completely purged).
 7. Send a message to the bot:
    - The bot treats you as a new user requiring `/start` registration.
@@ -324,6 +345,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 ---
 
 ### 🧪 Test 10: Family Group Creation & Invite Links
+
 1. Send the family creation command to the bot in Telegram:
    ```text
    /createfamily
@@ -339,11 +361,12 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 ---
 
 ### 🧪 Test 11: Multi-Member Family Shared Ledgers & Attribution
+
 1. Open a second Telegram client or simulate a second user starting a conversation with the bot by clicking the invite link: `https://t.me/<bot_username>?start=join_<token>`.
 2. **Expected Output:**
    - The bot replies confirming the join:
      > `✅ You have successfully joined the family group!`
-   - *(Database Verification)*: Verify that the joining user's previous single-member family record has been cleaned up/purged from the database to avoid orphan records.
+   - _(Database Verification)_: Verify that the joining user's previous single-member family record has been cleaned up/purged from the database to avoid orphan records.
 3. As the second user, log an expense:
    ```text
    Spent 30 on pizza
@@ -375,6 +398,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 ---
 
 ### 🧪 Test 12: Notion Workspace Connection (Discovery & Configuration)
+
 1. Prepare your Notion integration:
    - Go to `https://www.notion.so/my-integrations` and create an **Internal Integration**.
    - Copy the **Internal Integration Secret**.
@@ -420,6 +444,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 ---
 
 ### 🧪 Test 13: Notion Real-Time Mirroring & Adaptive Mapping
+
 1. Connect the Notion database again using `/notion connect` and `/notion setdb`.
 2. Run a diagnostic test to verify the write connection:
    ```text
@@ -450,6 +475,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 ---
 
 ### 🧪 Test 14: Notion Resilience (Retry & Catch-Up Sync)
+
 1. **Test Transient Retry:**
    - Block network access or mock a transient Notion API failure (such as rate limits or server errors).
    - Log a new transaction:
@@ -491,20 +517,24 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 Verify that data was stored and encrypted using AES-256:
 
 1. Connect to PostgreSQL inside the Podman container:
+
    ```powershell
    podman exec -it famfin-db psql -U famfin_user -d famfin_db
    ```
 
 2. Query users:
+
    ```sql
    SELECT id, telegram_id, username, first_name FROM users;
    ```
 
 3. Query transactions:
+
    ```sql
    SELECT id, user_id, amount, concept, category, timestamp FROM transactions ORDER BY timestamp DESC LIMIT 5;
    ```
-   *Notice that `amount` and `concept` columns contain secure Fernet ciphertext tokens (e.g. `gAAAAAB...`), ensuring zero plaintext leaks at rest.*
+
+   _Notice that `amount` and `concept` columns contain secure Fernet ciphertext tokens (e.g. `gAAAAAB...`), ensuring zero plaintext leaks at rest._
 
 4. Exit psql:
    ```sql
@@ -515,11 +545,11 @@ Verify that data was stored and encrypted using AES-256:
 
 ## 🛠️ Troubleshooting & Handy Podman Commands
 
-| Goal | Command |
-|---|---|
-| View App Logs | `podman logs -f famfin-app` |
-| View Ollama Logs | `podman logs -f famfin-ollama` |
-| Restart App Service | `podman restart famfin-app` |
-| Tear down containers | `podman-compose down` |
-| Rebuild all containers | `podman-compose up -d --build` |
+| Goal                       | Command                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| View App Logs              | `podman logs -f famfin-app`                                                      |
+| View Ollama Logs           | `podman logs -f famfin-ollama`                                                   |
+| Restart App Service        | `podman restart famfin-app`                                                      |
+| Tear down containers       | `podman-compose down`                                                            |
+| Rebuild all containers     | `podman-compose up -d --build`                                                   |
 | Test Ollama Model manually | `podman exec -it famfin-ollama ollama run llama3 "Extract amount: 20 for pizza"` |

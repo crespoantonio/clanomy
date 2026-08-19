@@ -17,7 +17,9 @@ So that users are automatically granted their Pro tier.
 - [ ] Update `telegram_webhook` in `src/api/routes/telegram.py` to stop fast-exiting when `"message"` is not present, specifically to capture `pre_checkout_query`.
 - [ ] Implement handler for `pre_checkout_query`. It MUST respond within 10 seconds via `answerPreCheckoutQuery` with `ok=True`.
 - [ ] Implement handler for `successful_payment` (which arrives inside the `message` object).
-- [ ] Extract the `invoice_payload` from the successful payment to determine which plan was purchased (e.g. `sub_solo_pro`).
+- [ ] Extract the `invoice_payload` and validate it against a strict whitelist of paid SKUs (`sub_solo_pro` -> `"solo_pro"`, `sub_family_pro` -> `"family_pro"`).
+- [ ] Reject or ignore any unauthorized payload (specifically ensuring `"lifetime_pro"` cannot be triggered via webhooks).
+- [ ] Preserve existing `"lifetime_pro"` accounts from being downgraded/overwritten if an external webhook update is received.
 - [ ] Update the user's `Family` record in the database: set `plan_type` to the purchased tier, `subscription_status` to `"active"`.
 - [ ] Send a success/welcome message to the user acknowledging their upgrade.
 
@@ -28,4 +30,11 @@ So that users are automatically granted their Pro tier.
       return {"status": "ok"}
   ```
   This must be changed to allow `"pre_checkout_query"` to be processed.
-- Telegram uses the Bot API to confirm payments natively, so verifying the initial webhook secret is sufficient for security.
+- Strict payload validation table:
+  ```python
+  ALLOWED_PAID_PLANS = {
+      "sub_solo_pro": "solo_pro",
+      "sub_family_pro": "family_pro",
+  }
+  ```
+- Telegram uses the Bot API to confirm payments natively, so verifying the initial webhook secret and strict SKU whitelisting guarantees security.

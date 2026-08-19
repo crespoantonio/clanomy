@@ -87,6 +87,17 @@ podman compose exec app pytest
 podman compose logs -f app
 ```
 
+### Grant Lifetime Pro (VIP Access)
+To bypass the free tier 30-transaction monthly limit and grant a user's family "free forever" VIP access, run the administrative script with the target Telegram ID:
+```bash
+# Run locally (if using venv)
+python scripts/grant_lifetime_pro.py --telegram-id 123456789
+
+# Or inside the container
+podman compose exec app python scripts/grant_lifetime_pro.py --telegram-id 123456789
+```
+This updates the database (`plan_type = 'lifetime_pro'`) and instantly grants unlimited features to all members of that family.
+
 ---
 
 ## 🏗 Project Architecture

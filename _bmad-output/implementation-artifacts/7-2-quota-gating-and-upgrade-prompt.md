@@ -18,8 +18,14 @@ So that I understand why my logs are blocked and how to upgrade.
 - [ ] If `plan_type` is `"free"` and `monthly_tx_count` >= 30, block the transaction log.
 - [ ] Return a friendly warning message via Telegram explaining the limit has been reached.
 - [ ] The warning message must include instructions to type `/upgrade` to unlock the Pro tier.
-- [ ] Ensure that active Pro users bypass this check.
+- [ ] Ensure that active Pro users (`"solo_pro"`, `"family_pro"`, and `"lifetime_pro"`) bypass this check.
+- [ ] For `"family_pro"` and `"lifetime_pro"`, all members linked to the `Family` share the unrestricted quota.
 
 ## Technical Notes
 - The check should happen early in the pipeline (likely before we send the audio/text to the AI orchestrator to save resources).
-- Increment the `monthly_tx_count` on every successful transaction log.
+- Increment the `monthly_tx_count` on every successful transaction log when in `"free"` tier.
+- Quota check helper:
+  ```python
+  def is_unlimited_plan(plan_type: str) -> bool:
+      return plan_type in ("solo_pro", "family_pro", "lifetime_pro")
+  ```

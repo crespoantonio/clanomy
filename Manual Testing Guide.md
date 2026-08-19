@@ -512,6 +512,31 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ---
 
+### 🧪 Test 15: Granting Lifetime Pro (VIP Access)
+
+1. Verify the 30-transaction limit for free users:
+   - Exhaust the limit (or artificially increase `monthly_tx_count` to 30 via DB).
+   - Attempt to log a new transaction.
+   - **Expected Output:** The bot replies with a warning and upgrade prompt (`/upgrade`).
+2. Run the administrative script to grant `lifetime_pro`:
+   - Obtain your Telegram ID (which you can query from the database or BotFather logs).
+   - Execute the script inside the container (or your local venv):
+     ```bash
+     podman compose exec app python scripts/grant_lifetime_pro.py --telegram-id <YOUR_TELEGRAM_ID>
+     ```
+3. **Expected Output:**
+   - The script outputs:
+     > `Success! Family has been upgraded to lifetime_pro.`
+4. Verify the upgrade:
+   - Log another transaction in Telegram.
+   - **Expected Output:** The transaction is accepted instantly, bypassing the quota.
+5. Verify DB state (Optional):
+   - Connect to PostgreSQL (`podman exec -it famfin-db psql -U famfin_user -d famfin_db`).
+   - Run: `SELECT plan_type, subscription_status FROM family;`
+   - Should yield `lifetime_pro` and `active`.
+
+---
+
 ## Step 7: Database & Encryption Verification
 
 Verify that data was stored and encrypted using AES-256:

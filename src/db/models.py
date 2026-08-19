@@ -18,6 +18,13 @@ class Family(SQLModel, table=True):
     notion_database_name: Optional[str] = Field(default=None)
     notion_connected_at: Optional[datetime] = Field(default=None)
 
+    # Subscription Tracking (Epic 7)
+    plan_type: str = Field(default="free")
+    subscription_status: str = Field(default="active")
+    monthly_tx_count: int = Field(default=0)
+    current_period_end: Optional[datetime] = Field(default=None)
+    telegram_payment_charge_id: Optional[str] = Field(default=None)
+
     # Relationships
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     transactions: List["Transaction"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})

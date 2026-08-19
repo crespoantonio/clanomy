@@ -392,7 +392,7 @@ So that I never lose a record in my primary dashboard.
 
 ## Epic 7: Monetization & Subscriptions
 
-Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features.
+Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features. Supports lifetime VIP access via direct database provisioning.
 
 ### Story 7.1: Database Schema Expansion for Subscriptions
 
@@ -404,7 +404,8 @@ So that we can manage quotas and active Pro plans.
 
 **Given** the `db/models.py` file
 **When** the `Family` model is updated
-**Then** it includes `plan_type` (default "free"), `subscription_status` (default "active"), and `monthly_tx_count` (default 0).
+**Then** it includes `plan_type` (default "free", supporting "free", "solo_pro", "family_pro", and "lifetime_pro"), `subscription_status` (default "active"), `monthly_tx_count` (default 0), and optional `current_period_end` and `telegram_payment_charge_id`.
+**And** `lifetime_pro` is strictly reserved for manual database administration (cannot be assigned via webhooks or bot commands).
 **And** Alembic migrations (if used) or SQLModel schema generation successfully applies these to the database.
 
 ### Story 7.2: Quota Gating & Upgrade Prompt
@@ -419,6 +420,7 @@ So that I understand why my logs are blocked and how to upgrade.
 **When** the `MessagingService` processes the request
 **Then** it blocks the transaction and replies with a warning message.
 **And** it prompts the user to type `/upgrade` to unlock unlimited logs.
+**And** users with `"solo_pro"`, `"family_pro"`, or `"lifetime_pro"` bypass quota gating, with all family members sharing the unlimited quota.
 
 ### Story 7.3: Telegram Stars Invoice Generation
 
@@ -444,4 +446,5 @@ So that users are automatically granted their Pro tier.
 **Given** a Telegram payment flow
 **When** the user attempts to pay
 **Then** the webhook successfully answers the `pre_checkout_query` within 10 seconds.
-**And** when `successful_payment` is received, the system updates the `Family` plan to the purchased tier.
+**And** when `successful_payment` is received, the system verifies the SKU against an immutable whitelist (`sub_solo_pro`, `sub_family_pro`) and updates the `Family` plan to the purchased tier.
+**And** existing `lifetime_pro` accounts are protected from external subscription overwrites.

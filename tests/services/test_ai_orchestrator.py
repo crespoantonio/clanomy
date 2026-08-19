@@ -30,6 +30,8 @@ async def test_orchestrator_success_text(orchestrator, monkeypatch):
     mock_extract_result.currency = "USD"
     mock_extract_result.concept = "Starbucks"
     mock_extract_result.category = "Food/Drink"
+    mock_extract_result.transaction_date = None
+    mock_extract_result.to_datetime.return_value = datetime.datetime.now(datetime.timezone.utc)
     mock_extract_result.model_dump.return_value = {
         "amount": 15.0,
         "currency": "USD",
@@ -72,6 +74,55 @@ async def test_orchestrator_success_text(orchestrator, monkeypatch):
     assert "Saved 15.0 USD for 'Starbucks' under category 'Food/Drink'." in call_args[1]["text"]
 
 @pytest.mark.anyio
+async def test_orchestrator_success_text_retroactive(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.amount = 15.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Starbucks"
+    mock_extract_result.category = "Food/Drink"
+    mock_extract_result.transaction_date = "2026-08-11"
+    
+    dt = datetime.datetime(2026, 8, 11, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    mock_extract_result.to_datetime.return_value = dt
+    mock_extract_result.model_dump.return_value = {
+        "amount": 15.0,
+        "currency": "USD",
+        "concept": "Starbucks",
+        "category": "Food/Drink",
+        "transaction_date": "2026-08-11"
+    }
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+    
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    
+    class MockEncryptionService:
+        def encrypt(self, text): return text
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text="last week 15 for Starbucks", audio_file_id=None, chat_id=12345)
+    
+    mock_send_message.assert_called_once()
+    call_args = mock_send_message.call_args
+    assert "Saved 15.0 USD for 'Starbucks' under category 'Food/Drink' (logged for Aug 11, 2026)." in call_args[1]["text"]
+
+@pytest.mark.anyio
 async def test_orchestrator_audio_success(orchestrator, monkeypatch):
     user_id = "00000000-0000-0000-0000-000000000000"
     
@@ -86,6 +137,8 @@ async def test_orchestrator_audio_success(orchestrator, monkeypatch):
     mock_extract_result.currency = "USD"
     mock_extract_result.concept = "Taxi"
     mock_extract_result.category = "Transport"
+    mock_extract_result.transaction_date = None
+    mock_extract_result.to_datetime.return_value = datetime.datetime.now(datetime.timezone.utc)
     mock_extract_result.model_dump.return_value = {"amount": 20.0}
     mock_extract.return_value = mock_extract_result
 

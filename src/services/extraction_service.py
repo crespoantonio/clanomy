@@ -3,6 +3,7 @@ import logging
 import threading
 import asyncio
 import re
+from datetime import datetime, timezone
 from typing import Optional, Union
 from pydantic import BaseModel, Field, field_validator, ValidationError
 import ollama
@@ -20,6 +21,20 @@ class ExtractionResult(BaseModel):
     category: str = Field(..., description="Mapped to one of: 'Food/Drink', 'Transport', 'Rent/Bills', 'Shopping', 'Leisure', 'Other'")
     concept: str = Field(..., description="The transaction description or concept")
     currency: str = Field(default="USD", description="ISO 3-letter currency code, e.g. 'USD', 'EUR', 'GBP'")
+    transaction_date: Optional[str] = Field(default=None, description="ISO format date string (YYYY-MM-DD) in UTC if explicitly mentioned or relative to current date (e.g. 'yesterday', 'last Monday', 'last week', '3 days ago'). Null/None if no date mentioned or if the purchase happened today.")
+
+    def to_datetime(self, reference_time: Optional[datetime] = None) -> datetime:
+        """Parses the extracted transaction date to a UTC datetime. Falls back to reference_time or now if none."""
+        ref = reference_time or datetime.now(timezone.utc)
+        if not self.transaction_date:
+            return ref
+        try:
+            parsed_date = datetime.strptime(self.transaction_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            # Combine parsed date with midday time to avoid timezone boundary issues
+            return parsed_date.replace(hour=12, minute=0, second=0, microsecond=0)
+        except ValueError:
+            logger.warning(f"Could not parse transaction_date '{self.transaction_date}'. Falling back to reference time.")
+            return ref
 
     @field_validator("category")
     @classmethod
@@ -88,7 +103,8 @@ class ExtractionService:
             amount=amount,
             category="Other",
             concept=text.strip(),
-            currency=currency
+            currency=currency,
+            transaction_date=None
         )
             
     @retry(
@@ -115,11 +131,14 @@ class ExtractionService:
             raise ExtractionError("Received empty response from Ollama")
         return content
 
-    async def extract(self, text: str) -> ExtractionResult:
+    async def extract(self, text: str, reference_time: Optional[datetime] = None) -> ExtractionResult:
         if not text or not text.strip():
             raise ValueError("Input text is empty or contains only whitespace")
 
-        system_prompt = '''You are an expert financial data extraction parser.
+        ref = reference_time or datetime.now(timezone.utc)
+        current_date_str = ref.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        system_prompt = f'''You are an expert financial data extraction parser.
 Your job is to extract transaction details from unstructured natural language text and return them in structured JSON format.
 
 RULES:
@@ -127,6 +146,11 @@ RULES:
 2. Determine the 'category'. It MUST be one of the following exact strings: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other". If the category is ambiguous or doesn't fit, use "Other".
 3. Extract the 'concept' (a brief description of what was purchased or the merchant name).
 4. Determine the 'currency' and return its standard ISO 3-letter code (e.g., "euros" -> "EUR", "dollars" -> "USD", "pounds" -> "GBP"). If no currency is mentioned, use "USD".
+5. Extract 'transaction_date' as an ISO format YYYY-MM-DD string.
+   - Current Date: {current_date_str}
+   - If a relative date is specified like "yesterday", "last Monday", "3 days ago", compute the specific date based on Current Date.
+   - If a vague relative date is specified like "last week" without specifying a day, default to 7 days prior to Current Date.
+   - If no date or time is specified or if it explicitly occurred today, set 'transaction_date' to null.
 
 Return ONLY the JSON matching the provided schema.'''
 

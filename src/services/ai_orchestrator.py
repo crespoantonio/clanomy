@@ -25,7 +25,7 @@ class AIOrchestrator:
     def __init__(self):
         self.encryption_service = EncryptionService()
 
-    def _persist_transaction(self, user_uuid: UUID, amount: str, concept: str, category: str) -> UUID:
+    def _persist_transaction(self, user_uuid: UUID, amount: str, concept: str, category: str, timestamp: Optional[datetime.datetime] = None) -> UUID:
         """
         Synchronous helper to write the transaction to the database.
         Runs inside a separate thread via asyncio.to_thread to keep the event loop unblocked.
@@ -44,7 +44,7 @@ class AIOrchestrator:
                     amount=amount,
                     concept=concept,
                     category=category,
-                    timestamp=datetime.datetime.now(datetime.timezone.utc)
+                    timestamp=timestamp or datetime.datetime.now(datetime.timezone.utc)
                 )
                 session.add(transaction)
                 session.commit()
@@ -366,8 +366,13 @@ class AIOrchestrator:
                         result = await extraction_service.extract(text=text)
                         extracted_data = result.model_dump()
                         
+                        transaction_time = result.to_datetime()
+                        
                         # Construct success message
-                        response_text = f"Saved {result.amount} {result.currency} for '{result.concept}' under category '{result.category}'."
+                        date_str = ""
+                        if result.transaction_date:
+                            date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"
+                        response_text = f"Saved {result.amount} {result.currency} for '{result.concept}' under category '{result.category}'{date_str}."
                         
                         try:
                             # Persist Transaction
@@ -379,7 +384,8 @@ class AIOrchestrator:
                                 user_uuid=user_uuid,
                                 amount=encrypted_amount,
                                 concept=encrypted_concept,
-                                category=result.category
+                                category=result.category,
+                                timestamp=transaction_time
                             )
                             
                             # Trigger background notion mirroring safely without affecting transaction response
@@ -391,7 +397,7 @@ class AIOrchestrator:
                                     currency=result.currency,
                                     concept=result.concept,
                                     category=result.category,
-                                    timestamp=datetime.datetime.now(datetime.timezone.utc),
+                                    timestamp=transaction_time,
                                     user_name=user_info["display_name"],
                                     transaction_id=tx_id
                                 ))

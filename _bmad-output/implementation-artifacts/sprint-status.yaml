@@ -53,6 +53,7 @@ development_status:
   2-2-ollama-json-extraction-service: done
   2-3-the-3-second-rule-orchestrator: done
   2-4-transaction-persistence-with-encryption: done
+  2-5-retroactive-and-relative-date-expense-logging: done
   epic-2-retrospective: done
 
   epic-3: done

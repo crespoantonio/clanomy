@@ -1,5 +1,6 @@
 import pytest
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
 from src.services.extraction_service import ExtractionService, ExtractionResult, ExtractionError
 import ollama
@@ -124,3 +125,28 @@ async def test_extract_empty_response(service, mock_ollama_client):
 
     with pytest.raises(ExtractionError, match="Received empty response"):
         await service.extract("test")
+
+@pytest.mark.anyio
+async def test_extract_transaction_date(service, mock_ollama_client):
+    mock_response = MagicMock()
+    # Explicit past date
+    mock_response.message.content = '{"amount": 10.0, "category": "Food/Drink", "concept": "Lunch", "currency": "USD", "transaction_date": "2026-08-10"}'
+    mock_ollama_client.chat.return_value = mock_response
+
+    result = await service.extract("Spent 10 for lunch on August 10th")
+    assert result.transaction_date == "2026-08-10"
+    
+    dt = result.to_datetime()
+    assert dt.year == 2026
+    assert dt.month == 8
+    assert dt.day == 10
+    assert dt.hour == 12
+
+@pytest.mark.anyio
+async def test_extract_transaction_date_fallback():
+    # When transaction_date is None, to_datetime should use reference_time
+    result = ExtractionResult(amount=10.0, category="Food/Drink", concept="Lunch")
+    ref_time = datetime(2026, 8, 18, 12, 0, 0, tzinfo=timezone.utc)
+    
+    dt = result.to_datetime(reference_time=ref_time)
+    assert dt == ref_time

@@ -10,7 +10,7 @@ from faster_whisper import WhisperModel
 from src.core.config import settings
 from src.core.http_client import get_http_client
 
-logger = logging.getLogger("famfin.whisper")
+logger = logging.getLogger("clanomy.whisper")
 
 class InferenceError(Exception):
     """Raised when audio transcription or inference fails."""

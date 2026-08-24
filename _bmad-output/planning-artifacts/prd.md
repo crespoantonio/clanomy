@@ -24,16 +24,16 @@ classification:
 workflowType: prd
 ---
 
-# Product Requirements Document - FamFin AI
+# Product Requirements Document - Clanomy
 
 **Author:** Tony
 **Date:** 2026-05-08
 
 ## 1. Executive Summary
-FamFin AI is an "invisible" financial companion designed to solve the chronic problem of expense tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper), FamFin AI enables zero-friction, privacy-centric expense logging via natural language audio and text. Users manage their finances through conversational interaction, receiving instant text confirmations and querying their spending history without ever leaving their primary messaging app.
+Clanomy is an "invisible" financial companion designed to solve the chronic problem of expense tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper), Clanomy enables zero-friction, privacy-centric expense logging via natural language audio and text. Users manage their finances through conversational interaction, receiving instant text confirmations and querying their spending history without ever leaving their primary messaging app.
 
 ### Core Differentiator
-The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, FamFin AI allows users to record expenses in seconds via voice notes processed locally, ensuring sensitive financial data never leaves the user's controlled infrastructure.
+The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, Clanomy allows users to record expenses in seconds via voice notes processed locally, ensuring sensitive financial data never leaves the user's controlled infrastructure.
 
 ## 2. Success Criteria
 

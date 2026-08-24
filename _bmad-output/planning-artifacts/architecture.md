@@ -4,7 +4,7 @@ inputDocuments:
   - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\product_brief_famfin_ai.md
   - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\prd.md
 workflowType: 'architecture'
-project_name: 'FamFin-AI'
+project_name: 'Clanomy'
 user_name: 'Tony'
 date: '2026-05-09'
 lastStep: 8
@@ -194,7 +194,7 @@ The Encryption Utility is a "Hard Dependency" for the Database layer; no transac
 ### Complete Project Directory Structure
 
 ```text
-famfin-ai/
+clanomy/
 ├── docker-compose.yaml      # Multi-container orchestration (FastAPI + Postgres)
 ├── .env.example             # Template for Bot Tokens, Encryption Keys
 ├── requirements.txt         # Core dependencies (FastAPI, SQLModel, Ollama, etc.)
@@ -399,7 +399,7 @@ import os
 import tempfile
 
 # 1. Establish secure temp file path
-fd, path = tempfile.mkstemp(suffix=".csv", prefix=f"famfin_export_{user_id}_")
+fd, path = tempfile.mkstemp(suffix=".csv", prefix=f"clanomy_export_{user_id}_")
 try:
     # 2. Open file descriptor and write decrypted CSV data
     with os.fdopen(fd, 'w', newline='', encoding='utf-8') as f:

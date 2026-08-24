@@ -1,6 +1,6 @@
-# FamFin-AI 💰🤖
+# Clanomy 💰🤖
 
-FamFin-AI is a privacy-first, multi-tenant family financial assistant. It features a high-performance FastAPI backend, a local-first AI pipeline for voice-to-JSON expense tracking, and application-level encryption to ensure data privacy.
+Clanomy is a privacy-first, multi-tenant family financial assistant. It features a high-performance FastAPI backend, a local-first AI pipeline for voice-to-JSON expense tracking, and application-level encryption to ensure data privacy.
 
 ## 🚀 Quick Start
 

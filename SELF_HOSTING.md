@@ -1,15 +1,15 @@
-# 🏠 Self-Hosting FamFin-AI
+# 🏠 Self-Hosting Clanomy
 
-Welcome! FamFin-AI operates on a **Hybrid Open Core model**. While we offer a zero-friction Managed SaaS version via Telegram for those who want instant access without the hassle of servers, we believe strongly in privacy and data sovereignty. 
+Welcome! Clanomy operates on a **Hybrid Open Core model**. While we offer a zero-friction Managed SaaS version via Telegram for those who want instant access without the hassle of servers, we believe strongly in privacy and data sovereignty. 
 
-If you are privacy-obsessed, technically inclined, or just prefer to own your infrastructure, you can self-host the entire FamFin-AI stack for free!
+If you are privacy-obsessed, technically inclined, or just prefer to own your infrastructure, you can self-host the entire Clanomy stack for free!
 
 If you find this open-source version valuable and it saves you money, consider supporting the project via [Patreon/Ko-fi] (link coming soon) to help us keep maintaining the code and adding new features!
 
 ---
 
 ## 🏗️ What You Will Be Hosting
-The FamFin-AI stack consists of three main containers:
+The Clanomy stack consists of three main containers:
 1. **App**: The FastAPI Python backend that handles Telegram webhooks and business logic.
 2. **Database**: A PostgreSQL instance where all your financial data is stored with AES-256 application-level encryption.
 3. **Ollama**: A local AI server running LLaMA3 to parse your natural language expenses into structured JSON data.
@@ -36,8 +36,8 @@ Before you begin, ensure your server or local machine has:
 
 ### 2. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/FamFin-AI.git
-cd FamFin-AI
+git clone https://github.com/crespoantonio/clanomy.git
+cd clanomy
 ```
 
 ### 3. Configure the Environment

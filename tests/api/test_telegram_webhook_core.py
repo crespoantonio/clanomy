@@ -26,7 +26,7 @@ def test_webhook_success_registration(app_client, mock_telegram, telegram_payloa
     
     # Verify the welcome message was sent
     assert len(mock_telegram.messages) == 1
-    assert "Welcome to FamFin-AI" in mock_telegram.messages[0]["text"]
+    assert "Welcome to Clanomy" in mock_telegram.messages[0]["text"]
 
 def test_webhook_log_text_expense(app_client, mock_telegram, telegram_payload_factory):
     """[P0] Webhook should process text expense and extract via LLM."""

@@ -186,7 +186,7 @@ class AIOrchestrator:
                         account_service = AccountService()
                         success = await account_service.delete_account(user_uuid)
                         if success:
-                            response_text = "✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using FamFin-AI! If you ever wish to return, simply send /start."
+                            response_text = "✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using Clanomy! If you ever wish to return, simply send /start."
                         else:
                             response_text = "Failed to delete account. Please try again later."
                     elif parsed_query and getattr(parsed_query, "intent", None) == "delete_account":

@@ -312,7 +312,7 @@ class NotionService:
                 
                 properties_payload = self._build_page_properties(
                     schema=db_details.get("properties_schema", {}),
-                    concept="FamFin Test Entry",
+                    concept="Clanomy Test Entry",
                     amount=0.00,
                     currency="USD",
                     category="Test",

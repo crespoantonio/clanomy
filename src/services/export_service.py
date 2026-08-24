@@ -123,7 +123,7 @@ class ExportService:
         transactions = await asyncio.to_thread(fetch_and_process)
         count = len(transactions)
         
-        fd, temp_path = tempfile.mkstemp(prefix=f"famfin_export_{family_id}_", suffix=f".{format}")
+        fd, temp_path = tempfile.mkstemp(prefix=f"clanomy_export_{family_id}_", suffix=f".{format}")
         os.close(fd) # Close immediately, we use standard open()
         
         try:

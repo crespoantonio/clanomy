@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "FamFin-AI API",
-    "description": "Postman collection to test the entire FamFin-AI messaging pipeline.",
+    "name": "Clanomy API",
+    "description": "Postman collection to test the entire Clanomy messaging pipeline.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [

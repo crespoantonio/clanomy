@@ -1,6 +1,6 @@
-# Complete Manual Testing Guide: FamFin-AI (Zero to Telegram)
+# Complete Manual Testing Guide: Clanomy (Zero to Telegram)
 
-This guide walks you through building, configuring, and testing the **FamFin-AI** system from complete scratch (zero state) using **Podman** and **Telegram**.
+This guide walks you through building, configuring, and testing the **Clanomy** system from complete scratch (zero state) using **Podman** and **Telegram**.
 
 ---
 
@@ -10,7 +10,7 @@ This guide walks you through building, configuring, and testing the **FamFin-AI*
 [ Telegram User ] (Text or Voice)
        │
        ▼  POST /api/v1/telegram/webhook (Header: X-Telegram-Bot-Api-Secret-Token)
- [ FamFin API ] ── Immediate 200 OK (< 3s)
+ [ Clanomy API ] ── Immediate 200 OK (< 3s)
        │
        ├─► (Background Task)
        │      │
@@ -54,8 +54,8 @@ _(Note: You can use either `podman-compose` or `podman compose`.)_
    /newbot
    ```
 4. Follow the prompts:
-   - **Name:** e.g., `My FamFin Assistant`
-   - **Username:** e.g., `my_famfin_test_bot` (must end in `bot`)
+   - **Name:** e.g., `Clanomy Assistant`
+   - **Username:** e.g., `clanomy_test_bot` (must end in `bot`)
 5. BotFather will provide your **Telegram Bot Token** (e.g., `7123456789:AAF_xxxxxxx_xxxxxxx`).
 6. **Save this token** — you will use it in `.env`.
 
@@ -83,17 +83,17 @@ _(Note: You can use either `podman-compose` or `podman compose`.)_
 
    ```env
    # Database Configuration
-   POSTGRES_USER=famfin_user
-   POSTGRES_PASSWORD=famfin_password
-   POSTGRES_DB=famfin_db
+   POSTGRES_USER=clanomy_user
+   POSTGRES_PASSWORD=clanomy_password
+   POSTGRES_DB=clanomy_db
 
    # Security & API Keys
    ENCRYPTION_KEY=YOUR_GENERATED_FERNET_KEY_HERE
    TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_FROM_BOTFATHER
 
    # App Configuration
-   DATABASE_URL=postgresql+psycopg://famfin_user:famfin_password@db:5432/famfin_db
-   MESSAGING_WEBHOOK_SECRET=famfin_super_secret_webhook_token_123
+   DATABASE_URL=postgresql+psycopg://clanomy_user:clanomy_password@db:5432/clanomy_db
+   MESSAGING_WEBHOOK_SECRET=clanomy_super_secret_webhook_token_123
 
    # Whisper Settings
    WHISPER_MODEL_SIZE=base
@@ -122,9 +122,9 @@ _(Note: You can use either `podman-compose` or `podman compose`.)_
    ```
 
    You should see:
-   - `famfin-db` (Port `5433->5432`)
-   - `famfin-app` (Port `8000->8000`)
-   - `famfin-ollama` (Port `11434->11434`)
+   - `clanomy-db` (Port `5433->5432`)
+   - `clanomy-app` (Port `8000->8000`)
+   - `clanomy-ollama` (Port `11434->11434`)
 
 3. Verify API Health:
    Open your browser and navigate to:
@@ -138,12 +138,12 @@ The Ollama container starts without downloaded weights. Pull `llama3` inside the
 
 1. Run:
    ```powershell
-   podman exec -it famfin-ollama ollama pull llama3
+   podman exec -it clanomy-ollama ollama pull llama3
    ```
 2. Wait for the download to finish (approx. 4.7 GB).
 3. Verify the model is available:
    ```powershell
-   podman exec -it famfin-ollama ollama list
+   podman exec -it clanomy-ollama ollama list
    ```
 
 _(Note: Faster-Whisper downloads its `base` model automatically on the first audio request and caches it in the `whisper_model_cache` volume)._
@@ -180,7 +180,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 3. **Expected Output:**
    Bot immediately replies:
-   > _"Welcome to FamFin-AI, [Your Name]! Your account is ready. You can now log your first expense by simply typing it, for example: '50 for lunch' or '100 for groceries'."_
+   > _"Welcome to Clanomy, [Your Name]! Your account is ready. You can now log your first expense by simply typing it, for example: '50 for lunch' or '100 for groceries'."_
 
 ---
 
@@ -192,7 +192,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 2. Check backend logs in your terminal:
    ```powershell
-   podman logs -f famfin-app
+   podman logs -f clanomy-app
    ```
    You will see:
    ```text
@@ -211,7 +211,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    > 🎙️ _"I paid twenty four dollars and fifty cents for an Uber ride to the airport."_
 2. Check backend logs:
    ```powershell
-   podman logs -f famfin-app
+   podman logs -f clanomy-app
    ```
    You will see:
    ```text
@@ -233,7 +233,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 2. Check backend logs:
    ```powershell
-   podman logs -f famfin-app
+   podman logs -f clanomy-app
    ```
    You will see the `[3s Audit]` logs for the query:
    ```text
@@ -290,7 +290,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    export my data to csv
    ```
 2. **Expected Output in Telegram:**
-   - The bot replies with a generated document file named `famfin_export_<uuid>.csv`.
+   - The bot replies with a generated document file named `clanomy_export_<uuid>.csv`.
    - The file contains header: `Timestamp (UTC),Amount,Currency,Category,Concept` followed by your decrypted transactions.
    - The file is accompanied by a friendly caption: `📊 Here is your exported transaction history (Total: X transactions).`
 3. Try exporting to JSON:
@@ -298,16 +298,16 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    download my JSON data
    ```
 4. **Expected Output in Telegram:**
-   - The bot replies with a generated document file named `famfin_export_<uuid>.json`.
+   - The bot replies with a generated document file named `clanomy_export_<uuid>.json`.
    - The file contains valid JSON with metadata (`family_id`, `exported_at`, `total_count`) and a `transactions` list of decrypted records.
 5. Check backend logs:
    ```powershell
-   podman logs -f famfin-app
+   podman logs -f clanomy-app
    ```
    You will see the secure cleanup verification logs:
    ```text
    INFO: [3s Audit] Data export took 0.05 seconds (format: csv, count: 12, family_id: ...)
-   INFO: Purged temp export file from disk: /tmp/famfin_export_...
+   INFO: Purged temp export file from disk: /tmp/clanomy_export_...
    ```
 
 ---
@@ -331,7 +331,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    ```
 5. **Expected Output in Telegram:**
    - The bot replies with the farewell message:
-     > _"✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using FamFin-AI! If you ever wish to return, simply send /start."_
+     > _"✅ Your account and all associated transaction records have been permanently deleted from our database. Thank you for using Clanomy! If you ever wish to return, simply send /start."_
 6. Connect to PostgreSQL and query users and transactions:
    ```sql
    SELECT * FROM users WHERE id = '<deleted_user_id>';
@@ -455,7 +455,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
      > `✅ Notion Mirror Test Successful!`
      > `Created test record in database: Family Expenses`
      > `🔗 View in Notion (clickable link)`
-   - Open the link in a browser and verify a test row with `FamFin Test Entry` was created under the `Test` category with `0.00` amount.
+   - Open the link in a browser and verify a test row with `Clanomy Test Entry` was created under the `Test` category with `0.00` amount.
 4. Send a real transaction message:
    ```text
    Spent 55 USD for dinner at Olive Garden under Food
@@ -485,7 +485,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    - Verify Telegram reply is still sent instantly.
    - Check backend container logs:
      ```powershell
-     podman logs famfin-app
+     podman logs clanomy-app
      ```
      Verify that `[Notion Mirror] [Retry]` warnings are printed, attempting retries with exponential wait times.
    - Restore connection. The system eventually completes mirroring successfully, updating `notion_page_id` in the local database.
@@ -531,7 +531,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
    - Log another transaction in Telegram.
    - **Expected Output:** The transaction is accepted instantly, bypassing the quota.
 5. Verify DB state (Optional):
-   - Connect to PostgreSQL (`podman exec -it famfin-db psql -U famfin_user -d famfin_db`).
+   - Connect to PostgreSQL (`podman exec -it clanomy-db psql -U clanomy_user -d clanomy_db`).
    - Run: `SELECT plan_type, subscription_status FROM family;`
    - Should yield `lifetime_pro` and `active`.
 
@@ -544,7 +544,7 @@ Verify that data was stored and encrypted using AES-256:
 1. Connect to PostgreSQL inside the Podman container:
 
    ```powershell
-   podman exec -it famfin-db psql -U famfin_user -d famfin_db
+   podman exec -it clanomy-db psql -U clanomy_user -d clanomy_db
    ```
 
 2. Query users:
@@ -572,9 +572,9 @@ Verify that data was stored and encrypted using AES-256:
 
 | Goal                       | Command                                                                          |
 | -------------------------- | -------------------------------------------------------------------------------- |
-| View App Logs              | `podman logs -f famfin-app`                                                      |
-| View Ollama Logs           | `podman logs -f famfin-ollama`                                                   |
-| Restart App Service        | `podman restart famfin-app`                                                      |
+| View App Logs              | `podman logs -f clanomy-app`                                                      |
+| View Ollama Logs           | `podman logs -f clanomy-ollama`                                                   |
+| Restart App Service        | `podman restart clanomy-app`                                                      |
 | Tear down containers       | `podman-compose down`                                                            |
 | Rebuild all containers     | `podman-compose up -d --build`                                                   |
-| Test Ollama Model manually | `podman exec -it famfin-ollama ollama run llama3 "Extract amount: 20 for pizza"` |
+| Test Ollama Model manually | `podman exec -it clanomy-ollama ollama run llama3 "Extract amount: 20 for pizza"` |

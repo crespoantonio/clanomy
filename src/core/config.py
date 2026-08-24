@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Project Info
-    PROJECT_NAME: str = "FamFin-AI"
+    PROJECT_NAME: str = "Clanomy"
     DEFAULT_CURRENCY: str = "USD"
     
     # Database

@@ -6,7 +6,7 @@ stepsCompleted:
   - step-04-ux-alignment
   - step-05-epic-quality-review
   - step-06-final-assessment
-project: FamFin-AI
+project: Clanomy
 date: 2026-05-18
 filesIncluded:
   - product_brief_famfin_ai.md
@@ -17,7 +17,7 @@ filesIncluded:
 # Implementation Readiness Assessment Report
 
 **Date:** 2026-05-18
-**Project:** FamFin-AI
+**Project:** Clanomy
 **Assessor:** BMad Lead Product Manager Agent
 
 ---

@@ -8,11 +8,11 @@ status: 'complete'
 completedAt: '2026-05-09'
 ---
 
-# FamFin-AI - Epic Breakdown
+# Clanomy - Epic Breakdown
 
 ## Overview
 
-This document provides the complete epic and story breakdown for FamFin-AI, decomposing the requirements from the PRD and Architecture requirements into implementable stories.
+This document provides the complete epic and story breakdown for Clanomy, decomposing the requirements from the PRD and Architecture requirements into implementable stories.
 
 ## Requirements Inventory
 

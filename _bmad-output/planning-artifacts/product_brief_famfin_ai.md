@@ -1,13 +1,13 @@
-# Product Brief: FamFin AI
+# Product Brief: Clanomy
 
-**Working Title:** FamFin AI (Family Finance Assistant)
+**Working Title:** Clanomy (formerly FamFin AI)
 **Focus:** Privacy-First, Family-Centric Financial Tracking via Conversational AI.
 **BMAD Compatibility:** High (Modular Architecture, Spec-Driven Invariants).
 
 ---
 
 ## 1. Project Overview
-FamFin AI is a messaging-based (Telegram/WhatsApp) SaaS that allows users to log expenses and manage family budgets using natural language (voice and text). Unlike existing solutions, it prioritizes **data sovereignty** by using local AI models and targets the **family/household segment** through multi-user synchronization.
+Clanomy is a messaging-based (Telegram/WhatsApp) SaaS that allows users to log expenses and manage family budgets using natural language (voice and text). Unlike existing solutions, it prioritizes **data sovereignty** by using local AI models and targets the **family/household segment** through multi-user synchronization.
 
 ## 2. Strategic Objectives
 - **Zero-Friction Logging:** Enable users to log expenses in <3 seconds via voice or text.

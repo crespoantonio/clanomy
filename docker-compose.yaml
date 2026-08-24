@@ -1,11 +1,11 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: famfin-db
+    container_name: clanomy-db
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-famfin_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-famfin_password}
-      POSTGRES_DB: ${POSTGRES_DB:-famfin_db}
+      POSTGRES_USER: ${POSTGRES_USER:-clanomy_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clanomy_password}
+      POSTGRES_DB: ${POSTGRES_DB:-clanomy_db}
     ports:
       - "5433:5432"
     volumes:
@@ -14,7 +14,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-famfin_user} -d ${POSTGRES_DB:-famfin_db}",
+          "pg_isready -U ${POSTGRES_USER:-clanomy_user} -d ${POSTGRES_DB:-clanomy_db}",
         ]
       interval: 5s
       timeout: 5s
@@ -24,11 +24,11 @@ services:
     build:
       context: .
       dockerfile: Containerfile
-    container_name: famfin-app
+    container_name: clanomy-app
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-famfin_user}:${POSTGRES_PASSWORD:-famfin_password}@db:5432/${POSTGRES_DB:-famfin_db}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-clanomy_user}:${POSTGRES_PASSWORD:-clanomy_password}@db:5432/${POSTGRES_DB:-clanomy_db}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       MESSAGING_WEBHOOK_SECRET: ${MESSAGING_WEBHOOK_SECRET}
@@ -46,7 +46,7 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    container_name: famfin-ollama
+    container_name: clanomy-ollama
     ports:
       - "11434:11434"
     volumes:

@@ -51,14 +51,22 @@ def mock_llm_responses(monkeypatch):
             amount = float(amount_match.group(0))
             
         concept = text
-        if "coffee" in text.lower():
+        tx_type = "expense"
+        category = "Food/Drink"
+        text_lower = (text or '').lower()
+        if "salary" in text_lower or "earned" in text_lower or "got paid" in text_lower or "income" in text_lower or "freelance" in text_lower:
+            tx_type = "income"
+            category = "Salary" if "salary" in text_lower or "got paid" in text_lower else "Freelance"
+            concept = "Acme Corp" if "acme" in text_lower else text
+        elif "coffee" in text_lower:
             concept = "coffee"
-        elif "groceries" in text.lower():
+        elif "groceries" in text_lower:
             concept = "groceries at Walmart"
             
         return json.dumps({
+            "type": tx_type,
             "amount": amount,
-            "category": "Food/Drink",
+            "category": category,
             "concept": concept,
             "currency": "USD"
         })

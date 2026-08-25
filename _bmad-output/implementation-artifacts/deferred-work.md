@@ -37,3 +37,5 @@
 - Dangerous Defaulting for Ambiguous Input: Architecture says ambiguous inputs default to expense rather than triggering fallback.
 - Incomplete Mathematical Fallback: Savings rate formula has no definition for zero/negative income.
 
+## Deferred from: code review of 8-3-income-voice-and-text-logging-orchestrator (2026-08-25)
+* Brittle Test Mocks — mock_llm_responses relies on hardcoded substring checks (e.g. "salary"), which is fragile but pre-existing.

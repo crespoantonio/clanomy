@@ -5,7 +5,7 @@ import datetime
 import asyncio
 from typing import Optional
 from uuid import UUID
-from sqlmodel import Session
+from sqlmodel import Session, select
 from src.core.config import settings
 from src.services.whisper_service import WhisperService
 from src.services.extraction_service import ExtractionService
@@ -21,13 +21,34 @@ from src.services.notion_service import NotionService
 
 logger = logging.getLogger(__name__)
 
+def _format_currency(amount: float, currency: str = "USD", show_sign: bool = False) -> str:
+    symbols = {
+        "USD": "$",
+        "EUR": "€",
+        "GBP": "£"
+    }
+    curr_upper = (currency or "USD").upper()
+    sym = symbols.get(curr_upper, f"{curr_upper} ")
+    sign = "-" if (amount or 0.0) < 0 else ("+" if show_sign and (amount or 0.0) > 0 else "")
+    abs_amt = abs(amount or 0.0)
+    return f"{sign}{sym}{abs_amt:,.2f}"
+
 class AIOrchestrator:
     def __init__(self):
         self.encryption_service = EncryptionService()
 
-    def _persist_transaction(self, user_uuid: UUID, amount: str, concept: str, category: str, timestamp: Optional[datetime.datetime] = None) -> UUID:
+    def _persist_transaction(
+        self,
+        user_uuid: UUID,
+        amount: str,
+        concept: str,
+        category: str,
+        timestamp: Optional[datetime.datetime] = None,
+        tx_type: str = "expense"
+    ) -> UUID:
         """
         Synchronous helper to write the transaction to the database.
+        :param tx_type: Type of transaction (expense/income)
         Runs inside a separate thread via asyncio.to_thread to keep the event loop unblocked.
         """
         with Session(engine) as session:
@@ -44,6 +65,7 @@ class AIOrchestrator:
                     amount=amount,
                     concept=concept,
                     category=category,
+                    tx_type=tx_type,
                     timestamp=timestamp or datetime.datetime.now(datetime.timezone.utc)
                 )
                 session.add(transaction)
@@ -53,6 +75,59 @@ class AIOrchestrator:
             except Exception as e:
                 session.rollback()
                 raise e
+
+    def _get_monthly_cash_flow_snapshot(self, family_id: UUID, target_date: datetime.datetime, primary_currency: str = "USD") -> dict:
+        """
+        Queries and decrypts all transactions for the given family in the calendar month of target_date.
+        Calculates Total In, Total Out, Net Savings, and Savings Rate percentage.
+        """
+        start_of_month = target_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if target_date.month == 12:
+            next_month = target_date.replace(year=target_date.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            next_month = target_date.replace(month=target_date.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_of_month = next_month - datetime.timedelta(microseconds=1)
+
+        with Session(engine) as session:
+            statement = select(Transaction).where(
+                Transaction.family_id == family_id,
+                Transaction.timestamp >= start_of_month,
+                Transaction.timestamp < next_month
+            )
+            transactions = session.exec(statement).all()
+
+            total_in = 0.0
+            total_out = 0.0
+
+            for tx in transactions:
+                try:
+                    decrypted_amount_str = self.encryption_service.decrypt(tx.amount)
+                    if not decrypted_amount_str:
+                        continue
+                    parts = decrypted_amount_str.strip().split()
+                    amt = float(parts[0]) if parts else 0.0
+                    curr = parts[1].upper() if len(parts) > 1 else "USD"
+                    
+                    if curr == primary_currency.upper():
+                        tx_type = getattr(tx, "tx_type", "expense") or "expense"
+                        if tx_type == "income":
+                            total_in += amt
+                        else:
+                            total_out += amt
+                except Exception as e:
+                    logger.warning(f"Failed to decrypt transaction {tx.id} for cash flow snapshot: {e}")
+
+            net_savings = total_in - total_out
+            savings_pct = round((net_savings / total_in) * 100) if total_in > 0 else 0
+
+            return {
+                "month_name": target_date.strftime("%B"),
+                "total_in": round(total_in, 2),
+                "total_out": round(total_out, 2),
+                "net_savings": round(net_savings, 2),
+                "savings_pct": savings_pct,
+                "currency": primary_currency
+            }
 
     def _is_special_intent(self, text: str) -> bool:
         """Heuristic to check if text is likely a query, export, or account deletion request."""
@@ -97,7 +172,7 @@ class AIOrchestrator:
                 "display_name": user.full_name or user.username
             }
 
-    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None):
+    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None, tx_type: str = "expense"):
         """Background task for Notion Mirroring. Fails silently with logs."""
         try:
             with Session(engine) as session:
@@ -110,7 +185,8 @@ class AIOrchestrator:
                     category=category,
                     timestamp=timestamp,
                     user_name=user_name,
-                    transaction_id=transaction_id
+                    transaction_id=transaction_id,
+                    tx_type=tx_type
                 )
         except Exception as e:
             logger.error(f"[Notion Mirror] Uncaught error in background task: {e}")
@@ -361,18 +437,12 @@ class AIOrchestrator:
                             else:
                                 response_text = "Unknown Notion command."
                     else:
-                        # Default: log expense
+                        # Default: log expense or income
                         extraction_service = ExtractionService()
                         result = await extraction_service.extract(text=text)
                         extracted_data = result.model_dump()
                         
                         transaction_time = result.to_datetime()
-                        
-                        # Construct success message
-                        date_str = ""
-                        if result.transaction_date:
-                            date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"
-                        response_text = f"Saved {result.amount} {result.currency} for '{result.concept}' under category '{result.category}'{date_str}."
                         
                         try:
                             # Persist Transaction
@@ -385,21 +455,66 @@ class AIOrchestrator:
                                 amount=encrypted_amount,
                                 concept=encrypted_concept,
                                 category=result.category,
-                                timestamp=transaction_time
+                                timestamp=transaction_time,
+                                tx_type=result.type
                             )
                             
-                            # Trigger background notion mirroring safely without affecting transaction response
                             try:
                                 user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
+                                family_id = user_info["family_id"]
+                            except Exception as u_err:
+                                logger.warning(f"Failed to get user info: {u_err}")
+                                family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                user_info = {"display_name": "User"}
+
+                            # Construct response message based on transaction type
+                            date_str = ""
+                            if getattr(result, "transaction_date", None):
+                                date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"
+                            if result.type == "income":
+                                snapshot = await asyncio.to_thread(
+                                    self._get_monthly_cash_flow_snapshot,
+                                    family_id=family_id,
+                                    target_date=transaction_time,
+                                    primary_currency=result.currency
+                                )
+                                
+                                if (result.concept or "").strip().lower() == (result.category or "").strip().lower():
+                                    concept_detail = f"({result.category})"
+                                else:
+                                    concept_detail = f"({result.category} - {result.concept})"
+                                    
+                                
+                                    
+                                formatted_amt = _format_currency(result.amount, result.currency, show_sign=True)
+                                formatted_in = _format_currency(snapshot["total_in"], result.currency, show_sign=False)
+                                formatted_out = _format_currency(snapshot["total_out"], result.currency, show_sign=False)
+                                formatted_net = _format_currency(snapshot["net_savings"], result.currency, show_sign=True)
+                                pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
+                                
+                                response_text = (
+                                    f"💰 Income Logged: {formatted_amt} {concept_detail}{date_str}\n"
+                                    f"📊 {snapshot['month_name']} Snapshot:\n"
+                                    f"• Total In: {formatted_in}\n"
+                                    f"• Total Out: {formatted_out}\n"
+                                    f"• Net Savings: {formatted_net}{pct_str}"
+                                )
+                            else:
+                                
+                                response_text = f"Saved {result.amount} {result.currency} for '{result.concept}' under category '{result.category}'{date_str}."
+
+                            # Trigger background notion mirroring safely without affecting transaction response
+                            try:
                                 asyncio.create_task(self._safe_mirror_to_notion(
-                                    family_id=user_info["family_id"],
+                                    family_id=family_id,
                                     amount=result.amount,
                                     currency=result.currency,
                                     concept=result.concept,
                                     category=result.category,
                                     timestamp=transaction_time,
                                     user_name=user_info["display_name"],
-                                    transaction_id=tx_id
+                                    transaction_id=tx_id,
+                                    tx_type=result.type
                                 ))
                             except Exception as mirror_err:
                                 logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")

@@ -695,3 +695,369 @@ async def test_orchestrator_notion_test_sync_commands(mock_notion_cls, orchestra
     mock_notion.sync_pending_transactions = AsyncMock(return_value={"status": "completed", "synced": 0, "failed": 1, "total_pending": 1})
     await orchestrator.orchestrate(user_id=user_id, text="/notion sync", audio_file_id=None, chat_id=12345)
     assert "Sync Failed" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_persist_transaction_with_type(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+    
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    
+    mock_user = MagicMock(family_id=UUID(family_id))
+    mock_session.get.return_value = mock_user
+
+    # Test persisting income
+    orchestrator._persist_transaction(
+        user_uuid=UUID(user_id),
+        amount="enc_3500.0 USD",
+        concept="enc_Acme Corp",
+        category="Salary",
+        tx_type="income"
+    )
+    
+    mock_session.add.assert_called_once()
+    added_tx = mock_session.add.call_args[0][0]
+    assert added_tx.type == "income"
+    assert added_tx.amount == "enc_3500.0 USD"
+    assert added_tx.concept == "enc_Acme Corp"
+    assert added_tx.category == "Salary"
+
+@pytest.mark.anyio
+async def test_orchestrator_income_text_success(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+    
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.type = "income"
+    mock_extract_result.amount = 3500.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Acme Corp"
+    mock_extract_result.category = "Salary"
+    mock_extract_result.transaction_date = None
+    fixed_now = datetime.datetime(2026, 8, 15, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    mock_extract_result.to_datetime.return_value = fixed_now
+    mock_extract_result.model_dump.return_value = {
+        "type": "income",
+        "amount": 3500.0,
+        "currency": "USD",
+        "concept": "Acme Corp",
+        "category": "Salary"
+    }
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony", username="tony")
+    mock_session.get.return_value = mock_user
+
+    # Mock past transactions in the session for cash flow calculation ($1200 expense)
+    t_exp = MagicMock(
+        amount="enc_1200.0 USD",
+        concept="enc_Rent",
+        category="Rent/Bills",
+        type="expense",
+        timestamp=fixed_now
+    )
+    t_inc = MagicMock(
+        amount="enc_3500.0 USD",
+        concept="enc_Acme Corp",
+        category="Salary",
+        type="income",
+        timestamp=fixed_now
+    )
+    # session.exec().all() returns existing + new
+    mock_session.exec.return_value.all.return_value = [t_exp, t_inc]
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"enc_{text}"
+        def decrypt(self, text): return text.replace("enc_", "")
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text="Got paid 3500 salary from Acme Corp", audio_file_id=None, chat_id=12345)
+
+    # Verify message format
+    mock_send_message.assert_called_once()
+    msg_text = mock_send_message.call_args[1]["text"]
+    assert "💰 Income Logged: +$3,500.00 (Salary - Acme Corp)" in msg_text
+    assert "📊 August Snapshot:" in msg_text
+    assert "• Total In: $3,500.00" in msg_text
+    assert "• Total Out: $1,200.00" in msg_text
+    assert "• Net Savings: +$2,300.00 (66%)" in msg_text or "(65%)" in msg_text
+
+@pytest.mark.anyio
+async def test_orchestrator_income_audio_success(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+
+    mock_transcribe = AsyncMock(return_value=("earned 500 freelance consulting", "en"))
+    class MockWhisperService:
+        transcribe = mock_transcribe
+    monkeypatch.setattr("src.services.ai_orchestrator.WhisperService", MockWhisperService)
+
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.type = "income"
+    mock_extract_result.amount = 500.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Consulting"
+    mock_extract_result.category = "Freelance"
+    mock_extract_result.transaction_date = None
+    mock_extract_result.to_datetime.return_value = datetime.datetime(2026, 8, 20, tzinfo=datetime.timezone.utc)
+    mock_extract_result.model_dump.return_value = {"type": "income", "amount": 500.0}
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    mock_get_file = AsyncMock(return_value="https://api.telegram.org/file/bot123/voice.ogg")
+    class MockTelegramService:
+        send_message = mock_send_message
+        get_file_url = mock_get_file
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id))
+    mock_session.get.return_value = mock_user
+    mock_session.exec.return_value.all.return_value = []
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"enc_{text}"
+        def decrypt(self, text): return text.replace("enc_", "")
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text=None, audio_file_id="audio_income_123", chat_id=12345)
+
+    mock_transcribe.assert_called_once()
+    mock_extract.assert_called_once_with(text="earned 500 freelance consulting")
+    mock_send_message.assert_called_once()
+    assert "💰 Income Logged: +$500.00" in mock_send_message.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_income_retroactive(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.type = "income"
+    mock_extract_result.amount = 2000.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Acme Corp"
+    mock_extract_result.category = "Salary"
+    mock_extract_result.transaction_date = "2026-08-10"
+    mock_extract_result.to_datetime.return_value = datetime.datetime(2026, 8, 10, 12, 0, 0, tzinfo=datetime.timezone.utc)
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id))
+    mock_session.get.return_value = mock_user
+    mock_session.exec.return_value.all.return_value = []
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"enc_{text}"
+        def decrypt(self, text): return text.replace("enc_", "")
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text="last week 2000 salary from Acme Corp", audio_file_id=None, chat_id=12345)
+
+    mock_send_message.assert_called_once()
+    msg = mock_send_message.call_args[1]["text"]
+    assert "💰 Income Logged: +$2,000.00 (Salary - Acme Corp) (logged for Aug 10, 2026)" in msg
+    assert "📊 August Snapshot:" in msg
+
+@pytest.mark.anyio
+async def test_orchestrator_income_concept_equals_category(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.type = "income"
+    mock_extract_result.amount = 4000.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Salary"
+    mock_extract_result.category = "Salary"
+    mock_extract_result.transaction_date = None
+    mock_extract_result.to_datetime.return_value = datetime.datetime(2026, 8, 1, tzinfo=datetime.timezone.utc)
+    mock_extract_result.model_dump.return_value = {"type": "income", "amount": 4000.0}
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id))
+    mock_session.get.return_value = mock_user
+    mock_session.exec.return_value.all.return_value = []
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"enc_{text}"
+        def decrypt(self, text): return text.replace("enc_", "")
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text="Salary 4000", audio_file_id=None, chat_id=12345)
+
+    mock_send_message.assert_called_once()
+    msg = mock_send_message.call_args[1]["text"]
+    assert "💰 Income Logged: +$4,000.00 (Salary)\n" in msg
+
+@pytest.mark.anyio
+async def test_orchestrator_income_negative_net_savings(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+    now_dt = datetime.datetime(2026, 8, 15, tzinfo=datetime.timezone.utc)
+
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.type = "income"
+    mock_extract_result.amount = 1000.0
+    mock_extract_result.currency = "USD"
+    mock_extract_result.concept = "Bonus"
+    mock_extract_result.category = "Bonus"
+    mock_extract_result.transaction_date = None
+    mock_extract_result.to_datetime.return_value = now_dt
+    mock_extract_result.model_dump.return_value = {"type": "income", "amount": 1000.0}
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id))
+    mock_session.get.return_value = mock_user
+
+    # $1500 in expense, $1000 in income -> Net: -$500.00
+    t_exp = MagicMock(amount="enc_1500.0 USD", type="expense", timestamp=now_dt)
+    t_inc = MagicMock(amount="enc_1000.0 USD", type="income", timestamp=now_dt)
+    mock_session.exec.return_value.all.return_value = [t_exp, t_inc]
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"enc_{text}"
+        def decrypt(self, text): return text.replace("enc_", "")
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text="Bonus 1000", audio_file_id=None, chat_id=12345)
+
+    mock_send_message.assert_called_once()
+    msg = mock_send_message.call_args[1]["text"]
+    assert "• Total In: $1,000.00" in msg
+    assert "• Total Out: $1,500.00" in msg
+    assert "• Net Savings: -$500.00 (-50%)" in msg
+
+@pytest.mark.anyio
+async def test_orchestrator_income_eur_currency(orchestrator, monkeypatch):
+    user_id = "00000000-0000-0000-0000-000000000000"
+    family_id = "11111111-1111-1111-1111-111111111111"
+    now_dt = datetime.datetime(2026, 8, 15, tzinfo=datetime.timezone.utc)
+
+    mock_extract = AsyncMock()
+    mock_extract_result = MagicMock()
+    mock_extract_result.type = "income"
+    mock_extract_result.amount = 2500.0
+    mock_extract_result.currency = "EUR"
+    mock_extract_result.concept = "Acme Europe"
+    mock_extract_result.category = "Salary"
+    mock_extract_result.transaction_date = None
+    mock_extract_result.to_datetime.return_value = now_dt
+    mock_extract_result.model_dump.return_value = {"type": "income", "amount": 2500.0, "currency": "EUR"}
+    mock_extract.return_value = mock_extract_result
+
+    class MockExtractionService:
+        extract = mock_extract
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", create_mock_query_service())
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_send_message = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send_message
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+
+    mock_user = MagicMock(family_id=UUID(family_id))
+    mock_session.get.return_value = mock_user
+
+    # EUR expense and USD expense (USD should be ignored for EUR snapshot)
+    t_exp_eur = MagicMock(amount="enc_500.0 EUR", type="expense", timestamp=now_dt)
+    t_exp_usd = MagicMock(amount="enc_300.0 USD", type="expense", timestamp=now_dt)
+    t_inc_eur = MagicMock(amount="enc_2500.0 EUR", type="income", timestamp=now_dt)
+    mock_session.exec.return_value.all.return_value = [t_exp_eur, t_exp_usd, t_inc_eur]
+
+    class MockEncryptionService:
+        def encrypt(self, text): return f"enc_{text}"
+        def decrypt(self, text): return text.replace("enc_", "")
+    monkeypatch.setattr(orchestrator, "encryption_service", MockEncryptionService())
+
+    await orchestrator.orchestrate(user_id=user_id, text="Earned 2500 euros salary from Acme Europe", audio_file_id=None, chat_id=12345)
+
+    mock_send_message.assert_called_once()
+    msg = mock_send_message.call_args[1]["text"]
+    assert "💰 Income Logged: +€2,500.00 (Salary - Acme Europe)" in msg
+    assert "• Total In: €2,500.00" in msg
+    assert "• Total Out: €500.00" in msg
+    assert "• Net Savings: +€2,000.00 (80%)" in msg
+
+

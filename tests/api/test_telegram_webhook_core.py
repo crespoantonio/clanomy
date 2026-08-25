@@ -77,3 +77,35 @@ def test_webhook_zero_spending_fallback(app_client, mock_telegram, telegram_payl
     assert len(mock_telegram.messages) > 0
     response_text = mock_telegram.messages[-1]["text"]
     assert "0.00" in response_text or "haven't logged any expenses" in response_text.lower() or "zero" in response_text.lower()
+
+def test_webhook_log_text_income(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] Webhook should process text income and reply with income badge & cash flow snapshot."""
+    # First register the user
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=666),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+    
+    # Log an income
+    payload = telegram_payload_factory(text="Got paid 3500 salary from Acme Corp", user_id=666)
+    
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    
+    assert len(mock_telegram.messages) > 0
+    response_text = mock_telegram.messages[-1]["text"]
+    assert "💰 Income Logged:" in response_text
+    assert "3,500.00" in response_text
+    assert "Salary" in response_text
+    assert "Snapshot:" in response_text
+    assert "Total In:" in response_text
+    assert "Net Savings:" in response_text
+

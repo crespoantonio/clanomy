@@ -29,6 +29,7 @@ async def test_extract_happy_path(service, mock_ollama_client):
     result = await service.extract("I spent $15 at Starbucks")
 
     assert isinstance(result, ExtractionResult)
+    assert result.type == "expense"
     assert result.amount == 15.0
     assert result.category == "Food/Drink"
     assert result.concept == "Starbucks"
@@ -150,3 +151,133 @@ async def test_extract_transaction_date_fallback():
     
     dt = result.to_datetime(reference_time=ref_time)
     assert dt == ref_time
+
+@pytest.mark.anyio
+async def test_extract_income_happy_path(service, mock_ollama_client):
+    mock_response = MagicMock()
+    mock_response.message.content = '{"type": "income", "amount": 3500.0, "category": "Salary", "concept": "Acme Corp", "currency": "USD"}'
+    mock_ollama_client.chat.return_value = mock_response
+
+    result = await service.extract("Got my salary of 3500 dollars from Acme Corp")
+
+    assert isinstance(result, ExtractionResult)
+    assert result.type == "income"
+    assert result.amount == 3500.0
+    assert result.category == "Salary"
+    assert result.concept == "Acme Corp"
+    assert result.currency == "USD"
+
+@pytest.mark.anyio
+async def test_extract_default_type_is_expense():
+    # When type is omitted or invalid, it defaults to 'expense'
+    result = ExtractionResult(amount=25.0, category="Shopping", concept="Book")
+    assert result.type == "expense"
+
+    # Type normalization case-insensitivity
+    result_upper = ExtractionResult(type="INCOME", amount=50.0, category="Bonus", concept="Work")
+    assert result_upper.type == "income"
+
+    result_invalid = ExtractionResult(type="unknown_intent", amount=50.0, category="Other", concept="Work")
+    assert result_invalid.type == "expense"
+
+@pytest.mark.anyio
+async def test_extract_income_category_normalization():
+    # Test income categories normalization
+    for cat_input, expected in [
+        ("salary", "Salary"),
+        ("SALARY", "Salary"),
+        ("bonus", "Bonus"),
+        ("freelance", "Freelance"),
+        ("investment", "Investment"),
+        ("gift", "Gift"),
+        ("sale", "Sale"),
+        ("dividend", "Investment"),
+        ("wage", "Salary"),
+        ("wages", "Salary"),
+    ]:
+        result = ExtractionResult(type="income", amount=100.0, category=cat_input, concept="Earned money")
+        assert result.category == expected
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("prompt,expected_type,expected_amount,expected_currency,expected_cat,expected_concept", [
+    ("Got my salary of 3200 dollars from Acme Corp", "income", 3200.0, "USD", "Salary", "Acme Corp"),
+    ("Sold my old bike for 150 euros", "income", 150.0, "EUR", "Sale", "old bike"),
+    ("Received freelance payment of £800 from Client X", "income", 800.0, "GBP", "Freelance", "Client X"),
+    ("Earned $500 bonus from work", "income", 500.0, "USD", "Bonus", "work"),
+    ("Received $200 dividend from Apple", "income", 200.0, "USD", "Investment", "Apple"),
+    ("Invoice paid $1200 for web design", "income", 1200.0, "USD", "Freelance", "web design"),
+    ("Got paid $1000 for tutoring", "income", 1000.0, "USD", "Salary", "tutoring"),
+    ("Spent $15 at Starbucks", "expense", 15.0, "USD", "Food/Drink", "Starbucks"),
+    ("Bought lunch for 12 EUR", "expense", 12.0, "EUR", "Food/Drink", "lunch"),
+    ("Paid for rent 1200 dollars", "expense", 1200.0, "USD", "Rent/Bills", "rent"),
+    ("Coffee for 4.50", "expense", 4.50, "USD", "Food/Drink", "coffee"),
+    ("50 dollars for project", "expense", 50.0, "USD", "Other", "project"),
+])
+async def test_extract_dual_intent_benchmark_dataset(service, mock_ollama_client, prompt, expected_type, expected_amount, expected_currency, expected_cat, expected_concept):
+    mock_response = MagicMock()
+    mock_response.message.content = f'{{"type": "{expected_type}", "amount": {expected_amount}, "category": "{expected_cat}", "concept": "{expected_concept}", "currency": "{expected_currency}"}}'
+    mock_ollama_client.chat.return_value = mock_response
+
+    result = await service.extract(prompt)
+    assert result.type == expected_type
+    assert result.amount == expected_amount
+    assert result.currency == expected_currency
+    assert result.category == expected_cat
+    assert result.concept == expected_concept
+    
+    # Verify the system prompt contains the markdown prohibition rule
+    kwargs = mock_ollama_client.chat.call_args.kwargs
+    system_prompt = next(msg["content"] for msg in kwargs["messages"] if msg["role"] == "system")
+    assert "Do not include any markdown formatting" in system_prompt
+
+@pytest.mark.anyio
+async def test_fallback_regex_extract_dual_intent(service, mock_ollama_client):
+    # Simulate network error to trigger regex fallback
+    mock_ollama_client.chat.side_effect = ollama.RequestError("Connection failed")
+
+    # Income phrases fallback
+    res1 = await service.extract("Got paid salary $2500 from TechCorp")
+    assert res1.type == "income"
+    assert res1.amount == 2500.0
+    assert res1.currency == "USD"
+    assert res1.category == "Salary"
+
+    res2 = await service.extract("Sold old laptop for 400 euros")
+    assert res2.type == "income"
+    assert res2.amount == 400.0
+    assert res2.currency == "EUR"
+    assert res2.category == "Sale"
+
+    res3 = await service.extract("Received bonus £500 from company")
+    assert res3.type == "income"
+    assert res3.amount == 500.0
+    assert res3.currency == "GBP"
+    assert res3.category == "Bonus"
+
+    res4 = await service.extract("Earned $300 dividend from stocks")
+    assert res4.type == "income"
+    assert res4.amount == 300.0
+    assert res4.category == "Investment"
+
+    res5 = await service.extract("Freelance payment 800 USD for app")
+    assert res5.type == "income"
+    assert res5.amount == 800.0
+    assert res5.category == "Freelance"
+
+    # Expense phrases fallback
+    res6 = await service.extract("Spent 45 euros for groceries")
+    assert res6.type == "expense"
+    assert res6.amount == 45.0
+    assert res6.currency == "EUR"
+
+    res7 = await service.extract("Paid 1200 dollars for rent")
+    assert res7.type == "expense"
+    assert res7.amount == 1200.0
+    assert res7.currency == "USD"
+
+    # Ambiguous phrase fallback defaults to expense
+    res8 = await service.extract("50 dollars for project")
+    assert res8.type == "expense"
+    assert res8.amount == 50.0
+    assert res8.currency == "USD"
+

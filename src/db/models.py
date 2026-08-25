@@ -59,9 +59,9 @@ class Transaction(SQLModel, table=True):
     amount: str 
     concept: str 
     
-    type: Literal["expense", "income"] = Field(
+    tx_type: str = Field(
         default="expense",
-        sa_column_kwargs={"server_default": "expense"},
+        sa_column_kwargs={"server_default": "expense", "name": "type"},
         index=True,
         max_length=7
     )

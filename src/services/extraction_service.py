@@ -4,7 +4,7 @@ import threading
 import asyncio
 import re
 from datetime import datetime, timezone
-from typing import Optional, Union
+from typing import Optional, Union, Literal
 from pydantic import BaseModel, Field, field_validator, ValidationError
 import ollama
 from src.core.config import settings
@@ -17,9 +17,13 @@ class ExtractionError(Exception):
     pass
 
 class ExtractionResult(BaseModel):
-    amount: float = Field(..., gt=0, description="The exact amount of the transaction")
-    category: str = Field(..., description="Mapped to one of: 'Food/Drink', 'Transport', 'Rent/Bills', 'Shopping', 'Leisure', 'Other'")
-    concept: str = Field(..., description="The transaction description or concept")
+    type: Literal["expense", "income"] = Field(
+        default="expense",
+        description="The transaction intent / type: 'expense' or 'income'. Defaults to 'expense'."
+    )
+    amount: float = Field(..., gt=0, description="The exact positive amount of the transaction")
+    category: str = Field(..., description="Mapped to one of: 'Food/Drink', 'Transport', 'Rent/Bills', 'Shopping', 'Leisure', 'Salary', 'Bonus', 'Freelance', 'Investment', 'Gift', 'Sale', 'Other'")
+    concept: str = Field(..., description="The transaction description, concept, merchant name, or earnings source")
     currency: str = Field(default="USD", description="ISO 3-letter currency code, e.g. 'USD', 'EUR', 'GBP'")
     transaction_date: Optional[str] = Field(default=None, description="ISO format date string (YYYY-MM-DD) in UTC if explicitly mentioned or relative to current date (e.g. 'yesterday', 'last Monday', 'last week', '3 days ago'). Null/None if no date mentioned or if the purchase happened today.")
 
@@ -36,18 +40,39 @@ class ExtractionResult(BaseModel):
             logger.warning(f"Could not parse transaction_date '{self.transaction_date}'. Falling back to reference time.")
             return ref
 
+    @field_validator("type", mode="before")
+    @classmethod
+    def validate_type(cls, v: Optional[str]) -> str:
+        if isinstance(v, str) and v.strip().lower() == "income":
+            return "income"
+        return "expense"
+
     @field_validator("category")
     @classmethod
     def validate_category(cls, v: str) -> str:
-        allowed = {"Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other"}
-        cleaned = v.strip()
-        
-        if cleaned.title() == "Food/Drink":
-            return "Food/Drink"
-            
-        for cat in allowed:
-            if cleaned.lower() == cat.lower():
-                return cat
+        category_map = {
+            "food/drink": "Food/Drink",
+            "transport": "Transport",
+            "rent/bills": "Rent/Bills",
+            "shopping": "Shopping",
+            "leisure": "Leisure",
+            "salary": "Salary",
+            "wage": "Salary",
+            "wages": "Salary",
+            "bonus": "Bonus",
+            "freelance": "Freelance",
+            "freelance payment": "Freelance",
+            "investment": "Investment",
+            "dividend": "Investment",
+            "dividends": "Investment",
+            "gift": "Gift",
+            "sale": "Sale",
+            "sales": "Sale",
+            "other": "Other",
+        }
+        cleaned = v.strip().lower()
+        if cleaned in category_map:
+            return category_map[cleaned]
         return "Other"
 
     @field_validator("currency")
@@ -85,23 +110,58 @@ class ExtractionService:
             self._initialized = True
 
     def _fallback_regex_extract(self, text: str) -> ExtractionResult:
-        """Attempt to extract amount and concept via regex as a last resort."""
-        # Look for numbers (e.g. 15.50 or $15)
-        amount_match = re.search(r'\b\d+(?:\.\d{1,2})?\b', text)
+        """Attempt to extract amount, type, category, and concept via regex and keyword heuristics as a last resort."""
+        # Look for numbers (e.g. 15.50 or $15) with robust regex
+        amount_match = re.search(r'\b(\d+(?:[.,]\d{1,2})?)\b', text.replace(',', ''))
         if not amount_match:
-            raise ExtractionError("Fallback failed: No amount found in text.")
+            # Maybe it starts with $ without word boundary
+            amount_match = re.search(r'[$€£](\d+(?:[.,]\d{1,2})?)', text.replace(',', ''))
+            if not amount_match:
+                raise ExtractionError("Fallback failed: No amount found in text.")
         
-        amount = float(amount_match.group(0))
+        amount = float(amount_match.group(1).replace(',', ''))
         
         currency = "USD"
-        if "eur" in text.lower() or "€" in text:
+        text_lower = text.lower()
+        if re.search(r'\beuro?s?\b|€', text_lower):
             currency = "EUR"
-        elif "gbp" in text.lower() or "£" in text:
+        elif re.search(r'\bgbp\b|\bpounds?\b|£', text_lower):
             currency = "GBP"
             
+        # Classify intent (income vs expense)
+        income_keywords = [
+            "salary", "earned", "got paid", "sold", "bonus",
+            "freelance payment", "freelance", "dividend", "dividends", "invoice paid", "received"
+        ]
+        expense_keywords = [
+            "spent", "bought", "paid for", "coffee", "lunch", "rent"
+        ]
+        
+        tx_type = "expense"
+        category = "Other"
+        
+        has_income = any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in income_keywords)
+        has_expense = any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in expense_keywords)
+        
+        if has_income and not has_expense:
+            tx_type = "income"
+            if any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["salary", "got paid", "wage", "wages"]):
+                category = "Salary"
+            elif re.search(r'\bbonus\b', text_lower):
+                category = "Bonus"
+            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["sold", "sale", "sales"]):
+                category = "Sale"
+            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["freelance", "freelance payment", "invoice paid", "consulting"]):
+                category = "Freelance"
+            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["dividend", "dividends", "investment", "interest"]):
+                category = "Investment"
+            elif re.search(r'\bgift\b', text_lower):
+                category = "Gift"
+                
         return ExtractionResult(
+            type=tx_type,
             amount=amount,
-            category="Other",
+            category=category,
             concept=text.strip(),
             currency=currency,
             transaction_date=None
@@ -142,17 +202,25 @@ class ExtractionService:
 Your job is to extract transaction details from unstructured natural language text and return them in structured JSON format.
 
 RULES:
-1. Extract the numeric 'amount' as a float.
-2. Determine the 'category'. It MUST be one of the following exact strings: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other". If the category is ambiguous or doesn't fit, use "Other".
-3. Extract the 'concept' (a brief description of what was purchased or the merchant name).
-4. Determine the 'currency' and return its standard ISO 3-letter code (e.g., "euros" -> "EUR", "dollars" -> "USD", "pounds" -> "GBP"). If no currency is mentioned, use "USD".
-5. Extract 'transaction_date' as an ISO format YYYY-MM-DD string.
+1. Determine the transaction 'type':
+   - Must be either "expense" or "income".
+   - Classify as "income" for earnings, wages, salaries, sales, bonuses, freelance payments, dividends, or received money (e.g. keywords: "salary", "earned", "got paid", "sold", "bonus", "freelance payment", "dividend", "invoice paid", "received").
+   - Classify as "expense" for spending, purchases, payments, bills (e.g. keywords: "spent", "bought", "paid for", "coffee", "lunch", "rent").
+   - Default safely to "expense" if intent is ambiguous.
+2. Extract the numeric 'amount' as a positive float (> 0).
+3. Determine the 'category':
+   - For expenses, use one of: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".
+   - For income, use one of: "Salary", "Bonus", "Freelance", "Investment", "Gift", "Sale", "Other".
+   - If ambiguous or does not fit, use "Other".
+4. Extract the 'concept' (a brief description of what was purchased or earned, client/merchant name, or item sold).
+5. Determine the 'currency' and return its standard ISO 3-letter code (e.g., "euros" -> "EUR", "dollars" -> "USD", "pounds" -> "GBP"). If no currency is mentioned, use "USD".
+6. Extract 'transaction_date' as an ISO format YYYY-MM-DD string:
    - Current Date: {current_date_str}
    - If a relative date is specified like "yesterday", "last Monday", "3 days ago", compute the specific date based on Current Date.
    - If a vague relative date is specified like "last week" without specifying a day, default to 7 days prior to Current Date.
    - If no date or time is specified or if it explicitly occurred today, set 'transaction_date' to null.
 
-Return ONLY the JSON matching the provided schema.'''
+Return ONLY the JSON matching the provided schema. Do not include any markdown formatting like ```json, and do not include any commentary.'''
 
         start_time = time.time()
         

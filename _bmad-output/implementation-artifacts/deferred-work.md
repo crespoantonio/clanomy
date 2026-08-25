@@ -32,3 +32,8 @@
 ### Resolved from: code review of 2-4-transaction-persistence-with-encryption.md (2026-06-06)
 
 - **Logging raw exception exposes potential database context details**: Logging raw `e` directly in `logger.error` might expose internal database error details if database connection parameters or SQL statement details are embedded in the exception object. *(Resolved: Sanitized exception logs in AIOrchestrator and AccountService)*
+
+## Deferred from: code review of 8-1-database-schema-extension-for-transaction-types.md (2026-08-25)
+- Dangerous Defaulting for Ambiguous Input: Architecture says ambiguous inputs default to expense rather than triggering fallback.
+- Incomplete Mathematical Fallback: Savings rate formula has no definition for zero/negative income.
+

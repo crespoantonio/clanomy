@@ -27,28 +27,28 @@ workflowType: prd
 # Product Requirements Document - Clanomy
 
 **Author:** Tony
-**Date:** 2026-05-08
+**Date:** 2026-08-25
 
 ## 1. Executive Summary
-Clanomy is an "invisible" financial companion designed to solve the chronic problem of expense tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper), Clanomy enables zero-friction, privacy-centric expense logging via natural language audio and text. Users manage their finances through conversational interaction, receiving instant text confirmations and querying their spending history without ever leaving their primary messaging app.
+Clanomy is an "invisible" financial companion designed to solve the chronic problem of financial tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper), Clanomy enables zero-friction, privacy-centric logging of both expenses and income via natural language audio and text. Users manage their full cash flow through conversational interaction, receiving instant text confirmations, tracking net savings, and querying their complete spending and earnings history without ever leaving their primary messaging app.
 
 ### Core Differentiator
-The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, Clanomy allows users to record expenses in seconds via voice notes processed locally, ensuring sensitive financial data never leaves the user's controlled infrastructure.
+The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, Clanomy allows users to record expenses and income in seconds via voice notes processed locally, ensuring sensitive financial data never leaves the user's controlled infrastructure.
 
 ## 2. Success Criteria
 
 ### 2.1 User Success
-*   **The 3-Second Rule:** Users must complete an expense entry (from Telegram open to confirmation) in under 3 seconds.
-*   **Conversational Clarity:** Users can query spending status in natural language with a margin of error < 7%.
-*   **Emotional Relief:** Users feel financial awareness without the anxiety of opening a traditional banking app.
+*   **The 3-Second Rule:** Users must complete an expense or income entry (from Telegram open to confirmation) in under 3 seconds.
+*   **Conversational Clarity:** Users can query spending status, income totals, and net cash flow in natural language with a margin of error < 7%.
+*   **Emotional Relief & Empowerment:** Users feel financial awareness and control without the anxiety of opening a traditional banking app, receiving positive feedback when earnings are recorded.
 
 ### 2.2 Business Success
-*   **Initial Traction:** Achieve 50 active users logging ≥3 expenses per week for 30 consecutive days.
-*   **Monetization Validation:** Validate willingness to pay for Premium Tiers (Family Groups, Notion Mirroring).
+*   **Initial Traction:** Achieve 50 active users logging ≥3 transactions (expenses or income) per week for 30 consecutive days.
+*   **Monetization Validation:** Validate willingness to pay for Premium Tiers (Family Groups, Notion Mirroring, Advanced Cash-Flow Analytics).
 *   **Brand Authority:** Establish a reputation in the "Privacy-First" niche leveraging Estonian e-Residency trust.
 
 ### 2.3 Technical Success
-*   **Extraction Accuracy:** 90% success rate extracting Amount, Category, and Concept from natural language.
+*   **Extraction Accuracy:** 90% success rate extracting Type (`income` vs `expense`), Amount, Category, and Concept from natural language.
 *   **Zero-Leakage Privacy:** 100% of PII and transaction data remains within the private local infrastructure.
 *   **System Latency:** End-to-end processing (STT -> LLM -> DB -> Response) consistently < 3 seconds.
 
@@ -69,6 +69,9 @@ Paula asks the shared family bot for the grocery balance. The bot aggregates dat
 ### 3.5 The Failure Recovery
 In a noisy environment, the AI fails to extract an amount. The bot conversationally asks for clarification ("Was it $15 or $50?"), allowing Sam to fix the log with a single word.
 
+### 3.6 The Income & Cash Flow Milestone (Elena)
+Elena receives her monthly paycheck and sends a quick voice note: "Just received my salary of $3,500 from Acme Corp." Clanomy extracts the intent as an income transaction, encrypts the details, and returns an upbeat confirmation with an updated monthly cash flow summary: Total Earned, Total Spent, and Net Savings (+62%).
+
 ## 4. Phased Development Roadmap
 
 ### Phase 1: MVP (V1)
@@ -80,13 +83,14 @@ In a noisy environment, the AI fails to extract an amount. The bot conversationa
 *   **Infrastructure:** Hosted on personal hardware via Podman Compose (Beta limit: first 10 users).
 
 ### Phase 2: Growth (V2)
-*   **Notion Mirror:** Premium integration to push logs to user Notion databases using the official Python SDK.
+*   **Notion Mirror:** Premium integration to push logs (both expenses and income) to user Notion databases using the official Python SDK.
 *   **Family Groups:** Multi-user sync and shared ledgers (Flat permission model).
-*   **Proactive Insights:** Behavioral nudges and spending trend alerts.
+*   **Income & Net Cash Flow Tracking:** Dual-intent transaction logging, earnings summaries, and net balance calculation (Income − Expenses).
+*   **Proactive Insights:** Behavioral nudges and spending/saving trend alerts.
 *   **Infrastructure Scaling:** Migration to a secure, containerized HA-VPS.
 
 ### Phase 3: Vision (V3)
-*   **AI Financial Coach:** Deep behavioral learning for budget optimization advice.
+*   **AI Financial Coach:** Deep behavioral learning for budget optimization advice and cash-flow forecasting.
 *   **Web Dashboard:** Dedicated dashboard for advanced analytics.
 *   **Automation:** Optional bank synchronization and tax categorization.
 
@@ -115,6 +119,13 @@ In a noisy environment, the AI fails to extract an amount. The bot conversationa
 *   **FR14:** Users can export transaction history in CSV/JSON format (GDPR Portability).
 *   **FR15:** Users can permanently delete their account and data (Right to be Forgotten).
 *   **FR16:** Users authenticate/register simply by initiating a chat with the bot.
+
+### 5.5 Income & Net Cash Flow Tracking (Phase 2)
+*   **FR17:** Users can log earnings and income via natural language text and voice notes in Telegram and WhatsApp.
+*   **FR18:** System classifies transaction intent (`expense` vs `income`) and extracts Amount, Category, Concept/Source, and Currency.
+*   **FR19:** Users can query total earnings, net cash flow (`Total Income − Total Expenses`), and savings rates for specific time frames (weekly, monthly, custom).
+*   **FR20:** In family groups, income can be attributed to specific members while aggregating into the family's collective cash flow.
+*   **FR21:** Income records are synchronized with Notion mirrors with type discrimination and included in data exports (CSV/JSON).
 
 ## 6. Non-Functional Requirements
 

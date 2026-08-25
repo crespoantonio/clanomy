@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field, Relationship
@@ -59,6 +59,12 @@ class Transaction(SQLModel, table=True):
     amount: str 
     concept: str 
     
+    type: Literal["expense", "income"] = Field(
+        default="expense",
+        sa_column_kwargs={"server_default": "expense"},
+        index=True,
+        max_length=7
+    )
     category: str = Field(index=True)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 

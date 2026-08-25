@@ -34,6 +34,11 @@ FR13: Users can manually trigger a synchronization to the Notion mirror via a ch
 FR14: Users can export transaction history in CSV/JSON format (GDPR Portability).
 FR15: Users can permanently delete their account and data (Right to be Forgotten).
 FR16: Users authenticate/register simply by initiating a chat with the bot.
+FR17: Users can log earnings and income via natural language text and voice notes in Telegram and WhatsApp.
+FR18: System classifies transaction intent (`expense` vs `income`) and extracts Amount, Category, Concept/Source, and Currency.
+FR19: Users can query total earnings, net cash flow (`Total Income − Total Expenses`), and savings rates for specific time frames (weekly, monthly, custom).
+FR20: In family groups, income can be attributed to specific members while aggregating into the family's collective cash flow.
+FR21: Income records are synchronized with Notion mirrors with type discrimination and included in data exports (CSV/JSON).
 
 ### NonFunctional Requirements
 
@@ -77,6 +82,11 @@ FR13: Epic 6 - Users can manually trigger a synchronization to the Notion mirror
 FR14: Epic 4 - Users can export transaction history in CSV/JSON format.
 FR15: Epic 4 - Users can permanently delete their account and data.
 FR16: Epic 1 - Users authenticate/register simply by initiating a chat with the bot.
+FR17: Epic 8 - Users can log earnings and income via natural language text and voice notes.
+FR18: Epic 8 - System classifies transaction intent (`expense` vs `income`) and extracts data.
+FR19: Epic 8 - Users can query total earnings, net cash flow, and savings rates.
+FR20: Epic 8 - In family groups, income is attributed to specific members and aggregated.
+FR21: Epic 8 - Income records are synchronized with Notion and included in data exports.
 
 ## Epic List
 
@@ -107,6 +117,10 @@ Integrate with external tools. Premium users can sync their local ledger to thei
 ### Epic 7: Monetization & Subscriptions
 Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features.
 **FRs covered:** FR1, FR10, FR12 (Monetization gating for features).
+
+### Epic 8: Family Income & Net Cash Flow Tracking
+Enable dual-intent transaction processing, income voice/text logging, net cash flow calculations, savings rates, and income synchronization across Notion and data exports.
+**FRs covered:** FR17, FR18, FR19, FR20, FR21, NFR1, NFR3, NFR4.
 
 ## Epic 1: Privacy-First Foundation
 
@@ -448,3 +462,76 @@ So that users are automatically granted their Pro tier.
 **Then** the webhook successfully answers the `pre_checkout_query` within 10 seconds.
 **And** when `successful_payment` is received, the system verifies the SKU against an immutable whitelist (`sub_solo_pro`, `sub_family_pro`) and updates the `Family` plan to the purchased tier.
 **And** existing `lifetime_pro` accounts are protected from external subscription overwrites.
+
+## Epic 8: Family Income & Net Cash Flow Tracking
+
+Enable users to log earnings and income, classify dual intents (expense vs income) via local AI extraction, compute real-time net cash flow and savings rate, and sync income entries across Notion and GDPR exports.
+
+### Story 8.1: Database Schema Extension for Transaction Types
+
+As a Developer,
+I want to extend the `Transaction` model with a `type` discriminator,
+So that both income and expense records can be stored uniformly with application-level encryption.
+
+**Acceptance Criteria:**
+
+**Given** the `src/db/models.py` file
+**When** the `Transaction` model is updated
+**Then** it includes `type: str = Field(default="expense", index=True)` supporting `"expense"` and `"income"`.
+**And** existing rows in PostgreSQL/SQLite default gracefully to `"expense"` without data corruption.
+**And** all unit tests in `tests/db/test_models.py` pass with full test coverage of cascade and query behaviors.
+
+### Story 8.2: Dual-Intent Natural Language Extraction (Income vs Expense)
+
+As a Developer,
+I want the Ollama extraction service to distinguish between income and expense intents,
+So that earnings and spend are accurately categorized and extracted.
+
+**Acceptance Criteria:**
+
+**Given** an income statement (e.g., "Got my salary of 3200 dollars from Acme Corp" or "Sold my bike for 150 euros")
+**When** processed through `ExtractionService`
+**Then** it returns a structured JSON payload with `type: "income"`, `amount: 3200.0`, `currency: "USD"`, `category: "Salary"`, and `concept: "Acme Corp"`.
+**And** standard expense statements continue returning `type: "expense"`.
+**And** ambiguous entries default safely to `type: "expense"`.
+
+### Story 8.3: Income Voice & Text Logging Orchestrator
+
+As a User,
+I want to log my income via voice notes and text in under 3 seconds,
+So that I get an immediate, upbeat confirmation of my earnings and monthly cash flow.
+
+**Acceptance Criteria:**
+
+**Given** an incoming income voice note or text message
+**When** processed by the AI orchestrator pipeline
+**Then** the record is encrypted and saved with `type: "income"` associated with the user's `family_id`.
+**And** the Telegram response provides an upbeat confirmation with income amount, monthly total earnings, and current net savings.
+**And** execution conforms to the 3-second rule.
+
+### Story 8.4: Conversational Net Cash Flow & Income Queries (ASK Engine)
+
+As a User,
+I want to ask the bot about our earnings and net balance (e.g., "How much did we make this month?" or "What's our net balance?"),
+So that I can understand our household cash flow conversationally.
+
+**Acceptance Criteria:**
+
+**Given** a conversational query about income or net balance
+**When** processed by `QueryService`
+**Then** it aggregates total income, total expenses, and calculates `net_balance = total_income - total_expenses` and savings rate percentage.
+**And** returns a clear, conversational summary in the user's primary currency.
+
+### Story 8.5: Notion Mirroring & Export Updates for Income Records
+
+As a User,
+I want income records to be reflected in my Notion mirror and GDPR exports,
+So that my external dashboards and data backups have a complete view of my finances.
+
+**Acceptance Criteria:**
+
+**Given** an income transaction
+**When** Notion mirroring is triggered
+**Then** the Notion database row includes the `Type` property set to `Income`.
+**And** when exporting data (CSV/JSON), the export file includes the `Type` column with `"income"` or `"expense"` for every transaction.
+

@@ -240,3 +240,164 @@ def test_cascade_delete_family_invites(session: Session):
     
     # Verify invite is deleted
     assert len(session.exec(select(FamilyInvite).where(FamilyInvite.family_id == family.id)).all()) == 0
+
+def test_transaction_default_type_is_expense(session: Session):
+    family = Family(name="Default Type Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=401, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    tx = Transaction(
+        family_id=family.id,
+        user_id=user.id,
+        amount="enc_100",
+        concept="enc_groceries",
+        category="Food",
+    )
+    session.add(tx)
+    session.commit()
+    session.refresh(tx)
+
+    assert tx.type == "expense"
+
+def test_transaction_explicit_income_type(session: Session):
+    family = Family(name="Income Type Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=402, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    tx = Transaction(
+        family_id=family.id,
+        user_id=user.id,
+        amount="enc_3000",
+        concept="enc_salary",
+        category="Income",
+        type="income"
+    )
+    session.add(tx)
+    session.commit()
+    session.refresh(tx)
+
+    assert tx.type == "income"
+
+def test_transaction_query_by_type(session: Session):
+    family = Family(name="Filter Type Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=403, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    t_exp1 = Transaction(family_id=family.id, user_id=user.id, amount="enc_10", concept="enc_Lunch", category="Food", type="expense")
+    t_exp2 = Transaction(family_id=family.id, user_id=user.id, amount="enc_20", concept="enc_Uber", category="Transport", type="expense")
+    t_inc1 = Transaction(family_id=family.id, user_id=user.id, amount="enc_1000", concept="enc_Bonus", category="Income", type="income")
+    t_inc2 = Transaction(family_id=family.id, user_id=user.id, amount="enc_2500", concept="enc_Salary", category="Income", type="income")
+
+    session.add_all([t_exp1, t_exp2, t_inc1, t_inc2])
+    session.commit()
+
+    expenses = session.exec(select(Transaction).where(Transaction.family_id == family.id, Transaction.type == "expense")).all()
+    incomes = session.exec(select(Transaction).where(Transaction.family_id == family.id, Transaction.type == "income")).all()
+
+    assert len(expenses) == 2
+    assert {t.concept for t in expenses} == {"enc_Lunch", "enc_Uber"}
+    assert len(incomes) == 2
+    assert {t.concept for t in incomes} == {"enc_Bonus", "enc_Salary"}
+
+def test_transaction_type_with_encryption(session: Session):
+    from src.core.encryption import EncryptionService
+    enc = EncryptionService()
+
+    family = Family(name="Encrypted Type Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=404, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    expense_tx = Transaction(
+        family_id=family.id,
+        user_id=user.id,
+        amount=enc.encrypt("45.50"),
+        concept=enc.encrypt("Dinner with friends"),
+        category="Dining",
+        type="expense"
+    )
+    income_tx = Transaction(
+        family_id=family.id,
+        user_id=user.id,
+        amount=enc.encrypt("5000.00"),
+        concept=enc.encrypt("Monthly Consulting"),
+        category="Consulting",
+        type="income"
+    )
+    session.add_all([expense_tx, income_tx])
+    session.commit()
+
+    # Query back and verify decryption
+    saved_expense = session.exec(select(Transaction).where(Transaction.id == expense_tx.id)).first()
+    saved_income = session.exec(select(Transaction).where(Transaction.id == income_tx.id)).first()
+
+    assert saved_expense is not None
+    assert saved_expense.type == "expense"
+    assert enc.decrypt(saved_expense.amount) == "45.50"
+    assert enc.decrypt(saved_expense.concept) == "Dinner with friends"
+
+    assert saved_income is not None
+    assert saved_income.type == "income"
+    assert enc.decrypt(saved_income.amount) == "5000.00"
+    assert enc.decrypt(saved_income.concept) == "Monthly Consulting"
+
+def test_cascade_delete_income_and_expense_transactions(session: Session):
+    family = Family(name="Cascade Both Types Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=405, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    t_exp = Transaction(family_id=family.id, user_id=user.id, amount="50", concept="Groceries", category="Food", type="expense")
+    t_inc = Transaction(family_id=family.id, user_id=user.id, amount="1500", concept="Freelance", category="Income", type="income")
+    session.add_all([t_exp, t_inc])
+    session.commit()
+
+    assert len(session.exec(select(Transaction).where(Transaction.family_id == family.id)).all()) == 2
+
+    # Delete family, should cascade delete both
+    session.delete(family)
+    session.commit()
+
+    assert len(session.exec(select(Transaction).where(Transaction.family_id == family.id)).all()) == 0
+
+
+
+def test_cascade_delete_user_income_and_expense_transactions(session: Session):
+    family = Family(name="Cascade User Both Types Family")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=406, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    t_exp = Transaction(family_id=family.id, user_id=user.id, amount="enc_50", concept="enc_Groceries", category="Food", type="expense")
+    t_inc = Transaction(family_id=family.id, user_id=user.id, amount="enc_1500", concept="enc_Freelance", category="Income", type="income")
+    session.add_all([t_exp, t_inc])
+    session.commit()
+
+    assert len(session.exec(select(Transaction).where(Transaction.user_id == user.id)).all()) == 2
+
+    session.delete(user)
+    session.commit()
+
+    assert len(session.exec(select(Transaction).where(Transaction.user_id == user.id)).all()) == 0
+

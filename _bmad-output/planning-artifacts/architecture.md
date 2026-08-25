@@ -434,3 +434,77 @@ For GDPR "Right to be Forgotten" (Story 4.2), account deletion must cascade dele
 **Verification Status:**
 - Cascade delete operations have been verified with automated unit tests in `tests/db/test_models.py` (`test_cascade_delete_family` and `test_cascade_delete_user`), yielding a 100% pass rate in memory.
 
+## Epic 8 Technical Research & Architectural Design (Income & Net Cash Flow)
+
+This section details the architectural decisions and design specifications for **Epic 8: Family Income & Net Cash Flow Tracking**, implementing **Option A (Unified Transaction Model with Type Discriminator)**.
+
+### 1. Schema Extension (`Transaction.type`)
+
+Rather than maintaining separate, duplicated schemas for income and expenses, the `Transaction` table is augmented with a single indexed discriminator field:
+
+```python
+class Transaction(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
+    user_id: UUID = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    
+    # Financial data (ciphertext)
+    amount: str
+    concept: str
+    
+    # Discriminator and categorization
+    type: str = Field(default="expense", index=True) # "expense" | "income"
+    category: str = Field(index=True)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+
+    notion_page_id: Optional[str] = Field(default=None, nullable=True, index=True)
+    notion_synced_at: Optional[datetime] = Field(default=None, nullable=True)
+
+    # Relationships
+    family: Family = Relationship(back_populates="transactions")
+    user: User = Relationship(back_populates="transactions")
+```
+
+**Architectural Invariants & Trade-offs:**
+- **Zero Schema Fragmentation:** Preserves uniform multi-tenant scoping (`family_id`), AES-256 field encryption (`amount`, `concept`), and relational cascades.
+- **Backward Compatibility:** Default value `"expense"` ensures existing records and queries continue to function identically without complex data migrations.
+- **Database Indexing:** Composite or single-column indexes on `(family_id, type, timestamp)` optimize time-windowed cash-flow aggregations.
+
+### 2. Dual-Intent LLM Extraction Pipeline
+
+The Ollama extraction prompt is upgraded to classify transaction intent in addition to entity extraction:
+
+**Extraction Output Schema:**
+```json
+{
+  "type": "expense | income",
+  "amount": 4200.0,
+  "currency": "USD",
+  "category": "Salary",
+  "concept": "Acme Corp Paycheck"
+}
+```
+
+**Intent Heuristics & Fail-safes:**
+- Earnings keywords: *"salary"*, *"earned"*, *"got paid"*, *"sold"*, *"bonus"*, *"freelance payment"*, *"dividend"*, *"received"* $\rightarrow$ `type: "income"`.
+- Spending keywords: *"spent"*, *"bought"*, *"paid for"*, *"coffee"*, *"uber"*, *"lunch"* $\rightarrow$ `type: "expense"`.
+- Ambiguous inputs default safely to `type: "expense"`.
+
+### 3. Net Cash Flow & Aggregation Engine
+
+The Query and Analytics service calculates period balances via atomic aggregation:
+
+$$\text{Net Balance} = \sum \text{Income} - \sum \text{Expenses}$$
+$$\text{Savings Rate} = \left( \frac{\text{Net Balance}}{\sum \text{Income}} \right) \times 100 \quad (\text{if } \sum \text{Income} > 0)$$
+
+**Conversational Feedback Logic:**
+- **Income Logging Confirmation:** Upbeat tone with monthly cumulative earnings and updated net balance.
+- **"ASK" Summary Queries:** Delivers both total spend, total earnings, and net balance when requested (e.g. *"What is our net balance this month?"* or *"How much did we make in August?"*).
+
+### 4. Integration Impact (Notion Mirror & GDPR Exports)
+
+- **Notion Mirroring:** Pushes a `Type` select property (`Expense` vs `Income`) and assigns positive values in the Notion database.
+- **GDPR Export (CSV/JSON):** Updates export headers to include `Type`:
+  `["Date", "Type", "Amount", "Currency", "Concept", "Category"]`
+
+

@@ -56,3 +56,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Sensitive Strategy Docs
+monetization-and-subscription-strategy.md

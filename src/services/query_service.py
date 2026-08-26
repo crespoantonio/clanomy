@@ -86,7 +86,9 @@ class ParsedQueryIntent(BaseModel):
         "query_spending", 
         "query_income",
         "earnings_summary",
-        "family_info"
+        "family_info",
+        "edit_last",
+        "undo_last"
     ]
     timeframe: Optional[str] = "this_month"
     start_date: Optional[str] = None
@@ -98,8 +100,13 @@ class ParsedQueryIntent(BaseModel):
     scope: Optional[str] = "family"
     member_filter: Optional[str] = None
     query_type: Optional[str] = None
+    new_type: Optional[str] = None
+    new_amount: Optional[float] = None
+    new_currency: Optional[str] = None
+    new_category: Optional[str] = None
+    new_concept: Optional[str] = None
 
-    @field_validator('category')
+    @field_validator('category', 'new_category')
     @classmethod
     def normalize_category(cls, v: Optional[str]) -> Optional[str]:
         return resolve_category_alias(v)
@@ -913,6 +920,8 @@ Intents:
 - "generate_invite": If the user wants to invite someone to their family group (e.g., "invite family member", "generate invite link").
 - "family_info": If the user wants to see information about their family group (e.g., "my family", "family info").
 - "notion_manage": If the user wants to connect, disconnect, or check the status of their Notion workspace (e.g., "connect notion", "notion status", "disconnect notion").
+- "edit_last": If the user wants to correct or edit their most recent transaction (e.g., "Change the last one to income", "Change last amount to 45", "Change category to groceries", "Change concept to lunch"). Extract `new_type` ("income" or "expense"), `new_amount` (positive float), `new_currency` ("USD", "EUR", etc.), `new_category`, and/or `new_concept`.
+- "undo_last": If the user wants to delete or undo their most recent transaction (e.g., "Delete last transaction", "Delete the last log", "Undo", "Undo last", "Remove last expense").
 
 Allowed canonical categories:
 Expense categories: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other".

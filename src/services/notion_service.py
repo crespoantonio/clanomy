@@ -320,6 +320,67 @@ class NotionService:
                 logger.error(f"[Notion Mirror] Failed to mirror transaction for family {family_id}: {e}")
                 return None
 
+    async def update_transaction_page(
+        self,
+        family_id: UUID,
+        page_id: str,
+        amount: float,
+        currency: str,
+        concept: str,
+        category: str,
+        timestamp: datetime,
+        user_name: Optional[str] = None,
+        tx_type: str = "expense"
+    ) -> bool:
+        """Updates properties of an existing Notion database page."""
+        family = self.session.get(Family, family_id)
+        if not family or not family.notion_api_key or not family.notion_database_id or not page_id:
+            return False
+
+        api_key = self.encryption.decrypt(family.notion_api_key)
+        database_id = family.notion_database_id
+        if not api_key or not database_id:
+            return False
+
+        async with AsyncClient(auth=api_key) as notion:
+            try:
+                db_details = await self.get_database_details(api_key, database_id)
+                properties_payload = self._build_page_properties(
+                    schema=db_details.get("properties_schema", {}),
+                    concept=concept,
+                    amount=amount,
+                    currency=currency,
+                    category=category,
+                    timestamp=timestamp,
+                    user_name=user_name,
+                    tx_type=tx_type
+                )
+                await notion.pages.update(page_id=page_id, properties=properties_payload)
+                logger.info(f"[Notion Mirror] Updated transaction page {page_id} for family {family_id}")
+                return True
+            except Exception as e:
+                logger.error(f"[Notion Mirror] Failed to update transaction page {page_id}: {e}")
+                return False
+
+    async def archive_transaction_page(self, family_id: UUID, page_id: str) -> bool:
+        """Archives (deletes) an existing Notion database page for an undone transaction."""
+        family = self.session.get(Family, family_id)
+        if not family or not family.notion_api_key or not page_id:
+            return False
+
+        api_key = self.encryption.decrypt(family.notion_api_key)
+        if not api_key:
+            return False
+
+        async with AsyncClient(auth=api_key) as notion:
+            try:
+                await notion.pages.update(page_id=page_id, archived=True)
+                logger.info(f"[Notion Mirror] Archived page {page_id} for family {family_id}")
+                return True
+            except Exception as e:
+                logger.error(f"[Notion Mirror] Failed to archive page {page_id}: {e}")
+                return False
+
     async def test_connection_mirror(self, family_id: UUID) -> Optional[Dict[str, Any]]:
         family = self.session.get(Family, family_id)
         if not family or not family.notion_api_key or not family.notion_database_id:

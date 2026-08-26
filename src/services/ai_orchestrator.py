@@ -3,6 +3,7 @@ import logging
 import httpx
 import datetime
 import asyncio
+import re
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
@@ -130,8 +131,15 @@ class AIOrchestrator:
             }
 
     def _is_special_intent(self, text: str) -> bool:
-        """Heuristic to check if text is likely a query, export, or account deletion request."""
-        if text.strip() == "CONFIRM DELETE":
+        """
+        Determines whether the incoming text should be routed to the QueryService / command parser
+        instead of the standard transaction logging flow.
+        """
+        if not text:
+            return False
+            
+        text_clean = text.strip()
+        if text_clean.startswith("/"):
             return True
             
         special_intent_keywords = {
@@ -143,10 +151,10 @@ class AIOrchestrator:
             "family", "invite", "join",
             "earn", "earned", "earning", "earnings", "income", "salary",
             "bonus", "freelance", "net", "cashflow", "cash flow", "balance",
-            "leftover", "left over", "surplus", "deficit", "saved", "savings", "profit"
+            "leftover", "left over", "surplus", "deficit", "saved", "savings", "profit",
+            "undo", "change", "edit", "correct", "fix"
         }
         words = set(text.lower().split())
-        # We also check if "confirm delete" or "delete account" is in the text directly
         text_lower = text.lower()
         if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "/createfamily" in text_lower or "invite" in text_lower or "/join_" in text_lower:
             return True
@@ -154,7 +162,7 @@ class AIOrchestrator:
             return True
         if "net balance" in text_lower or "cash flow" in text_lower or "net savings" in text_lower or "how much did we earn" in text_lower or "how much did i earn" in text_lower or "how much did we make" in text_lower or "how much did i make" in text_lower:
             return True
-        if "notion" in text_lower:
+        if "notion" in text_lower or "undo" in text_lower or "change" in text_lower or "delete last" in text_lower or "remove last" in text_lower:
             return True
         return bool(words.intersection(special_intent_keywords))
 
@@ -177,6 +185,153 @@ class AIOrchestrator:
                 "display_name": user.full_name or user.username
             }
 
+    def _get_latest_transaction(self, user_uuid: UUID) -> Optional[Transaction]:
+        """Synchronous database helper to fetch the user's most recent transaction."""
+        with Session(engine) as session:
+            statement = (
+                select(Transaction)
+                .where(Transaction.user_id == user_uuid)
+                .order_by(Transaction.timestamp.desc())
+                .limit(1)
+            )
+            return session.exec(statement).first()
+
+    def _handle_transaction_undo(self, user_uuid: UUID) -> str:
+        """Removes the latest transaction logged by the user, recalculating monthly balance."""
+        with Session(engine) as session:
+            statement = (
+                select(Transaction)
+                .where(Transaction.user_id == user_uuid)
+                .order_by(Transaction.timestamp.desc())
+                .limit(1)
+            )
+            tx = session.exec(statement).first()
+            if not tx:
+                return "ℹ️ You don't have any recent transactions to undo."
+
+            dec_amount = self.encryption_service.decrypt(tx.amount) or "0.00 USD"
+            dec_concept = self.encryption_service.decrypt(tx.concept) or "Transaction"
+            parts = dec_amount.strip().split()
+            amt = float(parts[0]) if parts else 0.0
+            curr = parts[1].upper() if len(parts) > 1 else "USD"
+            old_type = getattr(tx, "tx_type", getattr(tx, "type", "expense")) or "expense"
+            category = tx.category
+            notion_page_id = tx.notion_page_id
+            family_id = tx.family_id
+            tx_time = tx.timestamp
+
+            session.delete(tx)
+            session.commit()
+
+        if notion_page_id:
+            try:
+                asyncio.create_task(self._safe_archive_notion_page(family_id, notion_page_id))
+            except Exception as e:
+                logger.warning(f"Could not dispatch Notion archive task: {e}")
+
+        snapshot = self._get_monthly_cash_flow_snapshot(family_id, tx_time, curr)
+
+        icon = "💰" if old_type == "income" else "💸"
+        sign = "+" if old_type == "income" else "-"
+        formatted_amt = _format_currency(amt, curr, show_sign=False)
+        formatted_in = _format_currency(snapshot["total_in"], curr, show_sign=False)
+        formatted_out = _format_currency(snapshot["total_out"], curr, show_sign=False)
+        formatted_net = _format_currency(snapshot["net_savings"], curr, show_sign=True)
+        pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
+
+        return (
+            f"🗑️ <b>Removed latest transaction:</b>\n"
+            f"• {icon} {sign}{formatted_amt} ({category} - {dec_concept})\n\n"
+            f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
+            f"• Total In: {formatted_in}\n"
+            f"• Total Out: {formatted_out}\n"
+            f"• Net Savings: {formatted_net}{pct_str}"
+        )
+
+    def _handle_transaction_correction(self, user_uuid: UUID, parsed_query: ParsedQueryIntent) -> str:
+        """Modifies fields on the user's latest transaction and updates Notion / cash flow snapshot."""
+        with Session(engine) as session:
+            statement = (
+                select(Transaction)
+                .where(Transaction.user_id == user_uuid)
+                .order_by(Transaction.timestamp.desc())
+                .limit(1)
+            )
+            tx = session.exec(statement).first()
+            if not tx:
+                return "ℹ️ You don't have any recent transactions to update."
+
+            dec_amount = self.encryption_service.decrypt(tx.amount) or "0.00 USD"
+            dec_concept = self.encryption_service.decrypt(tx.concept) or "Transaction"
+            parts = dec_amount.strip().split()
+            current_amt = float(parts[0]) if parts else 0.0
+            current_curr = parts[1].upper() if len(parts) > 1 else "USD"
+            current_type = getattr(tx, "tx_type", getattr(tx, "type", "expense")) or "expense"
+            current_cat = tx.category
+
+            new_type = parsed_query.new_type or current_type
+            new_amt = parsed_query.new_amount if parsed_query.new_amount is not None else current_amt
+            new_curr = (parsed_query.new_currency.upper() if parsed_query.new_currency else current_curr)
+            new_cat = parsed_query.new_category or current_cat
+            new_concept = parsed_query.new_concept or dec_concept
+
+            tx.type = new_type
+            if hasattr(tx, "tx_type"):
+                tx.tx_type = new_type
+            tx.category = new_cat
+            tx.amount = self.encryption_service.encrypt(f"{new_amt:.2f} {new_curr}")
+            tx.concept = self.encryption_service.encrypt(new_concept)
+
+            session.add(tx)
+            session.commit()
+            session.refresh(tx)
+
+            notion_page_id = tx.notion_page_id
+            family_id = tx.family_id
+            tx_time = tx.timestamp
+
+        if notion_page_id:
+            try:
+                user_info = self._get_user_info(user_uuid)
+                asyncio.create_task(self._safe_update_notion_page(
+                    family_id=family_id,
+                    page_id=notion_page_id,
+                    amount=new_amt,
+                    currency=new_curr,
+                    concept=new_concept,
+                    category=new_cat,
+                    timestamp=tx_time,
+                    user_name=user_info.get("display_name"),
+                    tx_type=new_type
+                ))
+            except Exception as e:
+                logger.warning(f"Could not dispatch Notion update task: {e}")
+
+        snapshot = self._get_monthly_cash_flow_snapshot(family_id, tx_time, new_curr)
+
+        type_note = ""
+        if current_type != new_type:
+            old_label = "Expense 💸" if current_type == "expense" else "Income 💰"
+            new_label = "Income 💰" if new_type == "income" else "Expense 💸"
+            type_note = f"\n<i>[Switched from {old_label} to {new_label}]</i>"
+
+        icon = "💰" if new_type == "income" else "💸"
+        sign = "+" if new_type == "income" else "-"
+        formatted_amt = _format_currency(new_amt, new_curr, show_sign=False)
+        formatted_in = _format_currency(snapshot["total_in"], new_curr, show_sign=False)
+        formatted_out = _format_currency(snapshot["total_out"], new_curr, show_sign=False)
+        formatted_net = _format_currency(snapshot["net_savings"], new_curr, show_sign=True)
+        pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
+
+        return (
+            f"✏️ <b>Updated latest transaction:</b>\n"
+            f"• {icon} {sign}{formatted_amt} ({new_cat} - {new_concept}){type_note}\n\n"
+            f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
+            f"• Total In: {formatted_in}\n"
+            f"• Total Out: {formatted_out}\n"
+            f"• Net Savings: {formatted_net}{pct_str}"
+        )
+
     async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None, tx_type: str = "expense"):
         """Background task for Notion Mirroring. Fails silently with logs."""
         try:
@@ -195,6 +350,34 @@ class AIOrchestrator:
                 )
         except Exception as e:
             logger.error(f"[Notion Mirror] Uncaught error in background task: {e}")
+
+    async def _safe_update_notion_page(self, family_id: UUID, page_id: str, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str] = None, tx_type: str = "expense"):
+        """Background task for Notion Page Update. Fails silently with logs."""
+        try:
+            with Session(engine) as session:
+                notion_service = NotionService(session)
+                await notion_service.update_transaction_page(
+                    family_id=family_id,
+                    page_id=page_id,
+                    amount=amount,
+                    currency=currency,
+                    concept=concept,
+                    category=category,
+                    timestamp=timestamp,
+                    user_name=user_name,
+                    tx_type=tx_type
+                )
+        except Exception as e:
+            logger.error(f"[Notion Mirror] Uncaught error in update background task: {e}")
+
+    async def _safe_archive_notion_page(self, family_id: UUID, page_id: str):
+        """Background task for Notion Page Archival. Fails silently with logs."""
+        try:
+            with Session(engine) as session:
+                notion_service = NotionService(session)
+                await notion_service.archive_transaction_page(family_id=family_id, page_id=page_id)
+        except Exception as e:
+            logger.error(f"[Notion Mirror] Uncaught error in archive background task: {e}")
 
     async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int):
         start_time = time.time()
@@ -236,6 +419,24 @@ class AIOrchestrator:
                         if raw_text == "CONFIRM DELETE":
                             # Exact string match shortcut
                             parsed_query = ParsedQueryIntent(intent="delete_account", timeframe="all_time")
+                        elif raw_lower in ["/undo", "undo", "undo last", "undo latest", "delete last", "delete the last", "delete last log", "delete the last log", "delete last transaction", "delete the last transaction", "remove last log", "remove the last log", "remove last transaction", "remove the last transaction", "delete last expense", "delete last income"]:
+                            parsed_query = ParsedQueryIntent(intent="undo_last")
+                        elif re.match(r"^change (the )?(last|latest)? ?(one|log|transaction)? ?to income$", raw_lower) or raw_lower in ["change to income", "make it income", "it was income", "switch to income"]:
+                            parsed_query = ParsedQueryIntent(intent="edit_last", new_type="income", new_category="Salary")
+                        elif re.match(r"^change (the )?(last|latest)? ?(one|log|transaction)? ?to expense$", raw_lower) or raw_lower in ["change to expense", "make it expense", "it was expense", "switch to expense"]:
+                            parsed_query = ParsedQueryIntent(intent="edit_last", new_type="expense", new_category="Other")
+                        elif m := re.match(r"^change (the )?(last|latest)? ?amount to (\d+(?:[.,]\d{1,2})?)\s*([a-zA-Z$€£]*)$", raw_lower):
+                            amt_val = float(m.group(3).replace(",", "."))
+                            curr_raw = m.group(4).strip()
+                            curr_map = {"$": "USD", "€": "EUR", "£": "GBP", "usd": "USD", "eur": "EUR", "gbp": "GBP", "dollars": "USD", "euros": "EUR", "pounds": "GBP"}
+                            curr_val = curr_map.get(curr_raw.lower(), curr_raw.upper() if len(curr_raw) == 3 else None)
+                            parsed_query = ParsedQueryIntent(intent="edit_last", new_amount=amt_val, new_currency=curr_val)
+                        elif m := re.match(r"^change (the )?(last|latest)? ?category to (.+)$", raw_lower):
+                            cat_val = m.group(3).strip()
+                            parsed_query = ParsedQueryIntent(intent="edit_last", new_category=cat_val)
+                        elif m := re.match(r"^change (the )?(last|latest)? ?concept to (.+)$", raw_lower):
+                            concept_val = m.group(3).strip()
+                            parsed_query = ParsedQueryIntent(intent="edit_last", new_concept=concept_val)
                         elif raw_lower.startswith("/createfamily") or raw_lower.startswith("create family"):
                             if raw_lower.startswith("/createfamily"):
                                 name = raw_text[13:].strip()
@@ -280,6 +481,10 @@ class AIOrchestrator:
                         await export_service.export_and_send(family_id, chat_id, export_format)
                         # We don't need to send a regular message since we sent a document
                         return {"status": "ok"}
+                    elif parsed_query and parsed_query.intent == "undo_last":
+                        response_text = await asyncio.to_thread(self._handle_transaction_undo, user_uuid)
+                    elif parsed_query and parsed_query.intent == "edit_last":
+                        response_text = await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
                     elif parsed_query and parsed_query.intent in ["spending_summary", "query_spending", "income_summary", "query_income", "earnings_summary", "net_cash_flow", "net_balance", "cash_flow_summary"]:
                         family_service = FamilyService()
                         family_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)

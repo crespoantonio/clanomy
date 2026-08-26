@@ -59,9 +59,9 @@ class Transaction(SQLModel, table=True):
     amount: str 
     concept: str 
     
-    tx_type: str = Field(
+    type: str = Field(
         default="expense",
-        sa_column_kwargs={"name": "type", "server_default": "expense"},
+        sa_column_kwargs={"server_default": "expense"},
         index=True,
         max_length=7
     )
@@ -74,6 +74,19 @@ class Transaction(SQLModel, table=True):
     # Relationships
     family: Family = Relationship(back_populates="transactions")
     user: User = Relationship(back_populates="transactions")
+
+    def __init__(self, **data):
+        if "tx_type" in data and "type" not in data:
+            data["type"] = data.pop("tx_type")
+        super().__init__(**data)
+
+    @property
+    def tx_type(self) -> str:
+        return self.type
+
+    @tx_type.setter
+    def tx_type(self, value: str):
+        self.type = value
 
 class FamilyInvite(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)

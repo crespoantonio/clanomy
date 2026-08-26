@@ -109,7 +109,7 @@ class AIOrchestrator:
                     curr = parts[1].upper() if len(parts) > 1 else "USD"
                     
                     if curr == primary_currency.upper():
-                        tx_type = getattr(tx, "type", getattr(tx, "tx_type", "expense")) or "expense"
+                        tx_type = getattr(tx, "tx_type", "expense") or "expense"
                         if tx_type == "income":
                             total_in += amt
                         else:

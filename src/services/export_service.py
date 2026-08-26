@@ -45,6 +45,8 @@ class ExportService:
 
             concept = self.encryption_service.decrypt(tx.concept)
 
+            tx_type = getattr(tx, "tx_type", "expense") or "expense"
+
             return DecryptedTransaction(
                 id=tx.id,
                 family_id=tx.family_id,
@@ -54,7 +56,8 @@ class ExportService:
                 amount=amount,
                 currency=currency,
                 category=tx.category,
-                concept=concept
+                concept=concept,
+                type=tx_type
             )
         except Exception as e:
             logger.error(f"Failed to decrypt transaction {tx.id}: {e}")
@@ -64,15 +67,15 @@ class ExportService:
         """Generates a CSV file from a list of decrypted transactions."""
         with open(file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["Timestamp (UTC)", "Amount", "Currency", "Category", "Concept", "Logged By"])
+            writer.writerow(["Date", "Type", "Amount", "Currency", "Concept", "Category"])
             for tx in transactions:
                 writer.writerow([
                     tx.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    tx.type,
                     tx.amount,
                     tx.currency,
-                    tx.category,
                     tx.concept,
-                    tx.user_name or "User"
+                    tx.category
                 ])
 
     def generate_json(self, transactions: List[DecryptedTransaction], family_id: UUID, file_path: str) -> None:
@@ -85,6 +88,7 @@ class ExportService:
                 {
                     "id": str(tx.id),
                     "timestamp": tx.timestamp.isoformat().replace("+00:00", "Z"),
+                    "type": tx.type,
                     "amount": tx.amount,
                     "currency": tx.currency,
                     "category": tx.category,

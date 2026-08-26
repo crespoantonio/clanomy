@@ -201,6 +201,106 @@ def test_build_page_properties(notion_service):
     assert "Who" in props
     assert props["Who"]["select"]["name"] == "Alice"
 
+def test_build_page_properties_with_type_select_income(notion_service):
+    schema = {
+        "Concept": {"type": "title"},
+        "Type": {"type": "select"},
+        "Category": {"type": "select"},
+        "Amount": {"type": "number"},
+        "Date": {"type": "date"},
+    }
+    timestamp = datetime.now(timezone.utc)
+    props = notion_service._build_page_properties(
+        schema=schema,
+        concept="Monthly Salary",
+        amount=3500.0,
+        currency="USD",
+        category="Salary",
+        timestamp=timestamp,
+        user_name="Bob",
+        tx_type="income"
+    )
+
+    assert props["Concept"]["title"][0]["text"]["content"] == "Monthly Salary"
+    assert "Type" in props
+    assert props["Type"]["select"]["name"] == "Income"
+    assert "Category" in props
+    assert props["Category"]["select"]["name"] == "Salary"
+    assert props["Amount"]["number"] == 3500.0
+
+def test_build_page_properties_with_type_select_expense(notion_service):
+    schema = {
+        "Concept": {"type": "title"},
+        "Transaction Type": {"type": "select"},
+        "Category": {"type": "select"},
+        "Amount": {"type": "number"},
+    }
+    timestamp = datetime.now(timezone.utc)
+    props = notion_service._build_page_properties(
+        schema=schema,
+        concept="Groceries",
+        amount=65.20,
+        currency="USD",
+        category="Food",
+        timestamp=timestamp,
+        user_name="Bob",
+        tx_type="expense"
+    )
+
+    assert "Transaction Type" in props
+    assert props["Transaction Type"]["select"]["name"] == "Expense"
+    assert props["Category"]["select"]["name"] == "Food"
+
+def test_build_page_properties_with_type_multi_select_and_rich_text(notion_service):
+    schema_multi = {
+        "Name": {"type": "title"},
+        "Kind": {"type": "multi_select"},
+    }
+    props_multi = notion_service._build_page_properties(
+        schema=schema_multi,
+        concept="Freelance Project",
+        amount=500.0,
+        currency="EUR",
+        category="Freelance",
+        timestamp=datetime.now(timezone.utc),
+        tx_type="income"
+    )
+    assert props_multi["Kind"]["multi_select"][0]["name"] == "Income"
+
+    schema_text = {
+        "Name": {"type": "title"},
+        "Type": {"type": "rich_text"},
+    }
+    props_text = notion_service._build_page_properties(
+        schema=schema_text,
+        concept="Freelance Project",
+        amount=500.0,
+        currency="EUR",
+        category="Freelance",
+        timestamp=datetime.now(timezone.utc),
+        tx_type="income"
+    )
+    assert props_text["Type"]["rich_text"][0]["text"]["content"] == "Income"
+
+def test_build_page_properties_schema_missing_type(notion_service):
+    schema = {
+        "Name": {"type": "title"},
+        "Amount": {"type": "number"},
+        "Category": {"type": "select"}
+    }
+    props = notion_service._build_page_properties(
+        schema=schema,
+        concept="Dividend",
+        amount=120.0,
+        currency="USD",
+        category="Investment",
+        timestamp=datetime.now(timezone.utc),
+        tx_type="income"
+    )
+    assert "Type" not in props
+    assert props["Category"]["select"]["name"] == "Investment"
+    assert props["Amount"]["number"] == 120.0
+
 @pytest.mark.anyio
 @patch("src.services.notion_service.AsyncClient")
 async def test_test_connection_mirror(mock_client_cls, notion_service, family, session):
@@ -430,3 +530,96 @@ async def test_sync_pending_transactions(mock_client_cls, notion_service, family
     session.refresh(tx2)
     assert tx1.notion_page_id == "page_new"
     assert tx2.notion_page_id == "page_new"
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_mirror_transaction_income_success(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {
+            "Concept": {"type": "title"},
+            "Type": {"type": "select"},
+            "Amount": {"type": "number"},
+            "Category": {"type": "select"}
+        }
+    })
+
+    created_props = {}
+    async def mock_create(parent, properties):
+        nonlocal created_props
+        created_props = properties
+        return {"id": "page_inc_1", "url": "http://notion.so/page_inc_1"}
+    mock_notion.pages.create.side_effect = mock_create
+
+    result = await notion_service.mirror_transaction(
+        family_id=family.id,
+        amount=4000.0,
+        currency="USD",
+        concept="Client Invoice",
+        category="Freelance",
+        timestamp=datetime.now(timezone.utc),
+        user_name="Alice",
+        tx_type="income"
+    )
+    assert result is not None
+    assert result["page_id"] == "page_inc_1"
+    assert created_props["Type"]["select"]["name"] == "Income"
+    assert created_props["Amount"]["number"] == 4000.0
+    assert created_props["Category"]["select"]["name"] == "Freelance"
+
+@pytest.mark.anyio
+@patch("src.services.notion_service.AsyncClient")
+async def test_sync_pending_transactions_mixed_income_expense(mock_client_cls, notion_service, family, session):
+    family.notion_api_key = notion_service.encryption.encrypt("test_token")
+    family.notion_database_id = "test_db_id"
+    session.add(family)
+    session.commit()
+
+    from src.db.models import User, Transaction
+    user = User(telegram_id=789, family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    amt_exp_enc = notion_service.encryption.encrypt("45.0 USD")
+    amt_inc_enc = notion_service.encryption.encrypt("2000.0 USD")
+    concept_exp_enc = notion_service.encryption.encrypt("Dinner")
+    concept_inc_enc = notion_service.encryption.encrypt("Salary")
+
+    tx_exp = Transaction(family_id=family.id, user_id=user.id, amount=amt_exp_enc, concept=concept_exp_enc, category="Dining", timestamp=datetime.now(timezone.utc), tx_type="expense")
+    tx_inc = Transaction(family_id=family.id, user_id=user.id, amount=amt_inc_enc, concept=concept_inc_enc, category="Salary", timestamp=datetime.now(timezone.utc), tx_type="income")
+
+    session.add_all([tx_exp, tx_inc])
+    session.commit()
+
+    mock_notion = MagicMock()
+    mock_client_cls.return_value.__aenter__.return_value = mock_notion
+
+    notion_service.get_database_details = AsyncMock(return_value={
+        "id": "test_db_id",
+        "properties_schema": {
+            "Name": {"type": "title"},
+            "Type": {"type": "select"}
+        }
+    })
+
+    recorded_types = []
+    async def mock_create(parent, properties):
+        if "Type" in properties:
+            recorded_types.append(properties["Type"]["select"]["name"])
+        return {"id": f"page_{len(recorded_types)}", "url": "url"}
+    mock_notion.pages.create.side_effect = mock_create
+
+    res = await notion_service.sync_pending_transactions(family.id)
+    assert res["status"] == "completed"
+    assert res["total_pending"] == 2
+    assert res["synced"] == 2
+    assert recorded_types == ["Expense", "Income"]
+

@@ -406,62 +406,102 @@ So that I never lose a record in my primary dashboard.
 
 ## Epic 7: Monetization & Subscriptions
 
-Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features. Supports lifetime VIP access via direct database provisioning.
+Enable in-app subscriptions using Telegram Stars (XTR) with auto-renewing cycles. New users receive a 60-day Family Pro free trial with full feature access upon `/start`. Free workspaces share a 30-message/month quota across all features. Users can subscribe to Solo Pro (150 Stars/mo, 1 person) or Family Pro (300 Stars/mo, up to 5 members) for unlimited transactions. Proactive notifications trigger at Day 50 (trial ending soon) and Day 60 (reassurance of data safety + free tier limits). Supports lifetime VIP access via direct database provisioning.
 
-### Story 7.1: Database Schema Expansion for Subscriptions
+### Story 7.1: Database Schema Expansion for Subscriptions & 60-Day Trials
 
 As a Developer,
-I want to expand the `Family` table to support subscription tracking,
-So that we can manage quotas and active Pro plans.
+I want to expand the database models to support subscription tracking, 60-day trials, member caps, and notification states,
+So that we can manage quotas, active Pro plans, and proactive lifecycle messaging reliably.
 
 **Acceptance Criteria:**
 
-**Given** the `db/models.py` file
-**When** the `Family` model is updated
-**Then** it includes `plan_type` (default "free", supporting "free", "solo_pro", "family_pro", and "lifetime_pro"), `subscription_status` (default "active"), `monthly_tx_count` (default 0), and optional `current_period_end` and `telegram_payment_charge_id`.
+**Given** the `src/db/models.py` file
+**When** the `Family` and `User` models are updated
+**Then** `Family` includes:
+- `plan_type: str = Field(default="free")` (supporting `"free"`, `"trial"`, `"solo_pro"`, `"family_pro"`, `"lifetime_pro"`)
+- `subscription_status: str = Field(default="active")`
+- `monthly_tx_count: int = Field(default=0)`
+- `max_members: int = Field(default=5)`
+- `trial_ends_at: Optional[datetime] = Field(default=None)`
+- `current_period_end: Optional[datetime] = Field(default=None)`
+- `telegram_payment_charge_id: Optional[str] = Field(default=None)`
+- `notified_day_50: bool = Field(default=False)`
+- `notified_day_60: bool = Field(default=False)`
+**And** `User` includes:
+- `has_used_trial: bool = Field(default=False)`
 **And** `lifetime_pro` is strictly reserved for manual database administration (cannot be assigned via webhooks or bot commands).
-**And** Alembic migrations (if used) or SQLModel schema generation successfully applies these to the database.
 
-### Story 7.2: Quota Gating & Upgrade Prompt
-
-As a Free User,
-I want to be notified when I hit my 30-transaction limit,
-So that I understand why my logs are blocked and how to upgrade.
-
-**Acceptance Criteria:**
-
-**Given** a free-tier user logging their 31st transaction in the current month
-**When** the `MessagingService` processes the request
-**Then** it blocks the transaction and replies with a warning message.
-**And** it prompts the user to type `/upgrade` to unlock unlimited logs.
-**And** users with `"solo_pro"`, `"family_pro"`, or `"lifetime_pro"` bypass quota gating, with all family members sharing the unlimited quota.
-
-### Story 7.3: Telegram Stars Invoice Generation
+### Story 7.2: 60-Day Trial Provisioning, Onboarding Welcome & Quota Gating
 
 As a User,
-I want to trigger an upgrade invoice directly in chat,
-So that I can pay seamlessly using Telegram Stars (Apple/Google Pay).
+I want to be greeted with a 60-day Family Pro trial upon starting the bot, receive clear onboarding as a creator or invited member, manage my family members as an admin, and have quota limits enforced fast before AI processing,
+So that I experience the full capabilities of Clanomy upfront and understand my account and family lifecycle.
+
+**Acceptance Criteria:**
+
+**Given** a new user runs `/start`
+**When** creating their family workspace
+**Then** if the user's `has_used_trial` is `False`, the family is provisioned with `plan_type="trial"`, `trial_ends_at = now() + 60 days`, and the user is marked `has_used_trial = True`.
+**And** the `/start` welcome response explains all core features (voice notes, Ask cash flow questions, Notion sync, family invites) and announces the 60-day Family Pro trial.
+**And** when a user joins a family via an invite link (`/start join_<token>`), the bot greets them with an invited member welcome message explaining shared family logging and the `/leavefamily` portability option.
+**And** if a user who already used a trial creates a new workspace or leaves a family, their space starts directly on `"free"` with an explanation that the trial was previously consumed.
+**And** for Free tier workspaces (`plan_type="free"`), the webhook performs an early fast-fail quota check (`can_log_transaction`) *before* invoking Faster-Whisper audio transcription or Ollama LLM extraction; on the 31st log, it immediately blocks the log and replies with a friendly limit notice prompting `/upgrade`.
+**And** Pro tiers (`"solo_pro"`, `"family_pro"`, `"lifetime_pro"`, and active `"trial"`) bypass quota gating.
+**And** provides family management commands for the admin/creator:
+- `/family`: Lists all members in the family workspace.
+- `/removemember @username`: Admin removes a member, detaches them into a new personal Free workspace with all their personal transactions ported, revokes admin query access to their data, and sends the removed member a polite notification.
+- `/leavefamily`: Allows any member to leave independently with full transaction portability.
+
+
+### Story 7.3: Telegram Stars Auto-Renewing Invoice Generation (`/upgrade`)
+
+As a User,
+I want to trigger an upgrade invoice directly in chat with auto-renewing billing,
+So that I can pay seamlessly using Telegram Stars (Apple/Google Pay) for my chosen tier.
 
 **Acceptance Criteria:**
 
 **Given** a user types `/upgrade` in the chat
 **When** the Telegram webhook receives the command
-**Then** it responds with a Telegram invoice (`sendInvoice` API) in `XTR` currency.
-**And** the invoice includes options for Solo Pro (150 Stars) and Family Pro (300 Stars).
+**Then** it responds with Telegram invoices (`sendInvoice` API) in `XTR` currency with `subscription_period = 2592000` (30-day auto-renewing cycle).
+**And** presents:
+- **Solo Pro** (150 Stars / month): Unlimited logs for 1 person (no family invites).
+- **Family Pro** (300 Stars / month): Unlimited logs for up to 5 family members.
+**And** if a Solo Pro user attempts to generate an invite link, the bot explains that Family Pro is required to add members.
 
-### Story 7.4: Payment Verification Webhook Handler
+### Story 7.4: Payment Verification & Subscription Lifecycle Webhook Handler
 
 As a System,
-I want to securely verify and process successful payments,
-So that users are automatically granted their Pro tier.
+I want to securely verify payments, recurring renewals, and cancellations,
+So that user accounts are automatically upgraded and maintained in real time.
 
 **Acceptance Criteria:**
 
 **Given** a Telegram payment flow
 **When** the user attempts to pay
-**Then** the webhook successfully answers the `pre_checkout_query` within 10 seconds.
-**And** when `successful_payment` is received, the system verifies the SKU against an immutable whitelist (`sub_solo_pro`, `sub_family_pro`) and updates the `Family` plan to the purchased tier.
-**And** existing `lifetime_pro` accounts are protected from external subscription overwrites.
+**Then** the webhook answers the `pre_checkout_query` within 10 seconds with `ok=True`.
+**And** upon receiving `successful_payment`, the system validates the payload against the whitelist (`sub_solo_pro`, `sub_family_pro`), updates `Family.plan_type`, sets `subscription_status="active"`, and sends a confirmation message.
+**And** captures recurring renewal and cancellation webhook events, transitioning `subscription_status` accordingly while protecting `lifetime_pro` from external overwrites.
+
+### Story 7.5: Proactive Trial Lifecycle Notifications Scheduler (Day 50 & Day 60)
+
+As a User,
+I want to be proactively notified 10 days before my trial ends and when my trial completes,
+So that I understand my transition to the Free tier, know that my past data is safe, and have a clear option to subscribe.
+
+**Acceptance Criteria:**
+
+**Given** an automated daily notification scheduler
+**When** checking trial workspaces:
+**Then** for families where `trial_ends_at` is 10 days away (Day 50) and `notified_day_50 == False`:
+- Sends a proactive notification summarizing value delivered (transactions tracked) and warning that the trial ends in 10 days, presenting the tiers and `/upgrade` CTA.
+- Marks `notified_day_50 = True`.
+**And** for families where `trial_ends_at` has passed (Day 60) and `notified_day_60 == False` without an active paid subscription:
+- Transitions `Family.plan_type` to `"free"`.
+- Sends the Day 60 transition message reassuring that all historical data, Ask queries, and Notion sync remain 100% intact, while explaining the 30-message/month shared family limit and `/upgrade` CTA.
+- Marks `notified_day_60 = True`.
+
 
 ## Epic 8: Family Income & Net Cash Flow Tracking
 
@@ -534,4 +574,22 @@ So that my external dashboards and data backups have a complete view of my finan
 **When** Notion mirroring is triggered
 **Then** the Notion database row includes the `Type` property set to `Income`.
 **And** when exporting data (CSV/JSON), the export file includes the `Type` column with `"income"` or `"expense"` for every transaction.
+
+### Story 8.6: Conversational Transaction Correction & Undo (Edit Latest Log)
+
+As a User,
+I want to send natural language corrections (e.g., "Change the last one to income", "Change last amount to 45", or "Delete the last log"),
+So that I can immediately fix transcription mistakes or incorrect categories without opening a web dashboard.
+
+**Acceptance Criteria:**
+
+**Given** a user sends a conversational correction or undo request (via text or voice note)
+**When** processed by `ExtractionService` and `AIOrchestrator`
+**Then** the system identifies the user's most recent transaction (`latest_transaction`).
+**And** supports updating transaction `type` (`expense` $\leftrightarrow$ `income`), `amount`, `category`, and `concept` with re-encryption at rest.
+**And** supports deleting/undoing the latest transaction upon request.
+**And** if Notion mirroring is connected and `notion_page_id` is present, updates or archives the Notion page in the background.
+**And** replies with an upbeat confirmation of the edit alongside refreshed monthly cash flow totals.
+**And** unit and integration tests in `tests/services/test_ai_orchestrator.py` and `tests/services/test_extraction_service.py` verify all correction paths.
+
 

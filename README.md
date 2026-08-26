@@ -119,4 +119,4 @@ This updates the database (`plan_type = 'lifetime_pro'`) and instantly grants un
 
 ## 📅 Sprint Status
 The project progress is tracked in `_bmad-output/implementation-artifacts/sprint-status.yaml`.
-**Epic 1: Privacy-First Foundation** and **Epic 2: Zero-Friction Expense Logging** are fully completed. The backend pipeline is fully functional!
+**Epics 1 through 6** (Core Ledger, Privacy, AI Whisper/Ollama, ASK Engine, GDPR Exports, Family Multi-Tenancy, Notion Mirroring) and **Epic 8** (Family Income & Net Cash Flow Tracking) are fully completed with 189 tests passing!

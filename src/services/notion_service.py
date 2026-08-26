@@ -173,8 +173,12 @@ class NotionService:
         currency: str,
         category: str,
         timestamp: datetime,
-        user_name: Optional[str] = None
+        user_name: Optional[str] = None,
+        tx_type: str = "expense"
     ) -> Dict[str, Any]:
+        if amount < 0:
+            raise ValueError(f"Transaction amount cannot be negative. Received: {amount}")
+
         payload = {}
         
         # 1. Title property (mandatory for Notion page creation)
@@ -185,7 +189,11 @@ class NotionService:
                 break
         if not title_prop_name:
             title_prop_name = "Concept" if "Concept" in schema else ("Name" if "Name" in schema else "Title")
-        payload[title_prop_name] = {"title": [{"text": {"content": concept or "Expense"}}]}
+        
+        default_title = "Income" if (tx_type and tx_type.lower() == "income") else "Expense"
+        payload[title_prop_name] = {"title": [{"text": {"content": concept or default_title}}]}
+
+        has_type_property = False
 
         # 2. Iterate remaining properties in schema
         for name, prop_info in schema.items():
@@ -194,15 +202,25 @@ class NotionService:
             p_type = prop_info.get("type") if isinstance(prop_info, dict) else prop_info
             name_lower = name.lower()
 
-            # Amount
-            if name_lower in ["amount", "cost", "price", "value", "total", "expense"]:
+            # Transaction Type (Income vs Expense)
+            if name_lower in ["type", "transaction type", "tx_type", "kind", "entry type"]:
+                has_type_property = True
+                if p_type == "select":
+                    payload[name] = {"select": {"name": default_title}}
+                elif p_type == "multi_select":
+                    payload[name] = {"multi_select": [{"name": default_title}]}
+                elif p_type == "rich_text":
+                    payload[name] = {"rich_text": [{"text": {"content": default_title}}]}
+
+            # Amount (positive amount for both income and expense)
+            elif name_lower in ["amount", "cost", "price", "value", "total", "expense", "income"]:
                 if p_type == "number":
                     payload[name] = {"number": float(amount)}
                 elif p_type == "rich_text":
                     payload[name] = {"rich_text": [{"text": {"content": f"{amount:.2f} {currency}"}}]}
 
             # Category
-            elif name_lower in ["category", "tag", "tags", "type"]:
+            elif name_lower in ["category", "tag", "tags"]:
                 if p_type == "select":
                     payload[name] = {"select": {"name": category}}
                 elif p_type == "multi_select":
@@ -228,6 +246,9 @@ class NotionService:
                     payload[name] = {"rich_text": [{"text": {"content": user_name}}]}
                 elif p_type == "select":
                     payload[name] = {"select": {"name": user_name}}
+
+        if not has_type_property:
+            logger.warning(f"[Notion Mirror] Database schema does not include a 'Type' property; skipping type attribute.")
 
         return payload
 
@@ -275,7 +296,8 @@ class NotionService:
                     currency=currency,
                     category=category,
                     timestamp=timestamp,
-                    user_name=user_name
+                    user_name=user_name,
+                    tx_type=tx_type
                 )
                 
                 page = await self._create_page_with_retry(
@@ -318,7 +340,8 @@ class NotionService:
                     currency="USD",
                     category="Test",
                     timestamp=datetime.now(timezone.utc),
-                    user_name="System"
+                    user_name="System",
+                    tx_type="expense"
                 )
                 
                 page = await notion.pages.create(
@@ -377,6 +400,8 @@ class NotionService:
                 user = self.session.get(User, tx.user_id) if tx.user_id else None
                 user_name = (user.full_name or user.username) if user else None
 
+                tx_type_val = getattr(tx, "tx_type", "expense") or "expense"
+
                 res = await self.mirror_transaction(
                     family_id=family_id,
                     amount=amount_val,
@@ -385,7 +410,8 @@ class NotionService:
                     category=tx.category,
                     timestamp=tx.timestamp,
                     user_name=user_name,
-                    transaction_id=tx.id
+                    transaction_id=tx.id,
+                    tx_type=tx_type_val
                 )
                 if res and res.get("status") == "mirrored":
                     synced_count += 1

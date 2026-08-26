@@ -54,3 +54,6 @@
 ## Deferred from: code review of 7-3-telegram-stars-invoice-generation.md (2026-08-26)
 - Destructive Ledger Alteration on Member Exit [src/services/family_service.py]
 - Unbounded Invite Generation [src/services/family_service.py]
+
+## Deferred from: code review of 7-4-payment-verification-webhook-handler (2026-08-26)
+- Local import in webhook function [src/api/routes/telegram.py] — Shoving imports inside function adds overhead, but it's a pre-existing architectural choice in the project.

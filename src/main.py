@@ -18,8 +18,21 @@ async def lifespan(app: FastAPI):
     # Initialize HTTP client pool
     HTTPClientManager().init()
     
+    # Start background daily trial lifecycle notification scheduler
+    from src.services.notification_scheduler import start_notification_scheduler, stop_notification_scheduler
+    try:
+        start_notification_scheduler()
+    except Exception as e:
+        print(f"WARNING: Failed to start notification scheduler: {e}")
+
     yield
     
+    # Stop notification scheduler
+    try:
+        await stop_notification_scheduler()
+    except Exception as e:
+        print(f"WARNING: Error stopping notification scheduler: {e}")
+
     # Close HTTP client pool
     await HTTPClientManager().close()
 

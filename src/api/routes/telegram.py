@@ -45,6 +45,32 @@ async def telegram_webhook(
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
     payload = await request.json()
+    telegram_service = TelegramService()
+
+    # 1. Handle pre_checkout_query
+    if "pre_checkout_query" in payload:
+        pre_checkout = payload["pre_checkout_query"]
+        query_id = pre_checkout.get("id")
+        if not query_id:
+            logger.error("Missing pre_checkout_query id")
+            raise HTTPException(status_code=400, detail="Missing query_id")
+        invoice_payload = pre_checkout.get("invoice_payload", "")
+
+        from src.services.subscription_service import validate_invoice_payload
+        try:
+            validate_invoice_payload(invoice_payload)
+            await telegram_service.answer_pre_checkout_query(
+                pre_checkout_query_id=query_id,
+                ok=True
+            )
+        except ValueError as e:
+            logger.warning(f"Rejecting pre_checkout_query {query_id} for payload '{invoice_payload}': {e}")
+            await telegram_service.answer_pre_checkout_query(
+                pre_checkout_query_id=query_id,
+                ok=False,
+                error_message="Invalid or unsupported subscription plan."
+            )
+        return {"status": "ok"}
     
     # Fast exit for non-message updates (e.g. edited_message, inline_query)
     if "message" not in payload:
@@ -74,7 +100,127 @@ async def telegram_webhook(
     }
     
     user, family = service.get_or_create_user_and_family(user_data)
-    telegram_service = TelegramService()
+
+    # 2. Handle successful_payment
+    successful_payment = message.get("successful_payment")
+    if successful_payment:
+        invoice_payload = successful_payment.get("invoice_payload", "")
+        charge_id = successful_payment.get("telegram_payment_charge_id")
+        expiration_timestamp = successful_payment.get("subscription_expiration_date")
+
+        from src.services.subscription_service import (
+            extract_plan_and_family_id,
+            handle_successful_payment
+        )
+        from src.db.models import User, Family
+        from sqlmodel import select
+        import uuid
+
+        try:
+            plan_type, payload_family_id = extract_plan_and_family_id(invoice_payload)
+        except ValueError as e:
+            logger.error(f"Invalid invoice payload in successful_payment: {e}")
+            return {"status": "ok"}
+
+        target_family = family
+        if payload_family_id:
+            try:
+                fam_uuid = uuid.UUID(payload_family_id)
+                db_fam = session.get(Family, fam_uuid)
+                if db_fam:
+                    target_family = db_fam
+            except Exception:
+                pass
+
+        if not target_family:
+            logger.error("Target family not found for successful payment.")
+            raise HTTPException(status_code=400, detail="Target family not found")
+
+        # Query existing members before plan transition to notify multi-member households if switching to solo_pro
+        existing_members = session.exec(select(User).where(User.family_id == target_family.id)).all()
+        was_multi_member = len(existing_members) > 1
+
+        result = handle_successful_payment(
+            session=session,
+            family=target_family,
+            invoice_payload=invoice_payload,
+            charge_id=charge_id,
+            expiration_timestamp=expiration_timestamp
+        )
+
+        if target_family.plan_type == "lifetime_pro" or result.get("status") == "ignored_lifetime":
+            confirmation_text = (
+                "⭐️ <b>Clanomy Lifetime Pro Active</b>\n\n"
+                "Your workspace is enjoying permanent Lifetime Pro status. Thank you for your payment!"
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=confirmation_text)
+        elif target_family.plan_type == "solo_pro":
+            confirmation_text = (
+                "🎉 <b>Welcome to Clanomy Solo Pro!</b>\n\n"
+                "Your subscription is now active! You have unlocked unlimited voice and text transaction logging "
+                "and AI queries for your personal workspace. Thank you for supporting Clanomy!"
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=confirmation_text)
+
+            if was_multi_member:
+                fam_service = FamilyService()
+                for member in existing_members:
+                    if member.telegram_id and not fam_service.is_family_admin(target_family.id, member.id):
+                        member_notice = (
+                            "ℹ️ <b>Workspace Plan Update</b>\n\n"
+                            "Your workspace admin has updated the workspace to the <b>Solo Pro</b> plan. "
+                            "Solo Pro is designed for an individual user.\n\n"
+                            "To start your own personal workspace and keep logging transactions, "
+                            "simply type /leavefamily."
+                        )
+                        background_tasks.add_task(
+                            telegram_service.send_message,
+                            chat_id=member.telegram_id,
+                            text=member_notice
+                        )
+        elif target_family.plan_type == "family_pro":
+            confirmation_text = (
+                "🎉 <b>Welcome to Clanomy Family Pro!</b>\n\n"
+                "Your subscription is now active! You have unlocked unlimited voice and text transaction logging, "
+                "shared family ledger for up to 5 members, and real-time Notion mirroring. "
+                "Thank you for supporting Clanomy!"
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=confirmation_text)
+
+        return {"status": "ok"}
+
+    # 3. Handle refunded_payment
+    refunded_payment = message.get("refunded_payment")
+    if refunded_payment:
+        invoice_payload = refunded_payment.get("invoice_payload", "")
+        
+        from src.services.subscription_service import extract_plan_and_family_id, handle_subscription_expiry
+        import uuid
+        
+        try:
+            _, payload_family_id = extract_plan_and_family_id(invoice_payload)
+        except ValueError:
+            payload_family_id = None
+            
+        target_family = family
+        if payload_family_id:
+            try:
+                fam_uuid = uuid.UUID(payload_family_id)
+                db_fam = session.get(Family, fam_uuid)
+                if db_fam:
+                    target_family = db_fam
+            except Exception:
+                pass
+
+        if target_family and target_family.plan_type != "lifetime_pro":
+            handle_subscription_expiry(session, target_family)
+            refund_msg = (
+                "ℹ️ <b>Subscription Update:</b> Your payment was refunded. "
+                "Your workspace has transitioned to the Free tier (30 logs/month). "
+                "All your historical data, past entries, and Notion sync remain 100% safe."
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=refund_msg)
+        return {"status": "ok"}
 
     text = message.get("text")
     voice = message.get("voice")
@@ -113,6 +259,7 @@ async def telegram_webhook(
         )
         background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
         return {"status": "ok"}
+
 
     # Process /upgrade command
     if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
@@ -217,4 +364,85 @@ async def telegram_webhook(
         chat_id=chat_id
     )
 
+    return {"status": "ok"}
+
+class LifecyclePayload(BaseModel):
+    family_id: str
+    charge_id: Optional[str] = None
+    expiration_timestamp: Optional[int] = None
+
+@router.post("/webhook/renewal")
+async def handle_renewal(payload: LifecyclePayload, session: Session = Depends(get_session), x_telegram_bot_api_secret_token: Optional[str] = Header(None)):
+    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret token")
+    from src.services.subscription_service import handle_recurring_renewal
+    from src.db.models import Family
+    import uuid
+    try:
+        family = session.get(Family, uuid.UUID(payload.family_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid family_id")
+    if not family:
+        raise HTTPException(status_code=404, detail="Family not found")
+        
+    handle_recurring_renewal(
+        session=session,
+        family=family,
+        charge_id=payload.charge_id,
+        expiration_timestamp=payload.expiration_timestamp
+    )
+    return {"status": "ok"}
+
+@router.post("/webhook/cancellation")
+async def handle_cancellation(payload: LifecyclePayload, session: Session = Depends(get_session), x_telegram_bot_api_secret_token: Optional[str] = Header(None)):
+    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret token")
+    from src.services.subscription_service import handle_subscription_cancellation
+    from src.db.models import Family
+    import uuid
+    try:
+        family = session.get(Family, uuid.UUID(payload.family_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid family_id")
+    if not family:
+        raise HTTPException(status_code=404, detail="Family not found")
+        
+    handle_subscription_cancellation(session=session, family=family)
+    return {"status": "ok"}
+
+@router.post("/webhook/failure")
+async def handle_failure(
+    payload: LifecyclePayload, 
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session), 
+    x_telegram_bot_api_secret_token: Optional[str] = Header(None)
+):
+    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid secret token")
+    from src.services.subscription_service import handle_payment_failure
+    from src.services.telegram_service import TelegramService
+    from src.db.models import Family, User
+    from sqlmodel import select
+    import uuid
+    try:
+        family = session.get(Family, uuid.UUID(payload.family_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid family_id")
+    if not family:
+        raise HTTPException(status_code=404, detail="Family not found")
+        
+    if family.plan_type != "lifetime_pro":
+        handle_payment_failure(session=session, family=family)
+        
+        users = session.exec(select(User).where(User.family_id == family.id)).all()
+        admin_user = next((u for u in users if u.is_admin), users[0] if users else None)
+        if admin_user and admin_user.telegram_id:
+            telegram_service = TelegramService()
+            failure_msg = (
+                "⚠️ <b>Subscription Expired/Failed:</b> Your workspace payment failed or expired. "
+                "Your workspace has transitioned to the Free tier (30 logs/month). "
+                "All your historical data, past entries, and Notion sync remain 100% safe."
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=admin_user.telegram_id, text=failure_msg)
+            
     return {"status": "ok"}

@@ -137,3 +137,34 @@ class TelegramService:
             logger.error(f"Failed to send subscription invoice for plan {plan_type} to chat {chat_id}: {e}")
             raise
 
+    async def answer_pre_checkout_query(
+        self,
+        pre_checkout_query_id: str,
+        ok: bool = True,
+        error_message: str | None = None
+    ) -> bool:
+        """
+        Answers a pre-checkout query via Telegram Bot API answerPreCheckoutQuery.
+        Must respond within 10 seconds.
+        """
+        try:
+            client = get_http_client()
+            body = {
+                "pre_checkout_query_id": pre_checkout_query_id,
+                "ok": ok
+            }
+            if not ok and error_message:
+                body["error_message"] = error_message
+
+            response = await client.post(
+                f"{self.api_url}/answerPreCheckoutQuery",
+                json=body
+            )
+            response.raise_for_status()
+            data = response.json()
+            return bool(data.get("ok"))
+        except Exception as e:
+            logger.error(f"Failed to answer pre-checkout query {pre_checkout_query_id}: {e}")
+            return False
+
+

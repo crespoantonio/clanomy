@@ -116,4 +116,61 @@ async def test_send_subscription_invoice_http_error(telegram_service):
                 family_id="fam-123"
             )
 
+@pytest.mark.anyio
+async def test_answer_pre_checkout_query_ok_true(telegram_service):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"ok": True, "result": True}
+        mock_post.return_value = mock_response
+
+        res = await telegram_service.answer_pre_checkout_query(
+            pre_checkout_query_id="query_12345",
+            ok=True
+        )
+        assert res is True
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert args[0] == "https://api.telegram.org/bottest_token/answerPreCheckoutQuery"
+        json_body = kwargs["json"]
+        assert json_body["pre_checkout_query_id"] == "query_12345"
+        assert json_body["ok"] is True
+        assert "error_message" not in json_body
+
+@pytest.mark.anyio
+async def test_answer_pre_checkout_query_ok_false_with_error(telegram_service):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {"ok": True, "result": True}
+        mock_post.return_value = mock_response
+
+        res = await telegram_service.answer_pre_checkout_query(
+            pre_checkout_query_id="query_67890",
+            ok=False,
+            error_message="Invalid plan or payment expired."
+        )
+        assert res is True
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert args[0] == "https://api.telegram.org/bottest_token/answerPreCheckoutQuery"
+        json_body = kwargs["json"]
+        assert json_body["pre_checkout_query_id"] == "query_67890"
+        assert json_body["ok"] is False
+        assert json_body["error_message"] == "Invalid plan or payment expired."
+
+@pytest.mark.anyio
+async def test_answer_pre_checkout_query_failure(telegram_service):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.side_effect = httpx.HTTPError("Network failure")
+        with patch("src.services.telegram_service.logger.error") as mock_logger:
+            res = await telegram_service.answer_pre_checkout_query(
+                pre_checkout_query_id="query_fail",
+                ok=True
+            )
+            assert res is False
+            mock_logger.assert_called_once()
+            assert "Failed to answer pre-checkout query" in mock_logger.call_args[0][0]
+
+
 

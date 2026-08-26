@@ -152,6 +152,15 @@ def mock_telegram(monkeypatch):
                 "text": f"INVOICE: {plan_type}"
             })
             return True
+
+        async def answer_pre_checkout_query(self, pre_checkout_query_id, ok=True, error_message=None, **kwargs):
+            self.messages.append({
+                "type": "pre_checkout_answer",
+                "pre_checkout_query_id": pre_checkout_query_id,
+                "ok": ok,
+                "error_message": error_message
+            })
+            return True
             
         async def get_bot_username(self) -> str:
             return "mock_bot"
@@ -190,7 +199,22 @@ def mock_telegram(monkeypatch):
 @pytest.fixture
 def telegram_payload_factory():
     """Generates standard Telegram webhook payloads."""
-    def _create_payload(text=None, voice_file_id=None, user_id=12345, first_name="Tony", username=None):
+    def _create_payload(
+        text=None,
+        voice_file_id=None,
+        user_id=12345,
+        first_name="Tony",
+        username=None,
+        successful_payment=None,
+        refunded_payment=None,
+        pre_checkout_query=None
+    ):
+        if pre_checkout_query is not None:
+            return {
+                "update_id": 10001,
+                "pre_checkout_query": pre_checkout_query
+            }
+
         payload = {
             "message": {
                 "chat": {"id": user_id, "type": "private"},
@@ -205,6 +229,11 @@ def telegram_payload_factory():
             payload["message"]["text"] = text
         if voice_file_id:
             payload["message"]["voice"] = {"file_id": voice_file_id}
+        if successful_payment:
+            payload["message"]["successful_payment"] = successful_payment
+        if refunded_payment:
+            payload["message"]["refunded_payment"] = refunded_payment
             
         return payload
     return _create_payload
+

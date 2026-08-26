@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_USERNAME: Optional[str] = None
     MESSAGING_WEBHOOK_SECRET: str = ""
     USER_COOLDOWN_SECONDS: float = 0.5
+
+    # Monetization & Subscription Settings
+    ENABLE_SUBSCRIPTIONS: bool = False
     
     # Whisper settings
     WHISPER_MODEL_SIZE: str = "base"

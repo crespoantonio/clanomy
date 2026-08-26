@@ -1,122 +1,83 @@
 # Clanomy 💰🤖
 
-Clanomy is a privacy-first, multi-tenant family financial assistant. It features a high-performance FastAPI backend, a local-first AI pipeline for voice-to-JSON expense tracking, and application-level encryption to ensure data privacy.
+Clanomy is an open-source, privacy-first, multi-tenant family financial assistant. It combines a high-performance FastAPI backend with a local-first AI pipeline (Faster-Whisper for voice transcription and Ollama for entity extraction) and application-level AES-256 encryption.
 
-## 🚀 Quick Start
+---
+
+## ✨ Features
+
+- **🎙️ Dual Natural Language Logging**: Log both expenses and income seamlessly via text or voice notes.
+- **🤖 Local AI Inference**: Built-in Faster-Whisper audio transcription and Ollama (LLaMA3) transaction parsing for complete privacy.
+- **👨‍👩‍👧‍👦 Family Workspaces**: Multi-user ledger with per-member attribution, shared balances, and custom roles.
+- **📊 Conversational Financial Insights**: Ask queries like *"How much did we spend on groceries this month?"* or *"What is our net cash flow for February?"*.
+- **🔄 Real-Time Notion Sync**: Two-way encrypted synchronization directly into your family's personal Notion database.
+- **🔐 Zero-Knowledge Security**: Application-level AES-256 field encryption for all transaction amounts and concepts before database persistence.
+- **📦 100% Free & Unrestricted Self-Hosting**: Deploy on your own hardware or cloud with zero paywalls, tiers, or artificial limits.
+
+---
+
+## 🚀 Quick Start (Local Development)
 
 ### 1. Prerequisites
-- **Podman** & **Podman Compose** installed.
-- Python 3.12+ (optional, for local development).
+- [Podman](https://podman.io/) (or Docker) & `podman-compose` / `docker-compose`
+- Python 3.12+ (optional, for local development outside containers)
 
-### 2. Environment Setup
-Copy the example environment file and configure your secrets:
+### 2. Configure Environment
 ```bash
 cp .env.example .env
 ```
-
-### 3. Generate Encryption Key
-The project uses application-level AES-128 encryption via the Fernet recipe. You **must** generate a valid key for your `.env` file:
+Generate an encryption key:
 ```bash
-# Using the provided helper script
 python scripts/generate_key.py
 ```
-Copy the output into `ENCRYPTION_KEY` in your `.env`.
+Paste the generated key into `ENCRYPTION_KEY` in your `.env`.
 
-### 4. Launch the Application
-Start the containerized environment (FastAPI + PostgreSQL + Ollama):
+### 3. Start Containers
 ```bash
 podman compose up -d --build
 ```
 
-- **FastAPI Interactive Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Ollama AI Inference:** [http://localhost:11434](http://localhost:11434)
+- **Interactive API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Ollama AI Server:** [http://localhost:11434](http://localhost:11434)
 
-### 5. Download AI Models
-To prepare the system for transaction extraction and speech-to-text:
+### 4. Pull AI Models
 ```bash
-# Pull the LLM for transaction parsing
-podman-compose exec ollama ollama pull llama3
+podman compose exec ollama ollama pull llama3
 ```
-*Note: The Faster-Whisper audio transcription model is downloaded automatically the first time an audio request is processed.*
 
 ---
 
-## 🔗 Testing & Telegram Webhook Integration
+## 📖 Deployment & Self-Hosting Guides
 
-The architecture natively integrates with the Telegram Bot API via FastAPI `BackgroundTasks`.
+For full, step-by-step guides on deploying Clanomy to production or home lab environments:
 
-### Connecting Telegram
-
-To connect Telegram with the FastAPI backend:
-
-1. Expose your local port 8000 to the internet (e.g., using `ngrok`):
-   ```bash
-   ngrok http 8000
-   ```
-2. Register your webhook URL directly with Telegram:
-   ```bash
-   curl -F "url=https://<your-ngrok-url>/api/v1/telegram/webhook" -F "secret_token=your_messaging_secret_token_here" https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook
-   ```
-3. Send a message to your Telegram bot.
-4. Watch the backend terminal logs to see the "3-second rule" async processing, transcription, Ollama extraction, and encryption!
-
-### Usage Examples
-You can query your family expenses using natural language:
-- **General Summary**: "What did we spend this month?"
-- **Per-Member Filter**: "How much did Tony spend on groceries this week?"
-- **Comparisons**: "Did we spend more this month than last month?"
+- **[Self-Hosting Guide (Docker / Podman / Home Lab)](docs/self-hosting.md)**: Detailed instructions on running Clanomy on your own server, configuring reverse proxies, tunnels, and connecting your Telegram bot.
+- **[Cloud Deployment Guide (Always-Free Stack)](docs/deployment-guideline.md)**: Guide to hosting Clanomy on Render + Supabase + Groq with zero monthly infrastructure costs.
 
 ---
 
-## 🛠 Development Commands
+## 🛠 Testing & Development
 
-### Check Application Health
-Verify the API and Database connectivity:
-```bash
-curl http://localhost:8000/health
-```
-
-### Run Tests
-All unit and integration tests should be run inside the container to ensure environment parity:
+Run the automated test suite inside the container environment:
 ```bash
 podman compose exec app pytest
 ```
 
-### View Logs
+Check application health:
 ```bash
-podman compose logs -f app
+curl http://localhost:8000/health
 ```
-
-### Grant Lifetime Pro (VIP Access)
-To bypass the free tier 30-transaction monthly limit and grant a user's family "free forever" VIP access, run the administrative script with the target Telegram ID:
-```bash
-# Run locally (if using venv)
-python scripts/grant_lifetime_pro.py --telegram-id 123456789
-
-# Or inside the container
-podman compose exec app python scripts/grant_lifetime_pro.py --telegram-id 123456789
-```
-This updates the database (`plan_type = 'lifetime_pro'`) and instantly grants unlimited features to all members of that family.
 
 ---
-
-## 🏗 Project Architecture
-
-- **`src/`**: Core application logic.
-  - **`core/`**: Security (Encryption), Configuration, and Shared Utilities.
-  - **`db/`**: SQLModel sessions and database initialization.
-  - **`api/`**: FastAPI routers and endpoints.
-- **`tests/`**: Pytest suite organized by service and layer.
-- **`scripts/`**: Development and maintenance utilities.
-- **`_bmad-output/`**: Project planning, architecture, and sprint tracking artifacts.
 
 ## 🔒 Security Principles
-- **Field-Level Encryption**: Sensitive financial data is encrypted before storage using `cryptography.fernet`.
-- **Multi-Tenancy**: Data is strictly isolated per family/user using a multi-tenant schema.
-- **Local AI**: Voice processing (Faster-Whisper) and extraction (Ollama) run locally to keep data off the public cloud.
+
+- **Field-Level Encryption**: Sensitive financial records (amounts, descriptions, notes) are encrypted at the application layer using `cryptography.fernet`.
+- **Tenant Isolation**: Workspace boundaries and user data are strictly isolated per family.
+- **Local AI Privacy**: Voice processing and LLM reasoning run locally, preventing financial leaks to third-party APIs.
 
 ---
 
-## 📅 Sprint Status
-The project progress is tracked in `_bmad-output/implementation-artifacts/sprint-status.yaml`.
-**Epics 1 through 6** (Core Ledger, Privacy, AI Whisper/Ollama, ASK Engine, GDPR Exports, Family Multi-Tenancy, Notion Mirroring) and **Epic 8** (Family Income & Net Cash Flow Tracking) are fully completed with 189 tests passing!
+## 📄 License & Architecture
+
+Clanomy is distributed under the open-core model. For architecture and sprint planning details, see the `_bmad-output/` directory.

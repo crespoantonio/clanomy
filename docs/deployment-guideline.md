@@ -101,10 +101,10 @@ Finally, we need to tell Telegram to send messages to your Render server.
 2. You need to build a special URL by filling in the brackets with your actual data from the notepad. Do not include the `<` or `>` brackets.
 
 **The Template:**
-`https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<RENDER_URL>/telegram/webhook&secret_token=<MESSAGING_WEBHOOK_SECRET>`
+`https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<RENDER_URL>/api/v1/telegram/webhook&secret_token=<MESSAGING_WEBHOOK_SECRET>`
 
 **Example of what it should look like:**
-`https://api.telegram.org/bot1234567890:ABCdefGHI/setWebhook?url=https://clanomy-ai-bot.onrender.com/telegram/webhook&secret_token=my_super_secret_telegram_string_2026`
+`https://api.telegram.org/bot1234567890:ABCdefGHI/setWebhook?url=https://clanomy-ai-bot.onrender.com/api/v1/telegram/webhook&secret_token=my_super_secret_telegram_string_2026`
 
 3. Paste your customized URL into the address bar of your browser and hit Enter.
 4. If successful, you will see a white screen with text like: `{"ok":true,"result":true,"description":"Webhook was set"}`.

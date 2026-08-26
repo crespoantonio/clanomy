@@ -8,6 +8,7 @@ from sqlalchemy import Engine
 from src.db.models import Family, User, Transaction
 from src.db.session import engine as default_engine
 from src.services.telegram_service import TelegramService
+from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,10 @@ async def run_daily_trial_notifications(
     """
     Runs the full daily trial notification job (both Day 50 and Day 60 checks).
     """
+    if not settings.ENABLE_SUBSCRIPTIONS:
+        logger.debug("ENABLE_SUBSCRIPTIONS is disabled (Self-Hosted mode). Skipping trial notifications.")
+        return {"day_50_processed": 0, "day_60_processed": 0}
+
     logger.info("Running daily trial notification lifecycle check...")
     
     if not ignore_lock and not check_and_set_daily_run_lock():

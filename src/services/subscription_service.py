@@ -3,6 +3,7 @@ from typing import Dict, Optional, Set, Tuple, Any
 from datetime import datetime, timezone, timedelta
 from sqlmodel import Session
 from src.db.models import Family
+from src.core.config import settings
 
 # Strict mapping of allowed Telegram Star invoice payloads to internal plan types
 ALLOWED_PAID_PLANS: Dict[str, str] = {
@@ -33,11 +34,15 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
     """
     Helper to check if a family has unlimited access based on its current plan_type
     and subscription_status.
+    - If ENABLE_SUBSCRIPTIONS is False (Self-Hosted mode): always returns True.
     - For active lifetime_pro, solo_pro, family_pro: unlimited access.
     - For active trial workspaces: verifies that trial_ends_at has not expired.
     - For cancelled subscriptions: retains Pro access until current_period_end.
     - For expired or free subscriptions: no unlimited access.
     """
+    if not settings.ENABLE_SUBSCRIPTIONS:
+        return True
+
     current_time = now or datetime.now(timezone.utc)
 
     # Cancelled subscriptions retain Pro access until their paid current_period_end

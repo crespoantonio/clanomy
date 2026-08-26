@@ -278,6 +278,16 @@ async def telegram_webhook(
 
     # Process /upgrade command
     if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
+        if not settings.ENABLE_SUBSCRIPTIONS:
+            self_hosted_msg = (
+                "🏠 <b>Self-Hosted Clanomy</b>\n\n"
+                "You are running a self-hosted instance of Clanomy. All features (unlimited voice and text logging, "
+                "multi-member family sharing, Notion syncing, natural language insights, and data exports) are "
+                "<b>fully unlocked</b> with no quotas or subscriptions required!"
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=self_hosted_msg)
+            return {"status": "ok"}
+
         parts = text.split()
         arg = parts[1].lower() if len(parts) > 1 else None
         

@@ -89,15 +89,15 @@ curl -F "url=https://YOUR_DOMAIN.COM/api/v1/telegram/webhook" \
      https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook
 ```
 
-### 7. Claim VIP / Lifetime Pro Access
-By default, the application enforces a 30-transaction free tier limit. Since you are the server owner, you can bypass this and grant your family unrestricted access.
+### 7. Zero Limits Out-of-the-Box
+In self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`, default), Clanomy runs completely unrestricted:
+- **Unlimited transaction logging** (voice & text)
+- **Unlimited multi-member family workspaces**
+- **Notion real-time ledger synchronization**
+- **Natural language conversational cash-flow queries & exports**
+- **No subscription paywalls, trial timeouts, or Stars billing**
 
-1. Send any message to your newly created Telegram bot (e.g., "Hello").
-2. Run the administrative script on your server, providing your Telegram ID (you can find your ID using bots like `@userinfobot` or checking the app logs):
-   ```bash
-   podman compose exec app python scripts/grant_lifetime_pro.py --telegram-id YOUR_TELEGRAM_ID
-   ```
-3. You now have permanent, free-forever VIP access with no limits!
+No administrative scripts or license keys needed!
 
 ---
 

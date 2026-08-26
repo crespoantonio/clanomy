@@ -1,18 +1,18 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from sqlmodel import Session, text
-from src.db.session import get_session, init_db
+from src.db.session import get_session, init_db, run_migrations
 from src.core.config import settings
 from src.core.http_client import HTTPClientManager
 from src.api.routes.telegram import router as telegram_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database
+    # Initialize database & run pending migrations
     try:
-        init_db()
+        run_migrations()
     except Exception as e:
-        print(f"CRITICAL: Database initialization failed: {e}")
+        print(f"CRITICAL: Database initialization/migration failed: {e}")
         # In a real production app, we might want to retry or exit
         
     # Initialize HTTP client pool

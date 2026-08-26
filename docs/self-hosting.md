@@ -110,7 +110,20 @@ To prevent unauthorized users from using your GPU/CPU compute, AI inference, or 
    ```
    *Any user not in this list will be rejected immediately in < 1ms before any AI or database processing occurs.*
 
-2. **Harden Privacy via BotFather:**
+2. **Ingress Resource Abuse Guardrails (Pre-Inference Gatekeeping):**
+   Clanomy prevents resource exhaustion by inspecting metadata before downloading audio or invoking AI inference models:
+   ```env
+   # Maximum voice note duration in seconds (default: 60)
+   MAX_VOICE_DURATION_SECONDS=60
+
+   # Maximum text message length in characters (default: 350)
+   MAX_TEXT_LENGTH=350
+   ```
+   * **Voice Duration Cap:** Voice recordings exceeding `MAX_VOICE_DURATION_SECONDS` are rejected synchronously before downloading or transcribing with Whisper.
+   * **Text Length Cap:** Text inputs exceeding `MAX_TEXT_LENGTH` are rejected immediately before invoking Ollama.
+   * **Strict Media Filter:** Documents (PDFs), images, videos, audio files, and stickers are rejected early with friendly feedback, ensuring only native voice notes and text are processed.
+
+3. **Harden Privacy via BotFather:**
    - Open `@BotFather` on Telegram.
    - Send `/mybots` > Select your bot > **Bot Settings**.
    - **Group Privacy:** Ensure it is **Enabled** so the bot only reads messages directed at it if added to a group.
@@ -122,5 +135,6 @@ To prevent unauthorized users from using your GPU/CPU compute, AI inference, or 
 - **Never expose your PostgreSQL database to the internet.** Ensure port `5432` is firewalled or bound only to localhost.
 - **Keep your `ENCRYPTION_KEY` safe.** If you lose this key, your transaction amounts and concepts will be permanently unreadable, even to you. Back it up securely.
 - **Set `ALLOWED_TELEGRAM_USERS`** to prevent strangers from triggering local Whisper/Ollama inference.
+- **Tune `MAX_VOICE_DURATION_SECONDS` and `MAX_TEXT_LENGTH`** based on your server capacity and user habits.
 
 Enjoy true zero-friction, privacy-first financial tracking! 💸🤖

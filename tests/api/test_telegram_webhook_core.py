@@ -632,6 +632,95 @@ def test_webhook_lifecycle_failure(app_client, mock_telegram, telegram_payload_f
     assert "Subscription Expired/Failed" in failure_msg
     assert "Free tier" in failure_msg
 
+def test_webhook_rejects_unsupported_media(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] Webhook rejects unsupported media (photo, doc, audio, video) before any AI processing."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=9801),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # Send a document attachment
+    doc_payload = telegram_payload_factory(user_id=9801)
+    doc_payload["message"]["document"] = {"file_id": "doc_123", "file_name": "receipt.pdf"}
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=doc_payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert len(mock_telegram.messages) == 1
+    assert "Unsupported Format" in mock_telegram.messages[0]["text"]
+
+    mock_telegram.messages.clear()
+
+    # Send a photo attachment
+    photo_payload = telegram_payload_factory(user_id=9801)
+    photo_payload["message"]["photo"] = [{"file_id": "photo_123"}]
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=photo_payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Unsupported Format" in mock_telegram.messages[0]["text"]
+
+def test_webhook_rejects_excessive_text_length(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] Webhook fast-fails when text length exceeds MAX_TEXT_LENGTH before Ollama inference."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=9802),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    long_text = "Spent 50 dollars on groceries " * 20  # 600 characters > 350 limit
+    payload = telegram_payload_factory(text=long_text, user_id=9802)
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    alert_msg = mock_telegram.messages[0]["text"]
+    assert "Message Too Long" in alert_msg
+    assert "350 characters" in alert_msg
+
+def test_webhook_rejects_excessive_voice_duration(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] Webhook fast-fails when voice duration exceeds MAX_VOICE_DURATION_SECONDS before Whisper download."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=9803),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    voice_payload = telegram_payload_factory(user_id=9803)
+    voice_payload["message"]["voice"] = {
+        "file_id": "long_voice_file_id",
+        "duration": 120,  # 120s > 60s limit
+        "mime_type": "audio/ogg"
+    }
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=voice_payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    alert_msg = mock_telegram.messages[0]["text"]
+    assert "Voice Note Too Long" in alert_msg
+    assert "60 seconds" in alert_msg
+
+
 
 
 

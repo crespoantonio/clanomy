@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
 
 _user_last_msg: Dict[int, float] = {}
-USER_COOLDOWN_SECONDS = 0.5
-MAX_TEXT_LENGTH = 1000
 
 def _is_query_or_command(text: Optional[str]) -> bool:
     if not text:
@@ -250,11 +248,41 @@ async def telegram_webhook(
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=refund_msg)
         return {"status": "ok"}
 
+    # Check for unsupported media types (photos, documents, generic audio, videos, stickers, contacts, locations)
+    unsupported_media_keys = ("document", "audio", "video", "video_note", "photo", "sticker", "contact", "location")
+    if any(k in message for k in unsupported_media_keys):
+        unsupported_msg = (
+            "⚠️ <b>Unsupported Format</b>\n\n"
+            "Clanomy only accepts native voice notes (hold the mic 🎙️ icon) or text messages (e.g. <i>'Spent $24 on lunch'</i>)."
+        )
+        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=unsupported_msg)
+        return {"status": "ok"}
+
     text = message.get("text")
-    if text and len(text) > MAX_TEXT_LENGTH:
-        text = text[:MAX_TEXT_LENGTH]
     voice = message.get("voice")
     message_id = message.get("message_id")
+
+    # Guardrail: Enforce max text length
+    if text and len(text) > settings.MAX_TEXT_LENGTH:
+        length_msg = (
+            f"📝 <b>Message Too Long</b>\n\n"
+            f"Please keep transactions and queries under {settings.MAX_TEXT_LENGTH} characters "
+            f"(received {len(text)} characters)."
+        )
+        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=length_msg)
+        return {"status": "ok"}
+
+    # Guardrail: Enforce max voice duration
+    if voice:
+        voice_duration = voice.get("duration", 0)
+        if voice_duration > settings.MAX_VOICE_DURATION_SECONDS:
+            duration_msg = (
+                f"⏱️ <b>Voice Note Too Long</b>\n\n"
+                f"Please keep voice logs under {settings.MAX_VOICE_DURATION_SECONDS} seconds "
+                f"(recording was {voice_duration} seconds)."
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=duration_msg)
+            return {"status": "ok"}
     
     # Process /start command
     if text and text.startswith("/start"):

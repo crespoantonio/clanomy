@@ -50,3 +50,7 @@
 ## Deferred from: code review of 7-2-quota-gating-and-upgrade-prompt (2026-08-26)
 - _is_query_or_command relies on naive string matching
 - _is_query_or_command bypasses quota checks for anything flagged as a command
+
+## Deferred from: code review of 7-3-telegram-stars-invoice-generation.md (2026-08-26)
+- Destructive Ledger Alteration on Member Exit [src/services/family_service.py]
+- Unbounded Invite Generation [src/services/family_service.py]

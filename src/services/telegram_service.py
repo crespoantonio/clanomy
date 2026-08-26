@@ -80,3 +80,60 @@ class TelegramService:
             logger.error(f"Failed to fetch bot username via getMe: {e}")
             
         return "UnknownBot"
+
+    async def send_subscription_invoice(
+        self,
+        chat_id: int,
+        plan_type: str,
+        family_id: str | int
+    ) -> bool:
+        """
+        Sends an auto-renewing Telegram Stars subscription invoice via sendInvoice Bot API.
+        Currency: XTR (Telegram Stars).
+        Subscription period: 2592000 (30 days in seconds).
+        Payload identifier: sub_solo_pro_{family_id} or sub_family_pro_{family_id}.
+        """
+        tier_configs = {
+            "solo_pro": {
+                "title": "Clanomy Solo Pro",
+                "description": "⭐️ Unlimited AI text & voice transaction logs and smart queries for 1 individual user.",
+                "stars": 150,
+                "payload": f"sub_solo_pro_{family_id}"
+            },
+            "family_pro": {
+                "title": "Clanomy Family Pro",
+                "description": "⭐️ Unlimited AI logging, Notion sync, and shared ledger for up to 5 family members.",
+                "stars": 300,
+                "payload": f"sub_family_pro_{family_id}"
+            }
+        }
+
+        if plan_type not in tier_configs:
+            raise ValueError(f"Invalid subscription plan type for invoice: {plan_type}")
+
+        config = tier_configs[plan_type]
+
+        try:
+            client = get_http_client()
+            body = {
+                "chat_id": chat_id,
+                "title": config["title"],
+                "description": config["description"],
+                "payload": config["payload"],
+                "provider_token": "",
+                "currency": "XTR",
+                "prices": [{"label": config["title"], "amount": config["stars"]}],
+                "subscription_period": 2592000,
+                "start_parameter": f"sub_{plan_type}"
+            }
+            response = await client.post(
+                f"{self.api_url}/sendInvoice",
+                json=body
+            )
+            response.raise_for_status()
+            data = response.json()
+            return bool(data.get("ok"))
+        except Exception as e:
+            logger.error(f"Failed to send subscription invoice for plan {plan_type} to chat {chat_id}: {e}")
+            raise
+

@@ -57,3 +57,22 @@ def test_can_log_transaction_lazy_monthly_reset():
     assert can_log_transaction(f_reset) is True
     assert f_reset.monthly_tx_count == 0
     assert f_reset.last_reset_month == current_month_str
+
+def test_validate_invoice_payload():
+    from src.services.subscription_service import validate_invoice_payload
+
+    # Exact match
+    assert validate_invoice_payload("sub_solo_pro") == "solo_pro"
+    assert validate_invoice_payload("sub_family_pro") == "family_pro"
+
+    # Prefixed match with family_id
+    assert validate_invoice_payload("sub_solo_pro_123e4567-e89b-12d3-a456-426614174000") == "solo_pro"
+    assert validate_invoice_payload("sub_family_pro_custom-fam-id") == "family_pro"
+
+    # Invalid / Unauthorized payloads
+    with pytest.raises(ValueError, match="Unauthorized or invalid subscription payload"):
+        validate_invoice_payload("sub_lifetime_pro")
+
+    with pytest.raises(ValueError, match="Unauthorized or invalid subscription payload"):
+        validate_invoice_payload("invalid_payload")
+

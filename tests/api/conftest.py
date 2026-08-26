@@ -141,6 +141,17 @@ def mock_telegram(monkeypatch):
         async def send_document(self, chat_id, document=None, caption=None, **kwargs):
             self.messages.append({"chat_id": chat_id, "document": document, "caption": caption, **kwargs})
             return True
+
+        async def send_subscription_invoice(self, chat_id, plan_type, family_id, **kwargs):
+            self.messages.append({
+                "chat_id": chat_id,
+                "type": "invoice",
+                "plan_type": plan_type,
+                "family_id": family_id,
+                "payload": f"sub_{plan_type}_{family_id}",
+                "text": f"INVOICE: {plan_type}"
+            })
+            return True
             
         async def get_bot_username(self) -> str:
             return "mock_bot"

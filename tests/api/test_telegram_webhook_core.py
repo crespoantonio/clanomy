@@ -116,3 +116,117 @@ def test_webhook_log_text_income(app_client, mock_telegram, telegram_payload_fac
     assert "Total In:" in response_text
     assert "Net Savings:" in response_text
 
+def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] Webhook should handle /upgrade and dispatch tier explanation and both invoices."""
+    # Register user
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=4441),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # Trigger /upgrade
+    payload = telegram_payload_factory(text="/upgrade", user_id=4441)
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+    # Verify intro message + both invoices
+    assert len(mock_telegram.messages) == 3
+    intro = mock_telegram.messages[0]["text"]
+    assert "Upgrade to Clanomy Pro" in intro
+    assert "Solo Pro (150 Stars / month)" in intro
+    assert "Family Pro (300 Stars / month)" in intro
+
+    invoices = [m for m in mock_telegram.messages if m.get("type") == "invoice"]
+    assert len(invoices) == 2
+    plans = {inv["plan_type"] for inv in invoices}
+    assert plans == {"solo_pro", "family_pro"}
+    for inv in invoices:
+        assert inv["payload"].startswith(f"sub_{inv['plan_type']}_")
+
+def test_webhook_upgrade_command_solo_tier(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook should handle '/upgrade solo' and dispatch Solo Pro invoice directly."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=4442),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    payload = telegram_payload_factory(text="/upgrade solo", user_id=4442)
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert mock_telegram.messages[0].get("type") == "invoice"
+    assert mock_telegram.messages[0]["plan_type"] == "solo_pro"
+    assert mock_telegram.messages[0]["payload"].startswith("sub_solo_pro_")
+
+def test_webhook_upgrade_command_family_tier(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook should handle '/upgrade family' and dispatch Family Pro invoice directly."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=4443),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    payload = telegram_payload_factory(text="/upgrade family", user_id=4443)
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert mock_telegram.messages[0].get("type") == "invoice"
+    assert mock_telegram.messages[0]["plan_type"] == "family_pro"
+    assert mock_telegram.messages[0]["payload"].startswith("sub_family_pro_")
+
+def test_webhook_solo_pro_invite_blocked(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] If a Solo Pro subscriber attempts /invite, inform them Family Pro is required."""
+    from src.db.session import engine
+    from sqlmodel import Session, select
+    from src.db.models import Family, User
+
+    user_id = 4444
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+
+    # Set workspace plan to solo_pro
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
+        family = session.get(Family, user.family_id)
+        family.plan_type = "solo_pro"
+        session.add(family)
+        session.commit()
+
+    mock_telegram.messages.clear()
+
+    # Attempt to invite
+    payload = telegram_payload_factory(text="/invite", user_id=user_id)
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    resp_text = mock_telegram.messages[-1]["text"]
+    assert "Solo Pro" in resp_text
+    assert "Family Pro" in resp_text
+    assert "/upgrade" in resp_text
+
+

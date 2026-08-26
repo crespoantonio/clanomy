@@ -79,10 +79,27 @@ def can_log_transaction(family: Family, limit: int = 30, current_date: Optional[
 def validate_invoice_payload(invoice_payload: str) -> str:
     """
     Validates an incoming webhook invoice payload.
-    Raises ValueError if unauthorized (e.g. attempting to set lifetime_pro).
+    Extracts the plan type from payloads like 'sub_solo_pro' or 'sub_solo_pro_<family_id>'.
+    Raises ValueError if unauthorized (e.g. attempting to set lifetime_pro) or if family_id is invalid.
     Returns the mapped internal plan_type.
     """
-    if invoice_payload not in ALLOWED_PAID_PLANS:
-        raise ValueError(f"Unauthorized or invalid subscription payload: {invoice_payload}")
-    return ALLOWED_PAID_PLANS[invoice_payload]
+    if not invoice_payload:
+        raise ValueError("Missing or empty subscription payload")
+
+    if invoice_payload in ALLOWED_PAID_PLANS:
+        return ALLOWED_PAID_PLANS[invoice_payload]
+
+    import uuid
+    for prefix, plan_type in ALLOWED_PAID_PLANS.items():
+        if invoice_payload.startswith(f"{prefix}_"):
+            family_id_str = invoice_payload[len(prefix)+1:]
+            if family_id_str:
+                try:
+                    uuid.UUID(family_id_str)
+                except ValueError:
+                    raise ValueError(f"Invalid family_id format in payload: {invoice_payload}")
+            return plan_type
+
+    raise ValueError(f"Unauthorized or invalid subscription payload: {invoice_payload}")
+
 

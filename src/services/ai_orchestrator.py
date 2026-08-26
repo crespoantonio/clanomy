@@ -17,7 +17,7 @@ from src.services.telegram_service import TelegramService
 from src.services.query_service import QueryService, ParsedQueryIntent
 from src.services.export_service import ExportService
 from src.services.account_service import AccountService
-from src.services.family_service import FamilyService
+from src.services.family_service import FamilyService, PlanLimitExceededError
 from src.services.notion_service import NotionService
 
 logger = logging.getLogger(__name__)
@@ -459,7 +459,7 @@ class AIOrchestrator:
                             else:
                                 target = raw_text[13:].strip()
                             parsed_query = ParsedQueryIntent(intent="remove_member", target_member=target)
-                        elif raw_text == "/invite" or raw_lower in ["invite family member", "generate invite link", "generate invite", "invite to family"]:
+                        elif raw_text == "/invite" or raw_lower in ["invite", "invite link", "invite family member", "generate invite link", "generate invite", "invite to family"]:
                             parsed_query = ParsedQueryIntent(intent="generate_invite")
                         elif raw_text == "/family" or raw_lower in ["my family", "family info", "family members"]:
                             parsed_query = ParsedQueryIntent(intent="family_info")
@@ -571,8 +571,19 @@ class AIOrchestrator:
                         # Fetch bot username dynamically
                         telegram_service = TelegramService()
                         bot_username = await telegram_service.get_bot_username()
-                        invite, link = await asyncio.to_thread(family_service.create_invite, family_id, user_uuid, bot_username)
-                        response_text = f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 48 hours."
+                        try:
+                            invite, link = await asyncio.to_thread(family_service.create_invite, family_id, user_uuid, bot_username)
+                            response_text = f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 48 hours."
+                        except PlanLimitExceededError:
+                            response_text = (
+                                "⚠️ <b>Family Invites Require Family Pro</b>\n\n"
+                                "Your workspace is currently on the <b>Solo Pro</b> tier (1 user limit). "
+                                "To add family members and share a household ledger, please upgrade to <b>Family Pro</b> using /upgrade."
+                            )
+                        except ValueError as ve:
+                            response_text = f"⚠️ {ve}"
+
+
                     elif parsed_query and parsed_query.intent == "family_info":
                         family_service = FamilyService()
                         info = await asyncio.to_thread(family_service.get_family_info, user_uuid)

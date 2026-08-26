@@ -14,6 +14,9 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+class PlanLimitExceededError(ValueError):
+    pass
+
 class FamilyService:
     _instance = None
     
@@ -39,11 +42,19 @@ class FamilyService:
 
     def is_family_admin(self, family_id: UUID, user_id: UUID) -> bool:
         """
-        Identifies the workspace admin.
+        Identifies the workspace admin. The admin is either explicitly marked with is_admin=True
+        or is the earliest created member in the family workspace.
         """
         with Session(self.engine) as session:
             user = session.get(User, user_id)
-            return bool(user and user.is_admin and user.family_id == family_id)
+            if not user or user.family_id != family_id:
+                return False
+            if user.is_admin:
+                return True
+            first_user = session.exec(
+                select(User).where(User.family_id == family_id).order_by(User.created_at.asc())
+            ).first()
+            return bool(first_user and first_user.id == user_id)
 
     def create_family(self, user_id: UUID, name: str) -> Family:
         """
@@ -87,6 +98,7 @@ class FamilyService:
                 session.flush() # Get new_family.id without committing
                 
                 user.family_id = new_family.id
+                user.is_admin = True
                 session.add(user)
                 
                 if is_empty_single and old_family:
@@ -102,10 +114,16 @@ class FamilyService:
 
     def create_invite(self, family_id: UUID, user_id: UUID, bot_username: str = None, ttl_hours: int = 48) -> Tuple[FamilyInvite, str]:
         start_time = time.time()
-        token = secrets.token_urlsafe(16)
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
         
         with Session(self.engine, expire_on_commit=False) as session:
+            family = session.get(Family, family_id)
+            if not family:
+                raise ValueError("Workspace not found")
+            if family.plan_type == "solo_pro":
+                raise PlanLimitExceededError("Solo Pro plan only supports 1 user. Please upgrade to Family Pro using /upgrade to invite family members.")
+
+            token = secrets.token_urlsafe(16)
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
             invite = FamilyInvite(
                 family_id=family_id,
                 created_by_user_id=user_id,
@@ -151,6 +169,21 @@ class FamilyService:
                     self._log_3s_audit("join_family_via_invite", start_time)
                     return True, "You are already a member of this family!", session.get(Family, invite.family_id)
                 
+                target_family = session.get(Family, invite.family_id)
+                if not target_family:
+                    self._log_3s_audit("join_family_via_invite", start_time)
+                    return False, "Workspace not found.", None
+
+                if target_family.plan_type == "solo_pro":
+                    self._log_3s_audit("join_family_via_invite", start_time)
+                    return False, "⚠️ This workspace is on a Solo Pro plan (1 user limit) and cannot accept new members. The admin must upgrade to Family Pro.", None
+
+                if target_family.plan_type == "family_pro":
+                    member_count = len(session.exec(select(User).where(User.family_id == target_family.id)).all())
+                    if member_count >= 5:
+                        self._log_3s_audit("join_family_via_invite", start_time)
+                        return False, "⚠️ This workspace has reached the Family Pro limit of 5 members.", None
+
                 old_family_id = user.family_id
                 old_family = session.get(Family, old_family_id) if old_family_id else None
                 
@@ -161,9 +194,11 @@ class FamilyService:
                     if len(users_in_old) == 1:
                         is_single_member = True
                 
-                # Reassign user family
+                # Reassign user family and mark is_admin=False as invited member
                 user.family_id = invite.family_id
+                user.is_admin = False
                 session.add(user)
+
                 
                 # Migrate transactions if old family was single-member
                 if is_single_member:
@@ -306,6 +341,7 @@ class FamilyService:
                 session.flush()
 
                 target_user.family_id = new_family.id
+                target_user.is_admin = True
                 session.add(target_user)
 
                 # Re-assign member's transactions to the new personal workspace
@@ -374,7 +410,9 @@ class FamilyService:
                     session.flush()
 
                 user.family_id = new_family.id
+                user.is_admin = True
                 session.add(user)
+
 
                 from sqlalchemy import update
                 session.exec(

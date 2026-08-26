@@ -22,7 +22,7 @@ def _is_query_or_command(text: Optional[str]) -> bool:
         return True
     if "confirm delete" in t or "delete account" in t:
         return True
-    if t.startswith(("export", "notion", "invite", "create family", "leave family", "remove member", "family info", "my family")):
+    if t.startswith(("export", "notion", "invite", "create family", "leave family", "remove member", "family info", "my family", "upgrade")):
         return True
     if t.startswith(("how", "what", "show", "tell", "list", "summary", "breakdown", "report", "chart", "compare")):
         return True
@@ -113,6 +113,60 @@ async def telegram_webhook(
         )
         background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
         return {"status": "ok"}
+
+    # Process /upgrade command
+    if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
+        parts = text.split()
+        arg = parts[1].lower() if len(parts) > 1 else None
+        
+        family_id_str = str(family.id) if family else (str(user.family_id) if user and user.family_id else "")
+
+        if arg in ["solo", "solo_pro", "single"]:
+            background_tasks.add_task(
+                telegram_service.send_subscription_invoice,
+                chat_id=chat_id,
+                plan_type="solo_pro",
+                family_id=family_id_str
+            )
+            return {"status": "ok"}
+        elif arg in ["family", "family_pro", "fam"]:
+            background_tasks.add_task(
+                telegram_service.send_subscription_invoice,
+                chat_id=chat_id,
+                plan_type="family_pro",
+                family_id=family_id_str
+            )
+            return {"status": "ok"}
+        else:
+            intro_msg = (
+                "⭐️ <b>Upgrade to Clanomy Pro</b>\n\n"
+                "Choose the plan that fits your needs with seamless, auto-renewing Telegram Stars billing (Apple Pay / Google Pay / Card):\n\n"
+                "1️⃣ <b>Solo Pro (150 Stars / month)</b>\n"
+                "• Unlimited text & voice expense & income logging\n"
+                "• AI Natural language queries & cash flow insights\n"
+                "• CSV & JSON financial exports\n"
+                "• 1 User\n\n"
+                "2️⃣ <b>Family Pro (300 Stars / month)</b>\n"
+                "• Everything in Solo Pro\n"
+                "• Up to 5 Family Members with shared ledger\n"
+                "• Real-time Notion database mirroring\n"
+                "• Per-member spending attribution & budget visibility\n\n"
+                "<i>Invoices for both options are attached below. Tap <b>Pay</b> on your chosen tier to activate immediately!</i>"
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=intro_msg)
+            background_tasks.add_task(
+                telegram_service.send_subscription_invoice,
+                chat_id=chat_id,
+                plan_type="solo_pro",
+                family_id=family_id_str
+            )
+            background_tasks.add_task(
+                telegram_service.send_subscription_invoice,
+                chat_id=chat_id,
+                plan_type="family_pro",
+                family_id=family_id_str
+            )
+            return {"status": "ok"}
 
     # Determine if there is text or audio to process
     audio_file_id = None

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-08-26 14:40:02
+last_updated: 2026-08-26 15:29:00
 project: Clanomy
 tracking_system: file-system
 story_location: { implementation_artifacts }
@@ -83,7 +83,7 @@ development_status:
   epic-7: in-progress
   7-1-database-schema-expansion-for-subscriptions: done
   7-2-quota-gating-and-upgrade-prompt: done
-  7-3-telegram-stars-invoice-generation: ready-for-dev
+  7-3-telegram-stars-invoice-generation: done
   7-4-payment-verification-webhook-handler: ready-for-dev
   7-5-trial-lifecycle-notifications-and-scheduler: ready-for-dev
   epic-7-retrospective: optional

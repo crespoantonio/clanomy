@@ -530,3 +530,123 @@ def test_generate_fallback_summary_member_filter():
     qr = QueryResult(intent=intent, total_count=2, aggregation=agg)
     res = generate_fallback_summary(qr)
     assert "Maria has spent 85.50 USD across 2 transactions" in res
+
+def test_decrypted_transaction_with_type():
+    tx_inc = DecryptedTransaction(
+        id=uuid4(), family_id=uuid4(), user_id=uuid4(),
+        amount=3500.0, currency="USD", concept="Acme Corp",
+        category="Salary", type="income", timestamp=datetime.now(timezone.utc)
+    )
+    assert tx_inc.type == "income"
+
+    tx_exp = DecryptedTransaction(
+        id=uuid4(), family_id=uuid4(), user_id=uuid4(),
+        amount=50.0, currency="USD", concept="Coffee",
+        category="Food/Drink", timestamp=datetime.now(timezone.utc)
+    )
+    assert tx_exp.type == "expense"
+
+def test_parsed_query_intent_income_and_net_cash_flow():
+    intent_inc = ParsedQueryIntent(intent="income_summary", timeframe="this_month")
+    assert intent_inc.intent == "income_summary"
+
+    intent_net = ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
+    assert intent_net.intent == "net_cash_flow"
+
+    intent_bal = ParsedQueryIntent(intent="net_balance", timeframe="this_week")
+    assert intent_bal.intent == "net_balance"
+
+def test_resolve_income_category_aliases():
+    assert resolve_category_alias("salary") == "Salary"
+    assert resolve_category_alias("paycheck") == "Salary"
+    assert resolve_category_alias("wages") == "Salary"
+    assert resolve_category_alias("bonus") == "Bonus"
+    assert resolve_category_alias("freelance") == "Freelance"
+    assert resolve_category_alias("consulting") == "Freelance"
+    assert resolve_category_alias("dividends") == "Investment"
+    assert resolve_category_alias("stocks") == "Investment"
+    assert resolve_category_alias("gift") == "Gift"
+    assert resolve_category_alias("sold items") == "Sale"
+
+def test_aggregate_transactions_net_cash_flow_surplus():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=3500.0, currency="USD", concept="Salary", category="Salary", type="income", timestamp=datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=500.0, currency="USD", concept="Freelance", category="Freelance", type="income", timestamp=datetime(2026, 8, 5, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=1200.0, currency="USD", concept="Rent", category="Rent/Bills", type="expense", timestamp=datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=300.0, currency="USD", concept="Groceries", category="Food/Drink", type="expense", timestamp=datetime(2026, 8, 6, 10, 0, tzinfo=timezone.utc)),
+    ]
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    assert agg.total_income == 4000.0
+    assert agg.total_expenses == 1500.0
+    assert agg.total_amount == 5500.0  # preserves backwards compatibility for spending queries
+    assert agg.net_balance == 2500.0
+    assert agg.savings_rate == 62.5 # (2500 / 4000) * 100
+    assert agg.income_count == 2
+    assert agg.expense_count == 2
+    assert agg.transaction_count == 4
+    assert agg.income_category_breakdown == {"Salary": 4000.0 - 500.0, "Freelance": 500.0}
+
+def test_aggregate_transactions_net_cash_flow_deficit():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=1000.0, currency="USD", concept="Side gig", category="Freelance", type="income", timestamp=datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=1500.0, currency="USD", concept="Laptop", category="Shopping", type="expense", timestamp=datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc)),
+    ]
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    assert agg.total_income == 1000.0
+    assert agg.total_expenses == 1500.0
+    assert agg.net_balance == -500.0
+    assert agg.savings_rate == -50.0 # (-500 / 1000) * 100
+
+def test_aggregate_transactions_zero_income():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=200.0, currency="USD", concept="Groceries", category="Food/Drink", type="expense", timestamp=datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc)),
+    ]
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    assert agg.total_income == 0.0
+    assert agg.total_expenses == 200.0
+    assert agg.net_balance == -200.0
+    assert agg.savings_rate == 0.0 or agg.savings_rate is None
+
+def test_aggregate_transactions_multi_currency_cash_flow():
+    transactions = [
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=3000.0, currency="USD", concept="US Salary", category="Salary", type="income", timestamp=datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=1000.0, currency="EUR", concept="EU Freelance", category="Freelance", type="income", timestamp=datetime(2026, 8, 2, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=1000.0, currency="USD", concept="US Rent", category="Rent/Bills", type="expense", timestamp=datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc)),
+        DecryptedTransaction(id=uuid4(), family_id=uuid4(), user_id=uuid4(), amount=400.0, currency="EUR", concept="EU Hotel", category="Leisure", type="expense", timestamp=datetime(2026, 8, 4, 10, 0, tzinfo=timezone.utc)),
+    ]
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    assert agg.total_income == 3000.0
+    assert agg.total_expenses == 1000.0
+    assert agg.net_balance == 2000.0
+    assert agg.income_currency_totals == {"USD": 3000.0, "EUR": 1000.0}
+    assert agg.expense_currency_totals == {"USD": 1000.0, "EUR": 400.0}
+
+def test_generate_fallback_summary_income_query():
+    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    intent = ParsedQueryIntent(intent="income_summary", timeframe="this_month")
+    agg = TimeAggregation(
+        timeframe="this_month", total_amount=0.0, primary_currency="USD",
+        total_income=4500.0, total_expenses=0.0, net_balance=4500.0,
+        income_currency_totals={"USD": 4500.0}, transaction_count=2, income_count=2,
+        average_per_transaction=2250.0, daily_breakdown={},
+        income_category_breakdown={"Salary": 3500.0, "Bonus": 1000.0}
+    )
+    qr = QueryResult(intent=intent, total_count=2, aggregation=agg)
+    res = generate_fallback_summary(qr, user_name="Tony")
+    assert "earned 4,500.00 USD" in res or "earned $4,500.00" in res or "4500.00 USD" in res
+
+def test_generate_fallback_summary_net_cash_flow_query():
+    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    intent = ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
+    agg = TimeAggregation(
+        timeframe="this_month", total_amount=1200.0, primary_currency="USD",
+        total_income=3500.0, total_expenses=1200.0, net_balance=2300.0, savings_rate=65.71,
+        currency_totals={"USD": 1200.0}, income_currency_totals={"USD": 3500.0}, expense_currency_totals={"USD": 1200.0},
+        transaction_count=5, income_count=1, expense_count=4, average_per_transaction=240.0, daily_breakdown={}
+    )
+    qr = QueryResult(intent=intent, total_count=5, aggregation=agg)
+    res = generate_fallback_summary(qr, family_name="The Smiths")
+    assert "3500.00" in res or "3,500.00" in res
+    assert "1200.00" in res or "1,200.00" in res
+    assert "2300.00" in res or "2,300.00" in res
+

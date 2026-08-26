@@ -254,7 +254,8 @@ class NotionService:
         category: str,
         timestamp: datetime,
         user_name: Optional[str] = None,
-        transaction_id: Optional[UUID] = None
+        transaction_id: Optional[UUID] = None,
+        tx_type: str = "expense"
     ) -> Optional[Dict[str, Any]]:
         family = self.session.get(Family, family_id)
         if not family or not family.notion_api_key or not family.notion_database_id:

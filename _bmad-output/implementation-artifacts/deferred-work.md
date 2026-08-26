@@ -39,3 +39,7 @@
 
 ## Deferred from: code review of 8-3-income-voice-and-text-logging-orchestrator (2026-08-25)
 * Brittle Test Mocks — mock_llm_responses relies on hardcoded substring checks (e.g. "salary"), which is fragile but pre-existing.
+
+## Deferred from: code review of 8-4-conversational-net-cash-flow-queries (2026-08-25)
+- Fragile Intent Hardcoding - AIOrchestrator uses inline lists for intent routing - deferred, pre-existing
+- LLM Output Brittleness - Massive Literal for intent field - deferred, pre-existing

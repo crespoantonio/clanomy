@@ -772,14 +772,14 @@ async def test_orchestrator_income_text_success(orchestrator, monkeypatch):
         amount="enc_1200.0 USD",
         concept="enc_Rent",
         category="Rent/Bills",
-        type="expense",
+        tx_type="expense",
         timestamp=fixed_now
     )
     t_inc = MagicMock(
         amount="enc_3500.0 USD",
         concept="enc_Acme Corp",
         category="Salary",
-        type="income",
+        tx_type="income",
         timestamp=fixed_now
     )
     # session.exec().all() returns existing + new
@@ -987,8 +987,8 @@ async def test_orchestrator_income_negative_net_savings(orchestrator, monkeypatc
     mock_session.get.return_value = mock_user
 
     # $1500 in expense, $1000 in income -> Net: -$500.00
-    t_exp = MagicMock(amount="enc_1500.0 USD", type="expense", timestamp=now_dt)
-    t_inc = MagicMock(amount="enc_1000.0 USD", type="income", timestamp=now_dt)
+    t_exp = MagicMock(amount="enc_1500.0 USD", tx_type="expense", timestamp=now_dt)
+    t_inc = MagicMock(amount="enc_1000.0 USD", tx_type="income", timestamp=now_dt)
     mock_session.exec.return_value.all.return_value = [t_exp, t_inc]
 
     class MockEncryptionService:
@@ -1041,9 +1041,9 @@ async def test_orchestrator_income_eur_currency(orchestrator, monkeypatch):
     mock_session.get.return_value = mock_user
 
     # EUR expense and USD expense (USD should be ignored for EUR snapshot)
-    t_exp_eur = MagicMock(amount="enc_500.0 EUR", type="expense", timestamp=now_dt)
-    t_exp_usd = MagicMock(amount="enc_300.0 USD", type="expense", timestamp=now_dt)
-    t_inc_eur = MagicMock(amount="enc_2500.0 EUR", type="income", timestamp=now_dt)
+    t_exp_eur = MagicMock(amount="enc_500.0 EUR", tx_type="expense", timestamp=now_dt)
+    t_exp_usd = MagicMock(amount="enc_300.0 USD", tx_type="expense", timestamp=now_dt)
+    t_inc_eur = MagicMock(amount="enc_2500.0 EUR", tx_type="income", timestamp=now_dt)
     mock_session.exec.return_value.all.return_value = [t_exp_eur, t_exp_usd, t_inc_eur]
 
     class MockEncryptionService:

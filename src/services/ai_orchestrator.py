@@ -109,7 +109,7 @@ class AIOrchestrator:
                     curr = parts[1].upper() if len(parts) > 1 else "USD"
                     
                     if curr == primary_currency.upper():
-                        tx_type = getattr(tx, "tx_type", "expense") or "expense"
+                        tx_type = getattr(tx, "type", getattr(tx, "tx_type", "expense")) or "expense"
                         if tx_type == "income":
                             total_in += amt
                         else:
@@ -140,7 +140,10 @@ class AIOrchestrator:
             "breakdown", "history", "compare", "report", "chart",
             "graph", "list", "show", "tell", "query",
             "delete", "remove", "erase", "forget", "purge", "confirm delete",
-            "family", "invite", "join"
+            "family", "invite", "join",
+            "earn", "earned", "earning", "earnings", "income", "salary",
+            "bonus", "freelance", "net", "cashflow", "cash flow", "balance",
+            "leftover", "left over", "surplus", "deficit", "saved", "savings", "profit"
         }
         words = set(text.lower().split())
         # We also check if "confirm delete" or "delete account" is in the text directly
@@ -148,6 +151,8 @@ class AIOrchestrator:
         if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "/createfamily" in text_lower or "invite" in text_lower or "/join_" in text_lower:
             return True
         if "/familytotal" in text_lower or "family total" in text_lower or "family spending" in text_lower or "our spending" in text_lower or "how much did we spend" in text_lower:
+            return True
+        if "net balance" in text_lower or "cash flow" in text_lower or "net savings" in text_lower or "how much did we earn" in text_lower or "how much did i earn" in text_lower or "how much did we make" in text_lower or "how much did i make" in text_lower:
             return True
         if "notion" in text_lower:
             return True
@@ -275,7 +280,7 @@ class AIOrchestrator:
                         await export_service.export_and_send(family_id, chat_id, export_format)
                         # We don't need to send a regular message since we sent a document
                         return {"status": "ok"}
-                    elif parsed_query and parsed_query.intent == "spending_summary":
+                    elif parsed_query and parsed_query.intent in ["spending_summary", "query_spending", "income_summary", "query_income", "earnings_summary", "net_cash_flow", "net_balance", "cash_flow_summary"]:
                         family_service = FamilyService()
                         family_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
                         family_id = family_info["id"]
@@ -286,15 +291,36 @@ class AIOrchestrator:
                         user_name = None
                         reference_time = datetime.datetime.now(datetime.timezone.utc)
                         query_service = QueryService()
-                        summary = await query_service.get_spending_summary(
-                            family_id=family_id,
-                            timeframe=parsed_query.timeframe,
-                            category=parsed_query.category,
-                            user_name=user_name,
-                            reference_time=reference_time,
-                            family_name=family_name,
-                            member_names=member_names
-                        )
+
+                        if parsed_query.intent in ["income_summary", "query_income", "earnings_summary"]:
+                            summary = await query_service.get_income_summary(
+                                family_id=family_id,
+                                timeframe=parsed_query.timeframe,
+                                category=parsed_query.category,
+                                user_name=user_name,
+                                reference_time=reference_time,
+                                family_name=family_name,
+                                member_names=member_names
+                            )
+                        elif parsed_query.intent in ["net_cash_flow", "net_balance", "cash_flow_summary"]:
+                            summary = await query_service.get_net_cash_flow_summary(
+                                family_id=family_id,
+                                timeframe=parsed_query.timeframe,
+                                user_name=user_name,
+                                reference_time=reference_time,
+                                family_name=family_name,
+                                member_names=member_names
+                            )
+                        else:
+                            summary = await query_service.get_spending_summary(
+                                family_id=family_id,
+                                timeframe=parsed_query.timeframe,
+                                category=parsed_query.category,
+                                user_name=user_name,
+                                reference_time=reference_time,
+                                family_name=family_name,
+                                member_names=member_names
+                            )
                         response_text = summary
                     elif parsed_query and parsed_query.intent == "create_family":
                         family_service = FamilyService()

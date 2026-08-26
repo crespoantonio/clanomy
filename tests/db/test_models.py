@@ -278,7 +278,7 @@ def test_transaction_explicit_income_type(session: Session):
         amount="enc_3000",
         concept="enc_salary",
         category="Income",
-        type="income"
+        tx_type="income"
     )
     session.add(tx)
     session.commit()
@@ -295,10 +295,10 @@ def test_transaction_query_by_type(session: Session):
     session.add(user)
     session.commit()
 
-    t_exp1 = Transaction(family_id=family.id, user_id=user.id, amount="enc_10", concept="enc_Lunch", category="Food", type="expense")
-    t_exp2 = Transaction(family_id=family.id, user_id=user.id, amount="enc_20", concept="enc_Uber", category="Transport", type="expense")
-    t_inc1 = Transaction(family_id=family.id, user_id=user.id, amount="enc_1000", concept="enc_Bonus", category="Income", type="income")
-    t_inc2 = Transaction(family_id=family.id, user_id=user.id, amount="enc_2500", concept="enc_Salary", category="Income", type="income")
+    t_exp1 = Transaction(family_id=family.id, user_id=user.id, amount="enc_10", concept="enc_Lunch", category="Food", tx_type="expense")
+    t_exp2 = Transaction(family_id=family.id, user_id=user.id, amount="enc_20", concept="enc_Uber", category="Transport", tx_type="expense")
+    t_inc1 = Transaction(family_id=family.id, user_id=user.id, amount="enc_1000", concept="enc_Bonus", category="Income", tx_type="income")
+    t_inc2 = Transaction(family_id=family.id, user_id=user.id, amount="enc_2500", concept="enc_Salary", category="Income", tx_type="income")
 
     session.add_all([t_exp1, t_exp2, t_inc1, t_inc2])
     session.commit()
@@ -329,7 +329,7 @@ def test_transaction_type_with_encryption(session: Session):
         amount=enc.encrypt("45.50"),
         concept=enc.encrypt("Dinner with friends"),
         category="Dining",
-        type="expense"
+        tx_type="expense"
     )
     income_tx = Transaction(
         family_id=family.id,
@@ -337,7 +337,7 @@ def test_transaction_type_with_encryption(session: Session):
         amount=enc.encrypt("5000.00"),
         concept=enc.encrypt("Monthly Consulting"),
         category="Consulting",
-        type="income"
+        tx_type="income"
     )
     session.add_all([expense_tx, income_tx])
     session.commit()
@@ -365,8 +365,8 @@ def test_cascade_delete_income_and_expense_transactions(session: Session):
     session.add(user)
     session.commit()
 
-    t_exp = Transaction(family_id=family.id, user_id=user.id, amount="50", concept="Groceries", category="Food", type="expense")
-    t_inc = Transaction(family_id=family.id, user_id=user.id, amount="1500", concept="Freelance", category="Income", type="income")
+    t_exp = Transaction(family_id=family.id, user_id=user.id, amount="50", concept="Groceries", category="Food", tx_type="expense")
+    t_inc = Transaction(family_id=family.id, user_id=user.id, amount="1500", concept="Freelance", category="Income", tx_type="income")
     session.add_all([t_exp, t_inc])
     session.commit()
 
@@ -389,8 +389,8 @@ def test_cascade_delete_user_income_and_expense_transactions(session: Session):
     session.add(user)
     session.commit()
 
-    t_exp = Transaction(family_id=family.id, user_id=user.id, amount="enc_50", concept="enc_Groceries", category="Food", type="expense")
-    t_inc = Transaction(family_id=family.id, user_id=user.id, amount="enc_1500", concept="enc_Freelance", category="Income", type="income")
+    t_exp = Transaction(family_id=family.id, user_id=user.id, amount="enc_50", concept="enc_Groceries", category="Food", tx_type="expense")
+    t_inc = Transaction(family_id=family.id, user_id=user.id, amount="enc_1500", concept="enc_Freelance", category="Income", tx_type="income")
     session.add_all([t_exp, t_inc])
     session.commit()
 

@@ -61,7 +61,7 @@ class Transaction(SQLModel, table=True):
     
     tx_type: str = Field(
         default="expense",
-        sa_column_kwargs={"server_default": "expense", "name": "type"},
+        sa_column_kwargs={"name": "type", "server_default": "expense"},
         index=True,
         max_length=7
     )

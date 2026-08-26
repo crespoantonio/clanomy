@@ -81,3 +81,70 @@ def test_webhook_period_comparison_query(app_client, mock_telegram, telegram_pay
     response_text = mock_telegram.messages[-1]["text"].lower()
     # It should mention "week" or "less than" or "more than" or amounts
     assert "week" in response_text
+
+def test_webhook_income_query(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook should handle conversational income & earnings queries."""
+    user_id = 777
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    # Log an income transaction
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="Earned 3500 for salary from Acme Corp", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+    
+    # Query income
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="How much did we earn this month?", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    response_text = mock_telegram.messages[-1]["text"].lower()
+    assert "3,500" in response_text or "3500" in response_text
+    assert "earned" in response_text or "salary" in response_text or "income" in response_text
+
+def test_webhook_net_cash_flow_query(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook should handle conversational net cash flow & surplus queries."""
+    user_id = 888
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    # Log income and expense
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="Earned 2000 freelance consulting", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="Spent 500 on groceries", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+    
+    # Query net cash flow
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="What is our net balance this month?", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    response_text = mock_telegram.messages[-1]["text"].lower()
+    assert "2,000" in response_text or "2000" in response_text
+    assert "500" in response_text
+    assert "1,500" in response_text or "1500" in response_text or "savings" in response_text or "surplus" in response_text
+

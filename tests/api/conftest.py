@@ -88,9 +88,20 @@ def mock_llm_responses(monkeypatch):
             return ParsedQueryIntent(intent="notion_manage")
         elif "/invite" in lower_query:
             return ParsedQueryIntent(intent="generate_invite")
+        elif any(kw in lower_query for kw in ["how", "what", "show", "tell", "summary", "breakdown", "total", "query", "compare", "list"]):
+            if "earn" in lower_query or "income" in lower_query or "salary" in lower_query or "make" in lower_query or "made" in lower_query:
+                return ParsedQueryIntent(intent="income_summary", timeframe="this_month")
+            elif "net" in lower_query or "cash flow" in lower_query or "balance" in lower_query or "left over" in lower_query or "saved" in lower_query or "surplus" in lower_query:
+                return ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
+            else:
+                return ParsedQueryIntent(intent="spending_summary", timeframe="this_month")
         elif any(char.isdigit() for char in lower_query):
             return ParsedQueryIntent(intent="log_expense")
         else:
+            if "earn" in lower_query or "income" in lower_query or "salary" in lower_query or "make" in lower_query or "made" in lower_query:
+                return ParsedQueryIntent(intent="income_summary", timeframe="this_month")
+            elif "net" in lower_query or "cash flow" in lower_query or "balance" in lower_query:
+                return ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
             return ParsedQueryIntent(intent="spending_summary", timeframe="this_month")
 
     monkeypatch.setattr("src.services.extraction_service.ExtractionService._call_ollama", mock_extraction_call)

@@ -95,5 +95,4 @@ development_status:
   8-4-conversational-net-cash-flow-queries: done
   8-5-notion-mirroring-and-export-updates: done
   8-6-conversational-transaction-correction-and-undo: done
-  epic-8-retrospective: optional
-
+  epic-8-retrospective: done

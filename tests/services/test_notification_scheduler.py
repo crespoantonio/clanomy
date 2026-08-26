@@ -178,9 +178,9 @@ def test_format_day_50_message_content():
     family = Family(name="Smith Family", plan_type="trial")
     
     # Check with 42 transactions
-    msg = format_day_50_message(family, tx_count=42)
+    msg = format_day_50_message(family, tx_count=42, days_remaining=10)
     assert "42" in msg
-    assert "10 days" in msg.lower()
+    assert "10 Days" in msg
     assert "Family Pro" in msg
     assert "300" in msg
     assert "Solo Pro" in msg
@@ -188,9 +188,9 @@ def test_format_day_50_message_content():
     assert "/upgrade" in msg
 
     # Check with 0 transactions
-    msg_zero = format_day_50_message(family, tx_count=0)
+    msg_zero = format_day_50_message(family, tx_count=0, days_remaining=10)
     assert "0" in msg_zero
-    assert "10 days" in msg_zero.lower()
+    assert "10 Days" in msg_zero
     assert "/upgrade" in msg_zero
 
 def test_format_day_60_message_content():
@@ -336,7 +336,8 @@ async def test_run_daily_trial_notifications_orchestration(memory_session):
     summary = await run_daily_trial_notifications(
         session=memory_session,
         telegram_service=mock_telegram,
-        now=now
+        now=now,
+        ignore_lock=True
     )
 
     assert summary["day_50_processed"] == 1

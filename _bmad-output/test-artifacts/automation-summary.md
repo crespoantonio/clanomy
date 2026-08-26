@@ -6,8 +6,8 @@ stepsCompleted:
 lastStep: 'step-03c-aggregate'
 lastSaved: '2026-08-18'
 inputDocuments:
-  - 'Manual Testing Guide.md'
-  - 'Clanomy_Postman_Collection.json'
+  - 'docs/manual-testing-guide.md'
+  - 'tests/postman/Clanomy_Postman_Collection.json'
 ---
 
 # Step 1: Preflight & Context Loading

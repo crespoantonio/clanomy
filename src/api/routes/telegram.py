@@ -6,8 +6,16 @@ from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
+from src.services.subscription_service import (
+    extract_plan_and_family_id,
+    handle_successful_payment,
+    handle_subscription_expiry,
+    handle_payment_failure
+)
 from src.db.session import get_session
-from sqlmodel import Session
+from src.db.models import User, Family, Transaction
+from sqlmodel import Session, select
+import uuid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -108,14 +116,6 @@ async def telegram_webhook(
         charge_id = successful_payment.get("telegram_payment_charge_id")
         expiration_timestamp = successful_payment.get("subscription_expiration_date")
 
-        from src.services.subscription_service import (
-            extract_plan_and_family_id,
-            handle_successful_payment
-        )
-        from src.db.models import User, Family
-        from sqlmodel import select
-        import uuid
-
         try:
             plan_type, payload_family_id = extract_plan_and_family_id(invoice_payload)
         except ValueError as e:
@@ -193,9 +193,6 @@ async def telegram_webhook(
     refunded_payment = message.get("refunded_payment")
     if refunded_payment:
         invoice_payload = refunded_payment.get("invoice_payload", "")
-        
-        from src.services.subscription_service import extract_plan_and_family_id, handle_subscription_expiry
-        import uuid
         
         try:
             _, payload_family_id = extract_plan_and_family_id(invoice_payload)
@@ -419,11 +416,7 @@ async def handle_failure(
 ):
     if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
         raise HTTPException(status_code=403, detail="Invalid secret token")
-    from src.services.subscription_service import handle_payment_failure
-    from src.services.telegram_service import TelegramService
-    from src.db.models import Family, User
-    from sqlmodel import select
-    import uuid
+
     try:
         family = session.get(Family, uuid.UUID(payload.family_id))
     except Exception:

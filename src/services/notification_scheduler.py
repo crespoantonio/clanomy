@@ -233,14 +233,15 @@ async def run_daily_trial_notifications(
     session: Optional[Session] = None,
     engine: Optional[Engine] = None,
     telegram_service: Optional[Any] = None,
-    now: Optional[datetime] = None
+    now: Optional[datetime] = None,
+    ignore_lock: bool = False
 ) -> Dict[str, int]:
     """
     Runs the full daily trial notification job (both Day 50 and Day 60 checks).
     """
     logger.info("Running daily trial notification lifecycle check...")
     
-    if not check_and_set_daily_run_lock():
+    if not ignore_lock and not check_and_set_daily_run_lock():
         logger.info("Daily job already ran recently, skipping.")
         return {"day_50_processed": 0, "day_60_processed": 0}
 

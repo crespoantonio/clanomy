@@ -47,5 +47,5 @@ podman compose exec app pytest
    ```
 2. Write clean code adhering to existing project architecture.
 3. Add unit/integration tests for your changes.
-4. Ensure 100% of the test suite passes.
+4. Ensure 100% of the test suite passes and project code coverage remains **>= 85%**.
 5. Push to your fork and submit a Pull Request with a clear description of the problem and solution.

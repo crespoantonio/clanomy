@@ -1,0 +1,69 @@
+name: PR Integrity & Guardrail Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  guardrail:
+    name: Check Protected Paths
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Inspect Changed Files
+        id: check_diff
+        run: |
+          # Compare PR branch with the target base branch
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          echo "Comparing changes between $BASE_SHA and $HEAD_SHA..."
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Protected files/paths list:
+          # - README.md (project branding and donation links)
+          # - src/services/subscription_service.py (billing and tier logic)
+          # - .github/workflows/** (CI and security actions)
+          PROTECTED_PATTERNS=(
+            "^README\.md$"
+            "^src/services/subscription_service\.py$"
+            "^\.github/workflows/"
+          )
+
+          VIOLATIONS=()
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+
+          # If the PR author is the repo owner/maintainer, bypass check
+          if [ "$PR_AUTHOR" == "$REPO_OWNER" ]; then
+            echo "PR author is repository owner ($REPO_OWNER). Bypassing guardrail check."
+            exit 0
+          fi
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            for pattern in "${PROTECTED_PATTERNS[@]}"; do
+              if echo "$file" | grep -Eq "$pattern"; then
+                VIOLATIONS+=("$file")
+                break
+              fi
+            done
+          done <<< "$CHANGED_FILES"
+
+          if [ ${#VIOLATIONS[@]} -gt 0 ]; then
+            echo "::error::PR touches protected files that are restricted to repository maintainers:"
+            for v in "${VIOLATIONS[@]}"; do
+              echo "  - $v"
+            done
+            echo ""
+            echo "Modifications to billing logic, payment flows, CI workflows, or core README branding are maintained exclusively by the core team. Please see CONTRIBUTING.md."
+            exit 1
+          fi
+
+          echo "All changed files passed guardrail checks."

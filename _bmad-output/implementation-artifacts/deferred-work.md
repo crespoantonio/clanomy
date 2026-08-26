@@ -43,3 +43,6 @@
 ## Deferred from: code review of 8-4-conversational-net-cash-flow-queries (2026-08-25)
 - Fragile Intent Hardcoding - AIOrchestrator uses inline lists for intent routing - deferred, pre-existing
 - LLM Output Brittleness - Massive Literal for intent field - deferred, pre-existing
+## Deferred from: code review of 7-1-database-schema-expansion-for-subscriptions.md (2026-08-26)
+- Clunky Timezone Handling and Missing Tests: Timezone awareness is band-aided in domain logic and lacks test coverage.
+- Missing Indexes for Background Jobs: plan_type and 	rial_ends_at lack indexes, causing full table scans for cron jobs.

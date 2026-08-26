@@ -22,8 +22,13 @@ class Family(SQLModel, table=True):
     plan_type: str = Field(default="free")
     subscription_status: str = Field(default="active")
     monthly_tx_count: int = Field(default=0)
+    last_reset_month: Optional[str] = Field(default=None)
+    max_members: int = Field(default=5)
+    trial_ends_at: Optional[datetime] = Field(default=None)
     current_period_end: Optional[datetime] = Field(default=None)
     telegram_payment_charge_id: Optional[str] = Field(default=None)
+    notified_day_50: bool = Field(default=False)
+    notified_day_60: bool = Field(default=False)
 
     # Relationships
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
@@ -39,6 +44,7 @@ class User(SQLModel, table=True):
     username: Optional[str] = Field(default=None)
     full_name: Optional[str] = Field(default=None)
     family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
+    has_used_trial: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships

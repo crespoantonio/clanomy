@@ -38,7 +38,7 @@ def test_run_migrations_sqlite_isolated(tmp_path):
     with Session(test_engine) as session:
         # Check alembic_version table
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0001_initial_baseline"
+        assert version_result[0] == "0002_subscription_schema_expansion"
         
         # Check family table
         family_cols = session.exec(text("PRAGMA table_info(family)")).all()
@@ -47,6 +47,11 @@ def test_run_migrations_sqlite_isolated(tmp_path):
         assert "plan_type" in col_names
         assert "subscription_status" in col_names
         assert "monthly_tx_count" in col_names
+        assert "last_reset_month" in col_names
+        assert "max_members" in col_names
+        assert "trial_ends_at" in col_names
+        assert "notified_day_50" in col_names
+        assert "notified_day_60" in col_names
         assert "notion_database_id" in col_names
         
         # Check user table
@@ -54,6 +59,7 @@ def test_run_migrations_sqlite_isolated(tmp_path):
         user_col_names = [col[1] for col in user_cols]
         assert "telegram_id" in user_col_names
         assert "family_id" in user_col_names
+        assert "has_used_trial" in user_col_names
         
         # Check transaction table (quote 'transaction' for SQLite keyword safety)
         tx_cols = session.exec(text("PRAGMA table_info('transaction')")).all()
@@ -76,4 +82,5 @@ def test_run_migrations_helper_isolated(monkeypatch, tmp_path):
     test_engine = create_engine(test_db_url)
     with Session(test_engine) as session:
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0001_initial_baseline"
+        assert version_result[0] == "0002_subscription_schema_expansion"
+

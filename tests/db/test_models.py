@@ -401,3 +401,50 @@ def test_cascade_delete_user_income_and_expense_transactions(session: Session):
 
     assert len(session.exec(select(Transaction).where(Transaction.user_id == user.id)).all()) == 0
 
+
+def test_family_subscription_fields_persistence(session: Session):
+    trial_end = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
+    family = Family(
+        name="Subscription Family",
+        plan_type="trial",
+        subscription_status="active",
+        monthly_tx_count=12,
+        last_reset_month="2026-08",
+        max_members=5,
+        trial_ends_at=trial_end,
+        telegram_payment_charge_id="ch_12345",
+        notified_day_50=True,
+        notified_day_60=False,
+    )
+    session.add(family)
+    session.commit()
+    session.refresh(family)
+
+    assert family.plan_type == "trial"
+    assert family.subscription_status == "active"
+    assert family.monthly_tx_count == 12
+    assert family.last_reset_month == "2026-08"
+    assert family.max_members == 5
+    assert family.trial_ends_at is not None
+    assert family.telegram_payment_charge_id == "ch_12345"
+    assert family.notified_day_50 is True
+    assert family.notified_day_60 is False
+
+
+def test_user_has_used_trial_persistence(session: Session):
+    family = Family(name="Trial User Family")
+    session.add(family)
+    session.commit()
+
+    user = User(
+        telegram_id=501,
+        username="trial_user",
+        family_id=family.id,
+        has_used_trial=True,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    assert user.has_used_trial is True
+

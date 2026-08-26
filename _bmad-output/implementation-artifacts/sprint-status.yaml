@@ -1,5 +1,5 @@
 ﻿# generated: 2026-05-09
-# last_updated: 2026-08-26 11:37:36
+# last_updated: 2026-08-26 13:43:00
 # project: Clanomy
 # project_key: NOKEY
 # tracking_system: file-system
@@ -13,8 +13,8 @@
 #   - done: All stories in epic completed
 #
 # Epic Status Transitions:
-#   - backlog â†’ in-progress: Automatically when first story is created (via create-story)
-#   - in-progress â†’ done: Manually when all stories reach 'done' status
+#   - backlog Ã¢â€ â€™ in-progress: Automatically when first story is created (via create-story)
+#   - in-progress Ã¢â€ â€™ done: Manually when all stories reach 'done' status
 #
 # Story Status:
 #   - backlog: Story only exists in epic file
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-08-26 11:37:36
+last_updated: 2026-08-26 13:43:00
 project: Clanomy
 tracking_system: file-system
 story_location: { implementation_artifacts }
@@ -80,8 +80,8 @@ development_status:
   6-3-retry-mechanism-for-mirroring-failures: done
   epic-6-retrospective: done
 
-  epic-7: backlog
-  7-1-database-schema-expansion-for-subscriptions: ready-for-dev
+  epic-7: in-progress
+  7-1-database-schema-expansion-for-subscriptions: done
   7-2-quota-gating-and-upgrade-prompt: ready-for-dev
   7-3-telegram-stars-invoice-generation: ready-for-dev
   7-4-payment-verification-webhook-handler: ready-for-dev
@@ -96,3 +96,4 @@ development_status:
   8-5-notion-mirroring-and-export-updates: done
   8-6-conversational-transaction-correction-and-undo: done
   epic-8-retrospective: done
+

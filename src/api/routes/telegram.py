@@ -113,6 +113,22 @@ async def telegram_webhook(
             return {"status": "ok"}
         _user_last_msg[chat_id] = now
 
+    # Access control: If ALLOWED_TELEGRAM_USERS is configured (e.g. self-hosted privacy hardening),
+    # restrict access only to listed usernames or user IDs.
+    if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
+        allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
+        user_username = (from_user.get("username") or "").lower()
+        user_id_str = str(user_id)
+        
+        if user_username not in allowed_list and user_id_str not in allowed_list:
+            logger.warning(f"Unauthorized access attempt from user_id={user_id}, username={user_username}")
+            denial_msg = (
+                "🔒 <b>Private Instance</b>\n\n"
+                "This Clanomy bot instance is private and restricted to authorized users."
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=denial_msg)
+            return {"status": "ok"}
+
     # Resolve or create the user and family
     service = MessagingService(session)
     user_data = {

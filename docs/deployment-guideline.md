@@ -89,6 +89,7 @@ Now we will put the code on a server that runs 24/7 for free.
    * Key: `MESSAGING_WEBHOOK_SECRET` | Value: (Your random keyboard mash)
    * Key: `GROQ_API_KEY` | Value: (Your `gsk_...` key)
    * Key: `DEFAULT_CURRENCY` | Value: `USD`
+   * Key: `ALLOWED_TELEGRAM_USERS` | Value: (Your Telegram username, e.g. `your_username` or numeric ID to lock the bot to only you)
 8. Click **Deploy Web Service** at the bottom.
 9. Render will start building the app. Wait 5-10 minutes. When it says "Live" in green, look at the top left under your app name. You will see a URL (e.g., `https://clanomy-ai-bot.onrender.com`). **Copy this URL to your notepad.**
 

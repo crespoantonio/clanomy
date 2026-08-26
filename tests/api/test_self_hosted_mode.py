@@ -77,3 +77,37 @@ def test_upgrade_command_in_self_hosted_mode(app_client, mock_telegram, telegram
         msg = mock_telegram.messages[0]["text"]
         assert "Self-Hosted Clanomy" in msg
         assert "fully unlocked" in msg
+
+def test_allowed_telegram_users_access_granted(app_client, mock_telegram, telegram_payload_factory):
+    """Users in ALLOWED_TELEGRAM_USERS list are permitted through."""
+    with patch.object(settings, "ALLOWED_TELEGRAM_USERS", "tony_crespo, 999888"):
+        # By username
+        resp1 = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=telegram_payload_factory(text="/start", user_id=123, username="tony_crespo"),
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
+        assert resp1.status_code == 200
+        assert "Welcome to Clanomy" in mock_telegram.messages[0]["text"]
+        mock_telegram.messages.clear()
+
+        # By numeric ID
+        resp2 = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=telegram_payload_factory(text="/start", user_id=999888, username="another_name"),
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
+        assert resp2.status_code == 200
+        assert "Welcome to Clanomy" in mock_telegram.messages[0]["text"]
+
+def test_allowed_telegram_users_access_denied(app_client, mock_telegram, telegram_payload_factory):
+    """Unauthorized users are rejected immediately with Private Instance notice."""
+    with patch.object(settings, "ALLOWED_TELEGRAM_USERS", "tony_crespo, 999888"):
+        resp = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=telegram_payload_factory(text="/start", user_id=55555, username="stranger"),
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
+        assert resp.status_code == 200
+        assert len(mock_telegram.messages) == 1
+        assert "Private Instance" in mock_telegram.messages[0]["text"]

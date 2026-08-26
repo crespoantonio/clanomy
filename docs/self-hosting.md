@@ -97,13 +97,30 @@ In self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`, default), Clanomy runs comple
 - **Natural language conversational cash-flow queries & exports**
 - **No subscription paywalls, trial timeouts, or Stars billing**
 
-No administrative scripts or license keys needed!
+### 8. Hardening Your Bot & User Allowlisting (Recommended)
+By default in Telegram, any bot created via BotFather is globally searchable. If a stranger searches for your bot handle, they could send messages or voice notes to it.
+
+To prevent unauthorized users from using your GPU/CPU compute, AI inference, or database:
+
+1. **Configure User Allowlisting in `.env`:**
+   Add your Telegram username (or numeric Telegram ID) to `ALLOWED_TELEGRAM_USERS`:
+   ```env
+   # Restrict bot usage to you and your family members:
+   ALLOWED_TELEGRAM_USERS=my_username, my_spouse_username, 123456789
+   ```
+   *Any user not in this list will be rejected immediately in < 1ms before any AI or database processing occurs.*
+
+2. **Harden Privacy via BotFather:**
+   - Open `@BotFather` on Telegram.
+   - Send `/mybots` > Select your bot > **Bot Settings**.
+   - **Group Privacy:** Ensure it is **Enabled** so the bot only reads messages directed at it if added to a group.
+   - **Allow Groups? / `join_groups`:** Set to **Turn groups off** if you only plan to use private chats with your household.
 
 ---
 
 ## 🔒 Security Best Practices
 - **Never expose your PostgreSQL database to the internet.** Ensure port `5432` is firewalled or bound only to localhost.
 - **Keep your `ENCRYPTION_KEY` safe.** If you lose this key, your transaction amounts and concepts will be permanently unreadable, even to you. Back it up securely.
-- Only share your Bot link with family members you trust.
+- **Set `ALLOWED_TELEGRAM_USERS`** to prevent strangers from triggering local Whisper/Ollama inference.
 
 Enjoy true zero-friction, privacy-first financial tracking! 💸🤖

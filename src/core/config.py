@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_USERNAME: Optional[str] = None
     MESSAGING_WEBHOOK_SECRET: str = ""
     USER_COOLDOWN_SECONDS: float = 0.5
+    ALLOWED_TELEGRAM_USERS: str = ""  # Comma-separated list of allowed Telegram usernames or IDs (empty = open to all)
 
     # Monetization & Subscription Settings
     ENABLE_SUBSCRIPTIONS: bool = False

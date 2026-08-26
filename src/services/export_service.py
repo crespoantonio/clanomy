@@ -106,6 +106,11 @@ class ExportService:
         """Fetches, decrypts, and writes transactions to a temp file."""
         start_time = time.time()
         
+        ALLOWED_FORMATS = {"csv", "json"}
+        safe_format = (format or "csv").lower().strip().lstrip(".")
+        if safe_format not in ALLOWED_FORMATS:
+            safe_format = "csv"
+
         def fetch_and_process():
             with Session(self.engine) as session:
                 from src.db.models import User
@@ -127,17 +132,17 @@ class ExportService:
         transactions = await asyncio.to_thread(fetch_and_process)
         count = len(transactions)
         
-        fd, temp_path = tempfile.mkstemp(prefix=f"clanomy_export_{family_id}_", suffix=f".{format}")
+        fd, temp_path = tempfile.mkstemp(prefix=f"clanomy_export_{family_id}_", suffix=f".{safe_format}")
         os.close(fd) # Close immediately, we use standard open()
         
         try:
-            if format.lower() == "json":
+            if safe_format == "json":
                 await asyncio.to_thread(self.generate_json, transactions, family_id, temp_path)
             else:
                 await asyncio.to_thread(self.generate_csv, transactions, temp_path)
                 
             duration = time.time() - start_time
-            logger.info(f"[3s Audit] Data export took {duration:.2f} seconds (format: {format}, count: {count}, family_id: {family_id})")
+            logger.info(f"[3s Audit] Data export took {duration:.2f} seconds (format: {safe_format}, count: {count}, family_id: {family_id})")
             
             return temp_path, count
         except Exception as e:

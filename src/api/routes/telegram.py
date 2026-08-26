@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Header, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+import time
+import uuid
+import logging
+from sqlmodel import Session, select
+
 from src.core.config import settings
 from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
@@ -14,13 +19,14 @@ from src.services.subscription_service import (
 )
 from src.db.session import get_session
 from src.db.models import User, Family, Transaction
-from sqlmodel import Session, select
-import uuid
-import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
+
+_user_last_msg: Dict[int, float] = {}
+USER_COOLDOWN_SECONDS = 0.5
+MAX_TEXT_LENGTH = 1000
 
 def _is_query_or_command(text: Optional[str]) -> bool:
     if not text:
@@ -97,6 +103,15 @@ async def telegram_webhook(
     
     if not user_id or not chat_id:
         return {"status": "ok"}
+
+    # Per-user cooldown check to prevent spam / DoS
+    if settings.USER_COOLDOWN_SECONDS > 0:
+        now = time.time()
+        last_time = _user_last_msg.get(chat_id, 0.0)
+        if (now - last_time) < settings.USER_COOLDOWN_SECONDS:
+            logger.warning(f"Throttling rapid messages from chat_id {chat_id}")
+            return {"status": "ok"}
+        _user_last_msg[chat_id] = now
 
     # Resolve or create the user and family
     service = MessagingService(session)
@@ -220,7 +235,10 @@ async def telegram_webhook(
         return {"status": "ok"}
 
     text = message.get("text")
+    if text and len(text) > MAX_TEXT_LENGTH:
+        text = text[:MAX_TEXT_LENGTH]
     voice = message.get("voice")
+    message_id = message.get("message_id")
     
     # Process /start command
     if text and text.startswith("/start"):
@@ -358,7 +376,8 @@ async def telegram_webhook(
         user_id=str(user.id),
         text=text,
         audio_file_id=audio_file_id,
-        chat_id=chat_id
+        chat_id=chat_id,
+        message_id=message_id
     )
 
     return {"status": "ok"}

@@ -2,6 +2,7 @@ import asyncio
 import secrets
 import time
 import logging
+import threading
 from uuid import UUID
 from typing import Tuple, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
@@ -19,16 +20,18 @@ class PlanLimitExceededError(ValueError):
 
 class FamilyService:
     _instance = None
+    _lock = threading.Lock()
     
     def __new__(cls, engine: Engine = None):
-        if cls._instance is None:
-            cls._instance = super(FamilyService, cls).__new__(cls)
-        if engine is not None:
-            cls._instance.engine = engine
-        elif not hasattr(cls._instance, 'engine') or cls._instance.engine is None:
-            from src.db.session import engine as db_engine
-            cls._instance.engine = db_engine
-        return cls._instance
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(FamilyService, cls).__new__(cls)
+            if engine is not None:
+                cls._instance.engine = engine
+            elif not hasattr(cls._instance, 'engine') or cls._instance.engine is None:
+                from src.db.session import engine as db_engine
+                cls._instance.engine = db_engine
+            return cls._instance
 
     def __init__(self, engine: Engine = None):
         if engine:

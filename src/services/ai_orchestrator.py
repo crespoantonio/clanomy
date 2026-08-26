@@ -7,6 +7,7 @@ import re
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
+from sqlalchemy import update as sa_update
 from src.core.config import settings
 from src.services.whisper_service import WhisperService
 from src.services.extraction_service import ExtractionService
@@ -71,10 +72,12 @@ class AIOrchestrator:
                 )
                 session.add(transaction)
 
-                family = session.get(Family, user.family_id)
-                if family:
-                    family.monthly_tx_count += 1
-                    session.add(family)
+                # Atomic SQL increment to avoid race conditions under concurrency
+                session.execute(
+                    sa_update(Family)
+                    .where(Family.id == user.family_id)
+                    .values(monthly_tx_count=Family.monthly_tx_count + 1)
+                )
 
                 session.commit()
                 session.refresh(transaction)
@@ -387,7 +390,7 @@ class AIOrchestrator:
         except Exception as e:
             logger.error(f"[Notion Mirror] Uncaught error in archive background task: {e}")
 
-    async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int):
+    async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
         start_time = time.time()
         status = "success"
         response_text = ""
@@ -492,7 +495,9 @@ class AIOrchestrator:
                     elif parsed_query and parsed_query.intent == "export_data":
                         # Handle Export
                         family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
-                        export_format = parsed_query.export_format or "csv"
+                        ALLOWED_EXPORT_FORMATS = {"csv", "json"}
+                        raw_format = (parsed_query.export_format or "csv").lower()
+                        export_format = raw_format if raw_format in ALLOWED_EXPORT_FORMATS else "csv"
                         export_service = ExportService()
                         await export_service.export_and_send(family_id, chat_id, export_format)
                         # We don't need to send a regular message since we sent a document
@@ -628,22 +633,30 @@ class AIOrchestrator:
                                 else:
                                     token = parts[2]
                                     db_id = parts[3] if len(parts) > 3 else None
+                                    
+                                    # Auto-delete message containing the secret token for security
+                                    if message_id:
+                                        ts = TelegramService()
+                                        asyncio.create_task(ts.delete_message(chat_id, message_id))
+
                                     is_valid = await notion_service.validate_token(token)
                                     if not is_valid:
-                                        response_text = "⚠️ <b>Invalid Token!</b> Please check your Integration Secret and try again."
+                                        response_text = "⚠️ <b>Invalid Token!</b> Please check your Integration Secret and try again.\n\n🔒 <i>Your secret token message was automatically deleted for security.</i>"
                                     elif db_id:
                                         try:
                                             res = await notion_service.connect_database(family_id, token, db_id)
-                                            response_text = f"✅ <b>Notion Workspace Connected!</b>\n\n📁 <b>Database:</b> {res['database_name']}\n🆔 <b>ID:</b> <code>{res['database_id']}</code>\n\nYour transactions are now linked and ready for automatic mirroring!"
+                                            response_text = f"✅ <b>Notion Workspace Connected!</b>\n\n📁 <b>Database:</b> {res['database_name']}\n🆔 <b>ID:</b> <code>{res['database_id']}</code>\n\nYour transactions are now linked and ready for automatic mirroring!\n\n🔒 <i>Your secret token message was automatically deleted for security.</i>"
                                         except Exception as e:
-                                            response_text = f"⚠️ <b>Failed to connect database:</b> {e}"
+                                            logger.error(f"Failed to connect database: {e}")
+                                            response_text = "⚠️ <b>Failed to connect database.</b> Please verify the database ID and try again.\n\n🔒 <i>Your secret token message was automatically deleted for security.</i>"
                                     else:
                                         dbs = await notion_service.search_databases(token)
                                         if not dbs:
                                             response_text = (
                                                 "⚠️ <b>No databases found!</b>\n"
                                                 "Your Notion token is valid, but no databases have been shared with this integration yet.\n\n"
-                                                "Please open your Notion database, click <b>•••</b> -> <b>Add connections</b>, select your integration, and run <code>/notion connect &lt;token&gt;</code> again."
+                                                "Please open your Notion database, click <b>•••</b> -> <b>Add connections</b>, select your integration, and run <code>/notion connect &lt;token&gt;</code> again.\n\n"
+                                                "🔒 <i>Your secret token message was automatically deleted for security.</i>"
                                             )
                                         else:
                                             family = session.get(Family, family_id)
@@ -656,7 +669,8 @@ class AIOrchestrator:
                                             db_list = "\n".join([f"{i+1}. 📊 <b>{db['title']}</b> (ID: <code>{db['id']}</code>)" for i, db in enumerate(dbs)])
                                             response_text = (
                                                 f"📋 <b>Found {len(dbs)} Notion Database(s):</b>\n\n{db_list}\n\n"
-                                                "Reply with: <code>/notion setdb &lt;number or ID&gt;</code> (e.g. <code>/notion setdb 1</code>)"
+                                                "Reply with: <code>/notion setdb &lt;number or ID&gt;</code> (e.g. <code>/notion setdb 1</code>)\n\n"
+                                                "🔒 <i>Your secret token message was automatically deleted for security.</i>"
                                             )
                             elif raw_lower.startswith("/notion setdb") or raw_lower.startswith("notion setdb"):
                                 if len(parts) < 3:
@@ -833,4 +847,4 @@ class AIOrchestrator:
             
         # 4. Log 3s Audit
         duration = time.time() - start_time
-        logger.info(f"[3s Audit] Total pipeline orchestration took {duration:.2f} seconds (user_id: {user_id}, text: '{text}')")
+        logger.info(f"[3s Audit] Total pipeline orchestration took {duration:.2f} seconds (user_id: {user_id}, text_len: {len(text or '')})")

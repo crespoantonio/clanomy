@@ -5,6 +5,7 @@ from sqlalchemy.pool import StaticPool
 import sys
 
 from src.core.config import settings
+settings.USER_COOLDOWN_SECONDS = 0.0
 
 # Setup in-memory SQLite for testing to avoid polluting real DB
 test_engine = create_engine(

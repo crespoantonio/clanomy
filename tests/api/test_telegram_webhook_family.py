@@ -122,3 +122,165 @@ def test_webhook_account_deletion(app_client, mock_telegram, telegram_payload_fa
     assert response.status_code == 200
     confirm_text = mock_telegram.messages[-1]["text"]
     assert "permanently deleted" in confirm_text.lower()
+
+
+def test_webhook_family_info_command(app_client, mock_telegram, telegram_payload_factory):
+    """Webhook should handle /family command and return member list with admin badge."""
+    user_id = 9101
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id, username="admin_9101"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/family", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    text = mock_telegram.messages[-1]["text"]
+    assert "Family Workspace" in text
+    assert "Admin" in text
+
+
+def test_webhook_remove_member_and_leave_family(app_client, mock_telegram, telegram_payload_factory):
+    """Webhook should allow admin to remove members and members to leave."""
+    admin_id = 9201
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=admin_id, username="admin_9201"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    # Generate invite
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/invite", user_id=admin_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    import re
+    match = re.search(r'start=(join_[a-zA-Z0-9_-]+)', mock_telegram.messages[-1]["text"])
+    join_token = match.group(1)
+
+    # Member joins
+    member_id = 9202
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text=f"/start {join_token}", user_id=member_id, username="member_9202"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # Admin removes member
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/removemember @member_9202", user_id=admin_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    assert any("Removed @member_9202" in m["text"] for m in mock_telegram.messages)
+
+    # Member leaves family when back in personal
+    mock_telegram.messages.clear()
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/leavefamily", user_id=member_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert "already in your own personal workspace" in mock_telegram.messages[-1]["text"].lower()
+
+
+def test_webhook_quota_limit_admin(app_client, mock_telegram, telegram_payload_factory):
+    """Webhook should reject logging on free tier when monthly limit reached for admin."""
+    from src.db.session import engine
+    from sqlmodel import Session, select
+    from src.db.models import Family, User
+    
+    admin_id = 9301
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=admin_id, username="admin_9301"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+
+    # Manually set plan to free with count = 30
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.telegram_id == admin_id)).first()
+        family = session.get(Family, user.family_id)
+        family.plan_type = "free"
+        family.monthly_tx_count = 30
+        from datetime import datetime, timezone
+        family.last_reset_month = datetime.now(timezone.utc).strftime("%Y-%m")
+        session.add(family)
+        session.commit()
+
+    mock_telegram.messages.clear()
+
+    # Try logging transaction
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="Spent 15 on lunch", user_id=admin_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Monthly Free Limit Reached" in mock_telegram.messages[0]["text"]
+    assert "Type /upgrade" in mock_telegram.messages[0]["text"]
+
+
+def test_webhook_quota_limit_member(app_client, mock_telegram, telegram_payload_factory):
+    """Webhook should advise invited member to ask admin to upgrade when limit reached."""
+    from src.db.session import engine
+    from sqlmodel import Session, select
+    from src.db.models import Family, User
+    
+    admin_id = 9401
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=admin_id, username="admin_9401"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/invite", user_id=admin_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    import re
+    match = re.search(r'start=(join_[a-zA-Z0-9_-]+)', mock_telegram.messages[-1]["text"])
+    join_token = match.group(1)
+
+    member_id = 9402
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text=f"/start {join_token}", user_id=member_id, username="member_9402"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+
+    # Set family to free and count = 30
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.telegram_id == member_id)).first()
+        family = session.get(Family, user.family_id)
+        family.plan_type = "free"
+        family.monthly_tx_count = 30
+        from datetime import datetime, timezone
+        family.last_reset_month = datetime.now(timezone.utc).strftime("%Y-%m")
+        session.add(family)
+        session.commit()
+
+    mock_telegram.messages.clear()
+
+    # Member tries to log transaction
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="Spent 20 on coffee", user_id=member_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Monthly Free Limit Reached" in mock_telegram.messages[0]["text"]
+    assert "ask your family admin" in mock_telegram.messages[0]["text"]
+

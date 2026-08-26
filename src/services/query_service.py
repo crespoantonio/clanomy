@@ -87,6 +87,8 @@ class ParsedQueryIntent(BaseModel):
         "query_income",
         "earnings_summary",
         "family_info",
+        "remove_member",
+        "leave_family",
         "edit_last",
         "undo_last"
     ]
@@ -97,6 +99,7 @@ class ParsedQueryIntent(BaseModel):
     concept_keyword: Optional[str] = None
     export_format: Optional[str] = "csv"
     family_name: Optional[str] = None
+    target_member: Optional[str] = None
     scope: Optional[str] = "family"
     member_filter: Optional[str] = None
     query_type: Optional[str] = None

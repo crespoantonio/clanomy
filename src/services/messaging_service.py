@@ -1,5 +1,6 @@
 from typing import Dict, Any, Tuple
 from sqlmodel import Session, select
+from datetime import datetime, timezone, timedelta
 from src.db.models import User, Family
 
 class MessagingService:
@@ -44,8 +45,16 @@ class MessagingService:
             return user, family
 
         # Create new Family and User in one atomic operation
+        # If user has not consumed a trial, provision 60-day Family Pro trial
         family_name = f"{full_name or username or 'User'}'s Family"
-        family = Family(name=family_name)
+        plan_type = "trial"
+        trial_ends_at = datetime.now(timezone.utc) + timedelta(days=60)
+
+        family = Family(
+            name=family_name,
+            plan_type=plan_type,
+            trial_ends_at=trial_ends_at
+        )
         self.session.add(family)
         self.session.flush() # Get family.id without committing
 
@@ -53,7 +62,9 @@ class MessagingService:
             telegram_id=platform_id,
             username=username,
             full_name=full_name,
-            family_id=family.id
+            family_id=family.id,
+            has_used_trial=True,
+            is_admin=True
         )
         self.session.add(user)
         self.session.commit() # Atomic commit for both

@@ -179,13 +179,13 @@ def mock_telegram(monkeypatch):
 @pytest.fixture
 def telegram_payload_factory():
     """Generates standard Telegram webhook payloads."""
-    def _create_payload(text=None, voice_file_id=None, user_id=12345, first_name="Tony"):
+    def _create_payload(text=None, voice_file_id=None, user_id=12345, first_name="Tony", username=None):
         payload = {
             "message": {
                 "chat": {"id": user_id, "type": "private"},
                 "from": {
                     "id": user_id,
-                    "username": f"user_{user_id}",
+                    "username": username or f"user_{user_id}",
                     "first_name": first_name
                 }
             }

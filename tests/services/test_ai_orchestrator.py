@@ -286,9 +286,9 @@ async def test_orchestrator_persistence_success(orchestrator, monkeypatch):
 
     mock_session.get.assert_called_with(User, UUID(user_id))
     
-    mock_session.add.assert_called_once()
-    added_transaction = mock_session.add.call_args[0][0]
-    assert isinstance(added_transaction, Transaction)
+    assert mock_session.add.call_count >= 1
+    added_transaction = next((call[0][0] for call in mock_session.add.call_args_list if isinstance(call[0][0], Transaction)), None)
+    assert added_transaction is not None
     assert added_transaction.user_id == UUID(user_id)
     assert added_transaction.family_id == UUID(family_id)
     assert added_transaction.amount == "encrypted_15.0 USD"
@@ -718,8 +718,9 @@ async def test_persist_transaction_with_type(orchestrator, monkeypatch):
         tx_type="income"
     )
     
-    mock_session.add.assert_called_once()
-    added_tx = mock_session.add.call_args[0][0]
+    assert mock_session.add.call_count >= 1
+    added_tx = next((call[0][0] for call in mock_session.add.call_args_list if isinstance(call[0][0], Transaction)), None)
+    assert added_tx is not None
     assert added_tx.type == "income"
     assert added_tx.amount == "enc_3500.0 USD"
     assert added_tx.concept == "enc_Acme Corp"

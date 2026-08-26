@@ -26,12 +26,16 @@ def test_get_or_create_user_new_user(session: Session):
     assert user.username == "testuser"
     assert user.full_name == "Test User"
     assert user.family_id == family.id
+    assert user.has_used_trial is True
     assert family is not None
+    assert family.plan_type == "trial"
+    assert family.trial_ends_at is not None
     
     # Verify persistence
     db_user = session.get(User, user.id)
     assert db_user is not None
     assert db_user.telegram_id == 12345
+    assert db_user.has_used_trial is True
 
 def test_get_or_create_user_existing_user(session: Session):
     # Setup existing user

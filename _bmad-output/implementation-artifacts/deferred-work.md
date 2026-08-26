@@ -46,3 +46,7 @@
 ## Deferred from: code review of 7-1-database-schema-expansion-for-subscriptions.md (2026-08-26)
 - Clunky Timezone Handling and Missing Tests: Timezone awareness is band-aided in domain logic and lacks test coverage.
 - Missing Indexes for Background Jobs: plan_type and 	rial_ends_at lack indexes, causing full table scans for cron jobs.
+
+## Deferred from: code review of 7-2-quota-gating-and-upgrade-prompt (2026-08-26)
+- _is_query_or_command relies on naive string matching
+- _is_query_or_command bypasses quota checks for anything flagged as a command

@@ -70,6 +70,12 @@ class AIOrchestrator:
                     timestamp=timestamp or datetime.datetime.now(datetime.timezone.utc)
                 )
                 session.add(transaction)
+
+                family = session.get(Family, user.family_id)
+                if family:
+                    family.monthly_tx_count += 1
+                    session.add(family)
+
                 session.commit()
                 session.refresh(transaction)
                 return transaction.id
@@ -157,6 +163,8 @@ class AIOrchestrator:
         words = set(text.lower().split())
         text_lower = text.lower()
         if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "/createfamily" in text_lower or "invite" in text_lower or "/join_" in text_lower:
+            return True
+        if "/leavefamily" in text_lower or "leave family" in text_lower or "/removemember" in text_lower or "remove member" in text_lower:
             return True
         if "/familytotal" in text_lower or "family total" in text_lower or "family spending" in text_lower or "our spending" in text_lower or "how much did we spend" in text_lower:
             return True
@@ -443,6 +451,14 @@ class AIOrchestrator:
                             else:
                                 name = raw_text[13:].strip()
                             parsed_query = ParsedQueryIntent(intent="create_family", family_name=name)
+                        elif raw_text == "/leavefamily" or raw_lower in ["leave family", "leave the family", "leave group"]:
+                            parsed_query = ParsedQueryIntent(intent="leave_family")
+                        elif raw_lower.startswith("/removemember") or raw_lower.startswith("remove member"):
+                            if raw_lower.startswith("/removemember"):
+                                target = raw_text[13:].strip()
+                            else:
+                                target = raw_text[13:].strip()
+                            parsed_query = ParsedQueryIntent(intent="remove_member", target_member=target)
                         elif raw_text == "/invite" or raw_lower in ["invite family member", "generate invite link", "generate invite", "invite to family"]:
                             parsed_query = ParsedQueryIntent(intent="generate_invite")
                         elif raw_text == "/family" or raw_lower in ["my family", "family info", "family members"]:
@@ -485,6 +501,23 @@ class AIOrchestrator:
                         response_text = await asyncio.to_thread(self._handle_transaction_undo, user_uuid)
                     elif parsed_query and parsed_query.intent == "edit_last":
                         response_text = await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
+                    elif parsed_query and parsed_query.intent == "leave_family":
+                        family_service = FamilyService()
+                        success, msg, _ = await asyncio.to_thread(family_service.leave_family, user_uuid)
+                        response_text = msg
+                    elif parsed_query and parsed_query.intent == "remove_member":
+                        family_service = FamilyService()
+                        target = parsed_query.target_member or ""
+                        success, msg, removed_user, _ = await asyncio.to_thread(family_service.remove_member, user_uuid, target)
+                        if success and removed_user and removed_user.telegram_id:
+                            telegram_service = TelegramService()
+                            asyncio.create_task(
+                                telegram_service.send_message(
+                                    chat_id=removed_user.telegram_id,
+                                    text="ℹ️ You have been removed from the family workspace by the admin. A new personal workspace has been created for you with all your personal transaction history intact."
+                                )
+                            )
+                        response_text = msg
                     elif parsed_query and parsed_query.intent in ["spending_summary", "query_spending", "income_summary", "query_income", "earnings_summary", "net_cash_flow", "net_balance", "cash_flow_summary"]:
                         family_service = FamilyService()
                         family_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
@@ -543,8 +576,22 @@ class AIOrchestrator:
                     elif parsed_query and parsed_query.intent == "family_info":
                         family_service = FamilyService()
                         info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
-                        members = ", ".join([m.get("full_name") or m.get("username") or "User" for m in info["members"]])
-                        response_text = f"👪 <b>Family Info: {info['name']}</b>\nMembers: {members}\nTransactions: {info['transactions_count']}\nActive Invites: {info['active_invites_count']}"
+                        members_str = []
+                        for m in info["members"]:
+                            name = m.get("full_name") or m.get("username") or "User"
+                            handle = f" (@{m['username']})" if m.get("username") else ""
+                            role = " 👑 (Admin)" if m.get("is_admin") else ""
+                            members_str.append(f"• {name}{handle}{role}")
+                        members_formatted = "\n".join(members_str)
+                        plan_desc = info.get("plan_type", "free").replace("_", " ").title()
+                        response_text = (
+                            f"👪 <b>Family Workspace: {info['name']}</b>\n"
+                            f"📋 <b>Plan:</b> {plan_desc}\n"
+                            f"📊 <b>Monthly Logs:</b> {info.get('monthly_tx_count', 0)}\n\n"
+                            f"<b>Members:</b>\n{members_formatted}\n\n"
+                            f"<b>Total Transactions:</b> {info['transactions_count']}\n"
+                            f"<b>Active Invites:</b> {info['active_invites_count']}"
+                        )
                     elif parsed_query and parsed_query.intent == "notion_manage":
                         family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
                         raw_text = text.strip()

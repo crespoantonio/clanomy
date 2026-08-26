@@ -1,19 +1,19 @@
-﻿from pathlib import Path
-import re
+﻿import re
 
-# Update story file
-spec_path = Path('_bmad-output/implementation-artifacts/8-3-income-voice-and-text-logging-orchestrator.md')
-text = spec_path.read_text(encoding='utf-8')
-text = re.sub(r'status:\s*"review"', 'status: "done"', text)
-text = re.sub(r'Status:\s*review', 'Status: done', text)
-spec_path.write_text(text, encoding='utf-8')
+def update_status():
+    with open('_bmad-output/implementation-artifacts/7-2-quota-gating-and-upgrade-prompt.md', 'r', encoding='utf-8') as f:
+        content = f.read()
 
-# Update sprint status
-sprint_path = Path('_bmad-output/implementation-artifacts/sprint-status.yaml')
-if sprint_path.exists():
-    sprint = sprint_path.read_text(encoding='utf-8')
-    sprint = re.sub(r'8-3-income-voice-and-text-logging-orchestrator:\s*review', '8-3-income-voice-and-text-logging-orchestrator: done', sprint)
-    from datetime import datetime
-    sprint = re.sub(r'last_updated:\s*.*', f'last_updated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', sprint)
-    sprint_path.write_text(sprint, encoding='utf-8')
-print("Status updated")
+    # Update frontmatter status
+    content = re.sub(r'status: "review"', 'status: "done"', content, count=1)
+    # Update Status line
+    content = re.sub(r'Status: review', 'Status: done', content, count=1)
+    
+    # Check off patch findings
+    content = content.replace('- [ ] [Review][Decision]', '- [x] [Review][Decision]')
+    content = content.replace('- [ ] [Review][Patch]', '- [x] [Review][Patch]')
+    
+    with open('_bmad-output/implementation-artifacts/7-2-quota-gating-and-upgrade-prompt.md', 'w', encoding='utf-8') as f:
+        f.write(content)
+
+update_status()

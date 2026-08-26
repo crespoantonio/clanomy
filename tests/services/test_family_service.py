@@ -177,3 +177,178 @@ def test_join_family_via_invite_with_transaction_migration(session: Session, fam
     assert tx.family_id == target_family.id
     session.expire_all()
     assert session.get(Family, solo_family_id) is None
+
+
+def test_create_family_trial_and_anti_abuse(session: Session, family_service: FamilyService):
+    # User 1: has NOT used trial -> gets trial
+    u1 = User(telegram_id=1001, username="u1", has_used_trial=False, family_id=uuid4())
+    session.add(u1)
+    session.commit()
+
+    f1 = family_service.create_family(user_id=u1.id, name="Family 1")
+    session.refresh(u1)
+    assert f1.plan_type == "trial"
+    assert f1.trial_ends_at is not None
+    assert u1.has_used_trial is True
+
+    # User 2: has already used trial -> gets free
+    u2 = User(telegram_id=1002, username="u2", has_used_trial=True, family_id=uuid4())
+    session.add(u2)
+    session.commit()
+
+    f2 = family_service.create_family(user_id=u2.id, name="Family 2")
+    session.refresh(u2)
+    assert f2.plan_type == "free"
+    assert f2.trial_ends_at is None
+
+
+def test_is_family_admin(session: Session, family_service: FamilyService):
+    family = Family(name="Admin Test Fam")
+    session.add(family)
+    session.commit()
+
+    creator = User(telegram_id=2001, username="creator", family_id=family.id)
+    session.add(creator)
+    session.commit()
+
+    member = User(telegram_id=2002, username="member", family_id=family.id)
+    session.add(member)
+    session.commit()
+
+    assert family_service.is_family_admin(family.id, creator.id) is True
+    assert family_service.is_family_admin(family.id, member.id) is False
+
+
+def test_remove_member_success(session: Session, family_service: FamilyService):
+    from src.db.models import Transaction
+    family = Family(name="Removal Fam")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=3001, username="admin_u", full_name="Admin User", family_id=family.id, has_used_trial=True)
+    session.add(admin)
+    session.commit()
+
+    member = User(telegram_id=3002, username="member_u", full_name="Member User", family_id=family.id, has_used_trial=True)
+    session.add(member)
+    session.commit()
+
+    tx = Transaction(
+        family_id=family.id,
+        user_id=member.id,
+        amount="enc_amt",
+        concept="enc_cpt",
+        category="Groceries"
+    )
+    session.add(tx)
+    session.commit()
+
+    success, msg, removed_user, new_family = family_service.remove_member(
+        admin_user_id=admin.id,
+        target_identifier="@member_u"
+    )
+
+    assert success is True
+    assert removed_user.id == member.id
+    assert new_family is not None
+    assert new_family.id != family.id
+    assert new_family.plan_type == "free"
+
+    session.refresh(member)
+    assert member.family_id == new_family.id
+
+    session.refresh(tx)
+    assert tx.family_id == new_family.id
+
+
+def test_remove_member_non_admin_forbidden(session: Session, family_service: FamilyService):
+    family = Family(name="Forbidden Fam")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=4001, username="admin4", family_id=family.id)
+    session.add(admin)
+    session.commit()
+
+    member = User(telegram_id=4002, username="member4", family_id=family.id)
+    session.add(member)
+    session.commit()
+
+    # Member tries to remove admin
+    success, msg, _, _ = family_service.remove_member(
+        admin_user_id=member.id,
+        target_identifier="@admin4"
+    )
+    assert success is False
+    assert "only the family admin" in msg.lower()
+
+
+def test_remove_member_self_removal_prevented(session: Session, family_service: FamilyService):
+    family = Family(name="Self Fam")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=5001, username="admin5", family_id=family.id)
+    session.add(admin)
+    session.commit()
+
+    success, msg, _, _ = family_service.remove_member(
+        admin_user_id=admin.id,
+        target_identifier="@admin5"
+    )
+    assert success is False
+    assert "cannot remove yourself" in msg.lower()
+
+
+def test_leave_family_success(session: Session, family_service: FamilyService):
+    from src.db.models import Transaction
+    family = Family(name="Multi Fam")
+    session.add(family)
+    session.commit()
+
+    creator = User(telegram_id=6001, username="creator6", family_id=family.id, has_used_trial=True)
+    session.add(creator)
+    session.commit()
+
+    leaver = User(telegram_id=6002, username="leaver6", full_name="Leaver Six", family_id=family.id, has_used_trial=True)
+    session.add(leaver)
+    session.commit()
+
+    tx = Transaction(
+        family_id=family.id,
+        user_id=leaver.id,
+        amount="enc_amt",
+        concept="enc_cpt",
+        category="Dining"
+    )
+    session.add(tx)
+    session.commit()
+
+    success, msg, new_family = family_service.leave_family(user_id=leaver.id)
+
+    assert success is True
+    assert "left the family group" in msg.lower()
+    assert new_family is not None
+    assert new_family.id != family.id
+    assert new_family.plan_type == "free"
+
+    session.refresh(leaver)
+    assert leaver.family_id == new_family.id
+
+    session.refresh(tx)
+    assert tx.family_id == new_family.id
+
+
+def test_leave_family_solo_notice(session: Session, family_service: FamilyService):
+    family = Family(name="Solo Fam")
+    session.add(family)
+    session.commit()
+
+    user = User(telegram_id=7001, username="solo7", family_id=family.id)
+    session.add(user)
+    session.commit()
+
+    success, msg, res_family = family_service.leave_family(user_id=user.id)
+    assert success is False
+    assert "already in your own personal workspace" in msg.lower()
+

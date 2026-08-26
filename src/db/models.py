@@ -44,6 +44,7 @@ class User(SQLModel, table=True):
     username: Optional[str] = Field(default=None)
     full_name: Optional[str] = Field(default=None)
     family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
+    is_admin: bool = Field(default=False)
     has_used_trial: bool = Field(default=False)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

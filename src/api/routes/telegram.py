@@ -14,6 +14,24 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
 
+def _is_query_or_command(text: Optional[str]) -> bool:
+    if not text:
+        return False
+    t = text.strip().lower()
+    if t.startswith("/"):
+        return True
+    if "confirm delete" in t or "delete account" in t:
+        return True
+    if t.startswith(("export", "notion", "invite", "create family", "leave family", "remove member", "family info", "my family")):
+        return True
+    if t.startswith(("how", "what", "show", "tell", "list", "summary", "breakdown", "report", "chart", "compare")):
+        return True
+    if "how much" in t or "spending summary" in t or "cash flow" in t or "net balance" in t:
+        return True
+    if "undo" in t or "change" in t or "delete last" in t or "remove last" in t:
+        return True
+    return False
+
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
@@ -76,10 +94,22 @@ async def telegram_webhook(
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=msg)
             return {"status": "ok"}
 
+        trial_badge = ""
+        if family and family.plan_type == "trial":
+            trial_badge = "⭐️ <b>60-Day Family Pro Trial:</b> You are enjoying 60 days of unlimited logs and family features for free!\n\n"
+        elif family and family.plan_type == "free":
+            trial_badge = "📦 <b>Plan:</b> Free Plan (30 free transaction logs per month). Type /upgrade anytime for unlimited logs.\n\n"
+
         welcome_text = (
-            f"Welcome to {settings.PROJECT_NAME}, {from_user.get('first_name') or 'User'}!\n\n"
-            "Your account is ready. You can now log your first expense by simply typing it, "
-            "for example: '50 for lunch' or '100 for groceries'."
+            f"👋 <b>Welcome to {settings.PROJECT_NAME}, {from_user.get('first_name') or 'User'}!</b>\n\n"
+            f"{trial_badge}"
+            "Here is what you can do with Clanomy:\n"
+            "🎙️ <b>Voice & Text Logging:</b> Send voice notes or type expenses & income (e.g. <i>'Spent $45 on groceries'</i> or <i>'Got $3,500 salary'</i>).\n"
+            "💡 <b>Dual Income & Expense Tracking:</b> Automatically parses, categorizes, and updates your monthly cash flow.\n"
+            "💬 <b>Ask AI & Cash Flow Queries:</b> Ask questions like <i>'How much did we spend on food this month?'</i> or <i>'What\\'s our net savings?'</i>.\n"
+            "📊 <b>Notion Mirroring:</b> Real-time synchronization with your Notion database via /notion.\n"
+            "👨‍👩‍👧‍👦 <b>Family Sharing:</b> Share a unified household ledger using /invite and manage members with /family.\n\n"
+            "Go ahead and log your first transaction now, or ask a question!"
         )
         background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
         return {"status": "ok"}
@@ -92,8 +122,39 @@ async def telegram_webhook(
     if not text and not audio_file_id:
         return {"status": "ok"}
 
-    # Process expense log in background
     orchestrator = AIOrchestrator()
+
+    # Early fast-fail quota check (< 5ms) before downloading audio or invoking AI services
+    from src.services.subscription_service import can_log_transaction, check_and_reset_monthly_quota
+
+    # Lazy monthly reset: commit reset if month changed
+    if family and check_and_reset_monthly_quota(family):
+        session.add(family)
+        session.commit()
+
+    is_voice = bool(audio_file_id)
+    is_transaction_text = bool(text and not _is_query_or_command(text))
+
+    if family and (is_voice or is_transaction_text):
+        if not can_log_transaction(family):
+            family_service = FamilyService()
+            is_admin = family_service.is_family_admin(family.id, user.id)
+            if is_admin:
+                quota_msg = (
+                    "⛔ <b>Monthly Free Limit Reached (30/30 logs)</b>\n\n"
+                    "Your family has reached the limit of 30 free transaction logs for this month. "
+                    "Type /upgrade to unlock unlimited logs for your household."
+                )
+            else:
+                quota_msg = (
+                    "⛔ <b>Monthly Free Limit Reached (30/30 logs)</b>\n\n"
+                    "Your family has reached the limit of 30 free transaction logs for this month. "
+                    "Please ask your family admin to upgrade the workspace via /upgrade."
+                )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
+            return {"status": "ok"}
+
+    # Process expense log in background
     background_tasks.add_task(
         orchestrator.orchestrate,
         user_id=str(user.id),

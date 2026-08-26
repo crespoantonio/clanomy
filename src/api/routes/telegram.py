@@ -120,7 +120,7 @@ async def telegram_webhook(
             plan_type, payload_family_id = extract_plan_and_family_id(invoice_payload)
         except ValueError as e:
             logger.error(f"Invalid invoice payload in successful_payment: {e}")
-            return {"status": "ok"}
+            raise HTTPException(status_code=400, detail="Invalid invoice payload")
 
         target_family = family
         if payload_family_id:
@@ -129,7 +129,7 @@ async def telegram_webhook(
                 db_fam = session.get(Family, fam_uuid)
                 if db_fam:
                     target_family = db_fam
-            except Exception:
+            except ValueError:
                 pass
 
         if not target_family:
@@ -209,7 +209,7 @@ async def telegram_webhook(
                 db_fam = session.get(Family, fam_uuid)
                 if db_fam:
                     target_family = db_fam
-            except Exception:
+            except ValueError:
                 pass
 
         if target_family and target_family.plan_type != "lifetime_pro":
@@ -435,7 +435,8 @@ async def handle_failure(
         handle_payment_failure(session=session, family=family)
         
         users = session.exec(select(User).where(User.family_id == family.id)).all()
-        admin_user = next((u for u in users if u.is_admin), users[0] if users else None)
+        fam_service = FamilyService()
+        admin_user = next((u for u in users if fam_service.is_family_admin(family.id, u.id)), users[0] if users else None)
         if admin_user and admin_user.telegram_id:
             telegram_service = TelegramService()
             failure_msg = (

@@ -57,3 +57,8 @@
 
 ## Deferred from: code review of 7-4-payment-verification-webhook-handler (2026-08-26)
 - Local import in webhook function [src/api/routes/telegram.py] — Shoving imports inside function adds overhead, but it's a pre-existing architectural choice in the project.
+
+## Deferred from: code review of 7-5-trial-lifecycle-notifications-and-scheduler (2026-08-26)
+- Sequential Blocking Network Calls [src/services/notification_scheduler.py]
+- Plague of Inline Imports [src/api/routes/telegram.py]
+- Bizarre Secret Token Re-Use [src/api/routes/telegram.py]

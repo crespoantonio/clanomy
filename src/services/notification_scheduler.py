@@ -53,7 +53,7 @@ def get_day_60_trial_families(session: Session, now: Optional[datetime] = None) 
         Family.notified_day_60 == False,
         Family.trial_ends_at.is_not(None),
         Family.trial_ends_at <= current_time,
-        Family.plan_type.not_in(["solo_pro", "family_pro", "lifetime_pro"])
+        Family.plan_type.notin_(["solo_pro", "family_pro", "lifetime_pro"])
     )
     candidates = session.exec(statement).all()
 
@@ -66,16 +66,16 @@ def get_day_60_trial_families(session: Session, now: Optional[datetime] = None) 
 
     return results
 
-def format_day_50_message(family: Family, tx_count: int) -> str:
+def format_day_50_message(family: Family, tx_count: int, days_remaining: int) -> str:
     """
     Formats the Day 50 Nudge Message:
     - Summarizes value delivered (transactions tracked by family during the trial).
-    - Warns that the 60-day trial will finish in 10 days.
+    - Warns that the 60-day trial will finish in dynamically calculated days.
     - Presents available tiers (Family Pro 300 Stars/mo, Solo Pro 150 Stars/mo) and /upgrade CTA.
     """
     tx_label = "1 transaction" if tx_count == 1 else f"{tx_count} transactions"
     return (
-        "⏳ <b>Your 60-Day Clanomy Trial is Ending in 10 Days!</b>\n\n"
+        f"⏳ <b>Your 60-Day Clanomy Trial is Ending in {days_remaining} Days!</b>\n\n"
         f"During your trial, your workspace has tracked <b>{tx_label}</b> and kept your finances organized!\n\n"
         "To keep enjoying unlimited AI voice & text logging, real-time Notion sync, and multi-member collaboration without interruption, choose a plan:\n\n"
         "1️⃣ <b>Solo Pro (150 Stars / month)</b>\n"
@@ -119,15 +119,38 @@ async def process_day_50_notifications(
     service = telegram_service or TelegramService()
     candidates = get_day_50_trial_families(session, now=now)
     processed_count = 0
+    current_time = _to_utc(now or datetime.now(timezone.utc))
+
+    family_ids = [fam.id for fam in candidates]
+    if not family_ids:
+        return 0
+
+    # Batch query transactions
+    tx_counts = session.exec(
+        select(Transaction.family_id, func.count(Transaction.id))
+        .where(Transaction.family_id.in_(family_ids))
+        .group_by(Transaction.family_id)
+    ).all()
+    tx_count_map = {fid: count for fid, count in tx_counts}
+
+    # Batch query users
+    users_by_family = {}
+    all_users = session.exec(select(User).where(User.family_id.in_(family_ids))).all()
+    for user in all_users:
+        users_by_family.setdefault(user.family_id, []).append(user)
 
     for fam in candidates:
-        # Count transactions logged by this family
-        tx_count = session.exec(
-            select(func.count(Transaction.id)).where(Transaction.family_id == fam.id)
-        ).one() or 0
+        tx_count = tx_count_map.get(fam.id, 0)
+        
+        days_remaining = 10
+        if fam.trial_ends_at:
+            t_end = _to_utc(fam.trial_ends_at)
+            days_remaining = (t_end - current_time).days
+            if days_remaining < 0:
+                days_remaining = 0
 
-        msg = format_day_50_message(fam, tx_count)
-        users = session.exec(select(User).where(User.family_id == fam.id)).all()
+        msg = format_day_50_message(fam, tx_count, days_remaining)
+        users = users_by_family.get(fam.id, [])
 
         for user in users:
             if user.telegram_id:
@@ -138,10 +161,8 @@ async def process_day_50_notifications(
 
         fam.notified_day_50 = True
         session.add(fam)
-        processed_count += 1
-
-    if processed_count > 0:
         session.commit()
+        processed_count += 1
 
     return processed_count
 
@@ -158,9 +179,18 @@ async def process_day_60_notifications(
     candidates = get_day_60_trial_families(session, now=now)
     processed_count = 0
 
+    family_ids = [fam.id for fam in candidates]
+    if not family_ids:
+        return 0
+
+    users_by_family = {}
+    all_users = session.exec(select(User).where(User.family_id.in_(family_ids))).all()
+    for user in all_users:
+        users_by_family.setdefault(user.family_id, []).append(user)
+
     for fam in candidates:
         msg = format_day_60_message(fam)
-        users = session.exec(select(User).where(User.family_id == fam.id)).all()
+        users = users_by_family.get(fam.id, [])
 
         for user in users:
             if user.telegram_id:
@@ -170,16 +200,34 @@ async def process_day_60_notifications(
                     logger.error(f"Failed to send Day 60 notification to user {user.id} ({user.telegram_id}): {e}")
 
         fam.plan_type = "free"
-        fam.max_members = 1
+        fam.max_members = 5
         fam.subscription_status = "expired"
         fam.notified_day_60 = True
         session.add(fam)
+        session.commit()
         processed_count += 1
 
-    if processed_count > 0:
-        session.commit()
-
     return processed_count
+
+import json
+import os
+import tempfile
+
+def check_and_set_daily_run_lock() -> bool:
+    lock_file = os.path.join(tempfile.gettempdir(), "clanomy_daily_run.json")
+    now = datetime.now(timezone.utc).timestamp()
+    try:
+        if os.path.exists(lock_file):
+            with open(lock_file, "r") as f:
+                data = json.load(f)
+                if now - data.get("timestamp", 0) < 43200: # 12 hours
+                    return False
+        with open(lock_file, "w") as f:
+            json.dump({"timestamp": now}, f)
+        return True
+    except Exception as e:
+        logger.error(f"Lock check error: {e}")
+        return True
 
 async def run_daily_trial_notifications(
     session: Optional[Session] = None,
@@ -191,6 +239,11 @@ async def run_daily_trial_notifications(
     Runs the full daily trial notification job (both Day 50 and Day 60 checks).
     """
     logger.info("Running daily trial notification lifecycle check...")
+    
+    if not check_and_set_daily_run_lock():
+        logger.info("Daily job already ran recently, skipping.")
+        return {"day_50_processed": 0, "day_60_processed": 0}
+
     if session is not None:
         day_50_count = await process_day_50_notifications(session, telegram_service=telegram_service, now=now)
         day_60_count = await process_day_60_notifications(session, telegram_service=telegram_service, now=now)

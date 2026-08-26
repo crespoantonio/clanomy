@@ -1,5 +1,5 @@
-# generated: 2026-05-09
-# last_updated: 2026-08-26 16:38:00
+﻿# generated: 2026-05-09
+# last_updated: 2026-08-26 17:10:27
 # project: Clanomy
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-08-26 16:26:29
+last_updated: 2026-08-26 17:10:27
 project: Clanomy
 tracking_system: file-system
 story_location: { implementation_artifacts }
@@ -85,7 +85,7 @@ development_status:
   7-2-quota-gating-and-upgrade-prompt: done
   7-3-telegram-stars-invoice-generation: done
   7-4-payment-verification-webhook-handler: done
-  7-5-trial-lifecycle-notifications-and-scheduler: review
+  7-5-trial-lifecycle-notifications-and-scheduler: done
   epic-7-retrospective: optional
 
   epic-8: done

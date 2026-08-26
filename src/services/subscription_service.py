@@ -1,6 +1,7 @@
 import re
 from typing import Dict, Optional, Set, Tuple, Any
 from datetime import datetime, timezone, timedelta
+from dateutil.relativedelta import relativedelta
 from sqlmodel import Session
 from src.db.models import Family
 
@@ -163,7 +164,7 @@ def handle_successful_payment(
     if expiration_timestamp:
         family.current_period_end = datetime.fromtimestamp(expiration_timestamp, tz=timezone.utc)
     else:
-        family.current_period_end = current_time + timedelta(days=30)
+        family.current_period_end = current_time + relativedelta(months=1)
 
     if charge_id:
         family.telegram_payment_charge_id = charge_id
@@ -211,7 +212,7 @@ def handle_recurring_renewal(
         if base_time.tzinfo is None:
             base_time = base_time.replace(tzinfo=timezone.utc)
 
-        family.current_period_end = base_time + timedelta(days=30)
+        family.current_period_end = base_time + relativedelta(months=1)
 
     if charge_id:
         family.telegram_payment_charge_id = charge_id
@@ -244,7 +245,7 @@ def handle_subscription_expiry(session: Session, family: Family) -> Family:
 
     family.subscription_status = "expired"
     family.plan_type = "free"
-    family.max_members = 1
+    family.max_members = 5
     session.add(family)
     session.commit()
     session.refresh(family)

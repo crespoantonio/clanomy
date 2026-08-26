@@ -1,14 +1,14 @@
----
+﻿---
 story_id: "7.5"
 epic_id: "7"
 title: "Proactive Trial Lifecycle Notifications Scheduler (Day 50 & Day 60)"
-status: "review"
+status: "done"
 priority: "medium"
 ---
 
 # Story 7.5: Proactive Trial Lifecycle Notifications Scheduler (Day 50 & Day 60)
 
-Status: review
+Status: done
 
 ## User Story
 
@@ -74,14 +74,32 @@ So that I understand my transition to the Free tier, know that my past data is s
 4. Run all unit and integration tests to verify 100% success and execute container build verification.
 
 ### Completion Notes
-- ✅ Implemented `NotificationScheduler` and `run_daily_trial_notifications` in `src/services/notification_scheduler.py`.
-- ✅ Implemented Day 50 trial nudge query, transaction value summary formatter, Telegram dispatch to family members, and `notified_day_50` DB update.
-- ✅ Implemented Day 60 trial transition query, Free tier migration (`plan_type = "free"`, `max_members = 1`, `subscription_status = "expired"`), 100% data safety reassurance formatter, Telegram dispatch, and `notified_day_60` DB update.
-- ✅ Protected paid plans (`solo_pro`, `family_pro`, `lifetime_pro`) against Day 60 downgrades.
-- ✅ Connected background scheduler startup and graceful cancellation in FastAPI `lifespan` in `src/main.py`.
-- ✅ Added comprehensive unit and integration tests in `tests/services/test_notification_scheduler.py`.
-- ✅ Ran full regression test suite with 255/255 passing tests (100% pass rate).
-- ✅ Validated container build with `podman build -t clanomy .`.
+- âœ… Implemented `NotificationScheduler` and `run_daily_trial_notifications` in `src/services/notification_scheduler.py`.
+- âœ… Implemented Day 50 trial nudge query, transaction value summary formatter, Telegram dispatch to family members, and `notified_day_50` DB update.
+- âœ… Implemented Day 60 trial transition query, Free tier migration (`plan_type = "free"`, `max_members = 1`, `subscription_status = "expired"`), 100% data safety reassurance formatter, Telegram dispatch, and `notified_day_60` DB update.
+- âœ… Protected paid plans (`solo_pro`, `family_pro`, `lifetime_pro`) against Day 60 downgrades.
+- âœ… Connected background scheduler startup and graceful cancellation in FastAPI `lifespan` in `src/main.py`.
+- âœ… Added comprehensive unit and integration tests in `tests/services/test_notification_scheduler.py`.
+- âœ… Ran full regression test suite with 255/255 passing tests (100% pass rate).
+- âœ… Validated container build with `podman build -t clanomy .`.
 
 ## Change Log
 - **2026-08-26**: Implemented proactive trial lifecycle notification scheduler (Day 50 nudge & Day 60 Free tier transition), message formatters, FastAPI lifespan integration, and full test suite coverage (255/255 tests passing).
+
+### Review Findings
+
+- [x] [Review][Decision] Multi-Worker Notification Spam â€” Global scheduler in memory means multiple workers will spawn multiple schedulers, causing duplicate notifications.
+- [x] [Review][Patch] Inconsistent Tier Limits (max_members = 1 vs 5) [src/services/notification_scheduler.py]
+- [x] [Review][Patch] Invalid Database Query Method (.not_in() instead of .notin_()) [src/services/notification_scheduler.py]
+- [x] [Review][Patch] Missing Batch Commits (Non-Idempotent Notifications) [src/services/notification_scheduler.py]
+- [x] [Review][Patch] Catastrophic N+1 Queries in Background Task [src/services/notification_scheduler.py]
+- [x] [Review][Patch] Factually Incorrect Notifications ("Ending in 10 Days!" hardcoded) [src/services/notification_scheduler.py]
+- [x] [Review][Patch] Dangerous Bare Exception Swallowing (except Exception: pass) [src/api/routes/telegram.py]
+- [x] [Review][Patch] Silent Theft on Bad Payloads (Unfixed) [src/api/routes/telegram.py]
+- [x] [Review][Patch] Hardcoded Expiration Drifting [src/services/subscription_service.py]
+- [x] [Review][Patch] AttributeError in failure webhook (User model lacks is_admin attribute) [src/api/routes/telegram.py]
+- [x] [Review][Defer] Sequential Blocking Network Calls [src/services/notification_scheduler.py] â€” deferred, pre-existing
+- [x] [Review][Defer] Plague of Inline Imports [src/api/routes/telegram.py] â€” deferred, pre-existing
+- [x] [Review][Defer] Bizarre Secret Token Re-Use [src/api/routes/telegram.py] â€” deferred, pre-existing
+
+

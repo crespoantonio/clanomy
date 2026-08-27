@@ -23,6 +23,22 @@ from src.services.notion_service import NotionService
 
 logger = logging.getLogger(__name__)
 
+def create_logged_task(coro, *, name: Optional[str] = None) -> asyncio.Task:
+    """
+    Creates an asyncio task with an attached done callback to log any unhandled exceptions.
+    Prevents silent failure of fire-and-forget background coroutines.
+    """
+    task = asyncio.create_task(coro, name=name)
+    def _handle_task_result(t: asyncio.Task):
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc:
+            task_name = t.get_name() or "unnamed_task"
+            logger.error(f"Unhandled exception in background task '{task_name}': {exc}", exc_info=exc)
+    task.add_done_callback(_handle_task_result)
+    return task
+
 def _format_currency(amount: float, currency: str = "USD", show_sign: bool = False) -> str:
     symbols = {
         "USD": "$",
@@ -236,7 +252,7 @@ class AIOrchestrator:
 
         if notion_page_id:
             try:
-                asyncio.create_task(self._safe_archive_notion_page(family_id, notion_page_id))
+                create_logged_task(self._safe_archive_notion_page(family_id, notion_page_id), name="archive_notion_page")
             except Exception as e:
                 logger.warning(f"Could not dispatch Notion archive task: {e}")
 
@@ -304,7 +320,7 @@ class AIOrchestrator:
         if notion_page_id:
             try:
                 user_info = self._get_user_info(user_uuid)
-                asyncio.create_task(self._safe_update_notion_page(
+                create_logged_task(self._safe_update_notion_page(
                     family_id=family_id,
                     page_id=notion_page_id,
                     amount=new_amt,
@@ -314,7 +330,7 @@ class AIOrchestrator:
                     timestamp=tx_time,
                     user_name=user_info.get("display_name"),
                     tx_type=new_type
-                ))
+                ), name="update_notion_page")
             except Exception as e:
                 logger.warning(f"Could not dispatch Notion update task: {e}")
 
@@ -516,11 +532,12 @@ class AIOrchestrator:
                         success, msg, removed_user, _ = await asyncio.to_thread(family_service.remove_member, user_uuid, target)
                         if success and removed_user and removed_user.telegram_id:
                             telegram_service = TelegramService()
-                            asyncio.create_task(
+                            create_logged_task(
                                 telegram_service.send_message(
                                     chat_id=removed_user.telegram_id,
                                     text="ℹ️ You have been removed from the family workspace by the admin. A new personal workspace has been created for you with all your personal transaction history intact."
-                                )
+                                ),
+                                name="notify_removed_member"
                             )
                         response_text = msg
                     elif parsed_query and parsed_query.intent in ["spending_summary", "query_spending", "income_summary", "query_income", "earnings_summary", "net_cash_flow", "net_balance", "cash_flow_summary"]:
@@ -637,7 +654,7 @@ class AIOrchestrator:
                                     # Auto-delete message containing the secret token for security
                                     if message_id:
                                         ts = TelegramService()
-                                        asyncio.create_task(ts.delete_message(chat_id, message_id))
+                                        create_logged_task(ts.delete_message(chat_id, message_id), name="delete_secret_token_message")
 
                                     is_valid = await notion_service.validate_token(token)
                                     if not is_valid:
@@ -808,7 +825,7 @@ class AIOrchestrator:
 
                             # Trigger background notion mirroring safely without affecting transaction response
                             try:
-                                asyncio.create_task(self._safe_mirror_to_notion(
+                                create_logged_task(self._safe_mirror_to_notion(
                                     family_id=family_id,
                                     amount=result.amount,
                                     currency=result.currency,
@@ -818,7 +835,7 @@ class AIOrchestrator:
                                     user_name=user_info["display_name"],
                                     transaction_id=tx_id,
                                     tx_type=result.type
-                                ))
+                                ), name="mirror_to_notion")
                             except Exception as mirror_err:
                                 logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")
                         except Exception as e:

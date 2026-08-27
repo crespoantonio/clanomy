@@ -1,10 +1,13 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Response, status
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db, run_migrations
 from src.core.config import settings
 from src.core.http_client import HTTPClientManager
 from src.api.routes.telegram import router as telegram_router
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -12,8 +15,8 @@ async def lifespan(app: FastAPI):
     try:
         run_migrations()
     except Exception as e:
-        print(f"CRITICAL: Database initialization/migration failed: {e}")
-        # In a real production app, we might want to retry or exit
+        logger.critical(f"Database initialization/migration failed: {e}", exc_info=True)
+        raise RuntimeError(f"Startup aborted: database migration failed: {e}") from e
         
     # Initialize HTTP client pool
     HTTPClientManager().init()
@@ -23,7 +26,7 @@ async def lifespan(app: FastAPI):
     try:
         start_notification_scheduler()
     except Exception as e:
-        print(f"WARNING: Failed to start notification scheduler: {e}")
+        logger.warning(f"Failed to start notification scheduler: {e}", exc_info=True)
 
     yield
     
@@ -31,7 +34,7 @@ async def lifespan(app: FastAPI):
     try:
         await stop_notification_scheduler()
     except Exception as e:
-        print(f"WARNING: Error stopping notification scheduler: {e}")
+        logger.warning(f"Error stopping notification scheduler: {e}", exc_info=True)
 
     # Close HTTP client pool
     await HTTPClientManager().close()
@@ -46,7 +49,7 @@ async def root():
     return {"message": f"Welcome to {settings.PROJECT_NAME}"}
 
 @app.get("/health")
-async def health_check(session: Session = Depends(get_session)):
+async def health_check(response: Response, session: Session = Depends(get_session)):
     try:
         # Check database connectivity
         session.exec(text("SELECT 1")).one()
@@ -55,7 +58,9 @@ async def health_check(session: Session = Depends(get_session)):
             "database": "connected",
             "project": settings.PROJECT_NAME
         }
-    except Exception:
+    except Exception as e:
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {
             "status": "unhealthy",
             "database": "disconnected",

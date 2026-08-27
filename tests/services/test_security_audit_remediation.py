@@ -155,19 +155,68 @@ async def test_export_service_format_whitelist():
 
 
 def test_telegram_webhook_rate_limiting():
-    from src.api.routes.telegram import _user_last_msg
+    from src.api.routes.telegram import BoundedCooldownStore
     import time
-    from src.core.config import settings
 
+    store = BoundedCooldownStore(max_entries=3)
     chat_id = 999999
-    # Simulate a message at current time
-    _user_last_msg[chat_id] = time.time()
 
-    # If settings.USER_COOLDOWN_SECONDS is enabled, rapid messages are throttled
-    original = settings.USER_COOLDOWN_SECONDS
-    try:
-        settings.USER_COOLDOWN_SECONDS = 1.0
-        now = time.time()
-        assert (now - _user_last_msg[chat_id]) < settings.USER_COOLDOWN_SECONDS
-    finally:
-        settings.USER_COOLDOWN_SECONDS = original
+    # First request should not be throttled
+    assert store.is_throttled(chat_id, cooldown_seconds=1.0) is False
+
+    # Immediate second request should be throttled
+    assert store.is_throttled(chat_id, cooldown_seconds=1.0) is True
+
+    # After cooldown elapsed
+    time.sleep(1.05)
+    assert store.is_throttled(chat_id, cooldown_seconds=1.0) is False
+
+    # Test LRU eviction when capacity is exceeded
+    store.is_throttled(1, cooldown_seconds=10.0)
+    store.is_throttled(2, cooldown_seconds=10.0)
+    store.is_throttled(3, cooldown_seconds=10.0)
+    store.is_throttled(4, cooldown_seconds=10.0)  # Evicts 1
+
+    assert len(store.store) <= 3
+    assert 1 not in store.store
+
+
+@pytest.mark.anyio
+async def test_health_check_returns_503_on_db_failure():
+    from fastapi import Response
+    from src.main import health_check
+    
+    mock_session = MagicMock()
+    mock_session.exec.side_effect = Exception("Database connection lost")
+    response = Response()
+
+    result = await health_check(response=response, session=mock_session)
+    assert response.status_code == 503
+    assert result["status"] == "unhealthy"
+    assert result["database"] == "disconnected"
+
+
+def test_required_secrets_in_settings():
+    from pydantic import ValidationError
+    from src.core.config import Settings
+    
+    # Missing required ENCRYPTION_KEY, TELEGRAM_BOT_TOKEN, or MESSAGING_WEBHOOK_SECRET should raise
+    with pytest.raises(ValidationError):
+        Settings(
+            DATABASE_URL="sqlite:///test.db",
+            # missing ENCRYPTION_KEY, TELEGRAM_BOT_TOKEN, MESSAGING_WEBHOOK_SECRET
+        )
+
+
+@pytest.mark.anyio
+async def test_create_logged_task_handles_exception():
+    from src.services.ai_orchestrator import create_logged_task
+    
+    async def faulty_coro():
+        raise ValueError("Simulated background error")
+    
+    task = create_logged_task(faulty_coro(), name="test_faulty_task")
+    await asyncio.sleep(0.05)
+    assert task.done()
+    assert isinstance(task.exception(), ValueError)
+

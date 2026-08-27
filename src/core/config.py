@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     
     # Security
     ENCRYPTION_KEY: str
-    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_BOT_TOKEN: str
     TELEGRAM_BOT_USERNAME: Optional[str] = None
-    MESSAGING_WEBHOOK_SECRET: str = ""
+    MESSAGING_WEBHOOK_SECRET: str
     USER_COOLDOWN_SECONDS: float = 0.5
     ALLOWED_TELEGRAM_USERS: str = ""  # Comma-separated list of allowed Telegram usernames or IDs (empty = open to all)
     MAX_VOICE_DURATION_SECONDS: int = 60  # Maximum allowable voice note duration in seconds before fast-fail rejection

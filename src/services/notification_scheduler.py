@@ -210,26 +210,6 @@ async def process_day_60_notifications(
 
     return processed_count
 
-import json
-import os
-import tempfile
-
-def check_and_set_daily_run_lock() -> bool:
-    lock_file = os.path.join(tempfile.gettempdir(), "clanomy_daily_run.json")
-    now = datetime.now(timezone.utc).timestamp()
-    try:
-        if os.path.exists(lock_file):
-            with open(lock_file, "r") as f:
-                data = json.load(f)
-                if now - data.get("timestamp", 0) < 43200: # 12 hours
-                    return False
-        with open(lock_file, "w") as f:
-            json.dump({"timestamp": now}, f)
-        return True
-    except Exception as e:
-        logger.error(f"Lock check error: {e}")
-        return True
-
 async def run_daily_trial_notifications(
     session: Optional[Session] = None,
     engine: Optional[Engine] = None,
@@ -239,16 +219,13 @@ async def run_daily_trial_notifications(
 ) -> Dict[str, int]:
     """
     Runs the full daily trial notification job (both Day 50 and Day 60 checks).
+    Database flags (notified_day_50, notified_day_60) guarantee idempotency.
     """
     if not settings.ENABLE_SUBSCRIPTIONS:
         logger.debug("ENABLE_SUBSCRIPTIONS is disabled (Self-Hosted mode). Skipping trial notifications.")
         return {"day_50_processed": 0, "day_60_processed": 0}
 
     logger.info("Running daily trial notification lifecycle check...")
-    
-    if not ignore_lock and not check_and_set_daily_run_lock():
-        logger.info("Daily job already ran recently, skipping.")
-        return {"day_50_processed": 0, "day_60_processed": 0}
 
     if session is not None:
         day_50_count = await process_day_50_notifications(session, telegram_service=telegram_service, now=now)

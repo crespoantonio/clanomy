@@ -121,6 +121,7 @@ def reset_singletons():
 def app_client(monkeypatch):
     # Set the webhook secret to a known value
     monkeypatch.setattr(settings, "MESSAGING_WEBHOOK_SECRET", "valid-secret")
+    monkeypatch.setattr("src.main.run_migrations", lambda: None)
     # For tests, we use TestClient
     with TestClient(app) as c:
         yield c

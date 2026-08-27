@@ -58,7 +58,16 @@ For full, step-by-step guides on deploying Clanomy to production or home lab env
 
 ## 🛠 Testing & Development
 
-Run the automated test suite inside the container environment:
+Install development and testing dependencies:
+```bash
+pip install -r requirements-dev.txt
+```
+
+Run the automated test suite:
+```bash
+pytest
+```
+Or inside the container environment:
 ```bash
 podman compose exec app pytest
 ```

@@ -7,6 +7,7 @@ import logging
 from sqlmodel import Session, select
 
 from src.core.config import settings
+from src.core.security import verify_messaging_secret
 from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
@@ -19,12 +20,30 @@ from src.services.subscription_service import (
 )
 from src.db.session import get_session
 from src.db.models import User, Family, Transaction
+from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
 
-_user_last_msg: Dict[int, float] = {}
+class BoundedCooldownStore:
+    def __init__(self, max_entries: int = 10000):
+        self.store: OrderedDict[int, float] = OrderedDict()
+        self.max_entries = max_entries
+
+    def is_throttled(self, chat_id: int, cooldown_seconds: float) -> bool:
+        if cooldown_seconds <= 0:
+            return False
+        now = time.time()
+        last_time = self.store.get(chat_id, 0.0)
+        if (now - last_time) < cooldown_seconds:
+            return True
+        self.store[chat_id] = now
+        if len(self.store) > self.max_entries:
+            self.store.popitem(last=False)
+        return False
+
+_cooldown_store = BoundedCooldownStore()
 
 def _is_query_or_command(text: Optional[str]) -> bool:
     if not text:
@@ -52,7 +71,7 @@ async def telegram_webhook(
     session: Session = Depends(get_session)
 ):
     # Verify the secret token from Telegram
-    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+    if not verify_messaging_secret(x_telegram_bot_api_secret_token):
         logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
@@ -103,13 +122,9 @@ async def telegram_webhook(
         return {"status": "ok"}
 
     # Per-user cooldown check to prevent spam / DoS
-    if settings.USER_COOLDOWN_SECONDS > 0:
-        now = time.time()
-        last_time = _user_last_msg.get(chat_id, 0.0)
-        if (now - last_time) < settings.USER_COOLDOWN_SECONDS:
-            logger.warning(f"Throttling rapid messages from chat_id {chat_id}")
-            return {"status": "ok"}
-        _user_last_msg[chat_id] = now
+    if _cooldown_store.is_throttled(chat_id, settings.USER_COOLDOWN_SECONDS):
+        logger.warning(f"Throttling rapid messages from chat_id {chat_id}")
+        return {"status": "ok"}
 
     # Access control: If ALLOWED_TELEGRAM_USERS is configured (e.g. self-hosted privacy hardening),
     # restrict access only to listed usernames or user IDs.
@@ -443,7 +458,8 @@ class LifecyclePayload(BaseModel):
 
 @router.post("/webhook/renewal")
 async def handle_renewal(payload: LifecyclePayload, session: Session = Depends(get_session), x_telegram_bot_api_secret_token: Optional[str] = Header(None)):
-    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+    if not verify_messaging_secret(x_telegram_bot_api_secret_token):
+        logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
     from src.services.subscription_service import handle_recurring_renewal
     from src.db.models import Family
@@ -465,7 +481,8 @@ async def handle_renewal(payload: LifecyclePayload, session: Session = Depends(g
 
 @router.post("/webhook/cancellation")
 async def handle_cancellation(payload: LifecyclePayload, session: Session = Depends(get_session), x_telegram_bot_api_secret_token: Optional[str] = Header(None)):
-    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+    if not verify_messaging_secret(x_telegram_bot_api_secret_token):
+        logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
     from src.services.subscription_service import handle_subscription_cancellation
     from src.db.models import Family
@@ -487,7 +504,8 @@ async def handle_failure(
     session: Session = Depends(get_session), 
     x_telegram_bot_api_secret_token: Optional[str] = Header(None)
 ):
-    if not x_telegram_bot_api_secret_token or x_telegram_bot_api_secret_token != settings.MESSAGING_WEBHOOK_SECRET:
+    if not verify_messaging_secret(x_telegram_bot_api_secret_token):
+        logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
     try:

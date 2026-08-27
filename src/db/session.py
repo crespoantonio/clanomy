@@ -20,18 +20,17 @@ def run_migrations():
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
         alembic_ini_path = os.path.join(base_dir, "alembic.ini")
         
-        if os.path.exists(alembic_ini_path):
-            alembic_cfg = Config(alembic_ini_path)
-            alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
-            logger.info("Running Alembic database migrations (upgrade head)...")
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Alembic database migrations completed successfully.")
-        else:
-            logger.warning("alembic.ini not found, falling back to SQLModel create_all")
-            init_db()
+        if not os.path.exists(alembic_ini_path):
+            raise FileNotFoundError(f"alembic.ini not found at {alembic_ini_path}")
+            
+        alembic_cfg = Config(alembic_ini_path)
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        logger.info("Running Alembic database migrations (upgrade head)...")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic database migrations completed successfully.")
     except Exception as e:
-        logger.warning(f"Alembic migration runner notice: {e}. Ensuring tables exist via create_all.")
-        init_db()
+        logger.critical(f"Alembic database migration failed: {e}", exc_info=True)
+        raise
 
 def init_db():
     # Create all tables defined in models.py (fallback / test suites)

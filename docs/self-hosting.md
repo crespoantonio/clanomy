@@ -132,9 +132,12 @@ To prevent unauthorized users from using your GPU/CPU compute, AI inference, or 
 ---
 
 ## 🔒 Security Best Practices
-- **Never expose your PostgreSQL database to the internet.** Ensure port `5432` is firewalled or bound only to localhost.
+- **Strict Environment Enforcement**: `ENCRYPTION_KEY`, `TELEGRAM_BOT_TOKEN`, and `MESSAGING_WEBHOOK_SECRET` are strictly required with no insecure fallback defaults. The container fails fast at startup if any variable is missing.
+- **Never expose your PostgreSQL database to the internet.** Ensure port `5432` is firewalled or bound only to localhost/container network.
 - **Keep your `ENCRYPTION_KEY` safe.** If you lose this key, your transaction amounts and concepts will be permanently unreadable, even to you. Back it up securely.
 - **Set `ALLOWED_TELEGRAM_USERS`** to prevent strangers from triggering local Whisper/Ollama inference.
 - **Tune `MAX_VOICE_DURATION_SECONDS` and `MAX_TEXT_LENGTH`** based on your server capacity and user habits.
+- **Health Probes**: The `/health` endpoint returns `200 OK` when healthy and `503 Service Unavailable` if the database connection fails, allowing reverse proxies and container orchestrators to route traffic safely.
+- **Cloudflare Edge Defense**: When self-hosting on a public IP, place Cloudflare in front with **Full (Strict)** SSL and WAF rules to drop non-Telegram scanner bots before they reach your server.
 
 Enjoy true zero-friction, privacy-first financial tracking! 💸🤖

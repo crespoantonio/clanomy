@@ -23,8 +23,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
+# Create non-root system user and adjust permissions
+RUN groupadd -r clanomy && useradd -r -g clanomy -d /app -s /sbin/nologin clanomy \
+    && chown -R clanomy:clanomy /app
+
+# Switch to non-root user
+USER clanomy
+
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Command to run the application (production default without --reload)
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+

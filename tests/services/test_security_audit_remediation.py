@@ -196,15 +196,19 @@ async def test_health_check_returns_503_on_db_failure():
     assert result["database"] == "disconnected"
 
 
-def test_required_secrets_in_settings():
+def test_required_secrets_in_settings(monkeypatch):
     from pydantic import ValidationError
     from src.core.config import Settings
     
-    # Missing required ENCRYPTION_KEY, TELEGRAM_BOT_TOKEN, or MESSAGING_WEBHOOK_SECRET should raise
+    # Clear environment variables to test missing required secrets
+    monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("MESSAGING_WEBHOOK_SECRET", raising=False)
+
     with pytest.raises(ValidationError):
         Settings(
+            _env_file=None,
             DATABASE_URL="sqlite:///test.db",
-            # missing ENCRYPTION_KEY, TELEGRAM_BOT_TOKEN, MESSAGING_WEBHOOK_SECRET
         )
 
 

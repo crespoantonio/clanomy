@@ -28,13 +28,17 @@ def create_logged_task(coro, *, name: Optional[str] = None) -> asyncio.Task:
     Creates an asyncio task with an attached done callback to log any unhandled exceptions.
     Prevents silent failure of fire-and-forget background coroutines.
     """
-    task = asyncio.create_task(coro, name=name)
+    try:
+        task = asyncio.create_task(coro, name=name) if name else asyncio.create_task(coro)
+    except TypeError:
+        task = asyncio.create_task(coro)
+
     def _handle_task_result(t: asyncio.Task):
         if t.cancelled():
             return
         exc = t.exception()
         if exc:
-            task_name = t.get_name() or "unnamed_task"
+            task_name = getattr(t, "get_name", lambda: "unnamed_task")()
             logger.error(f"Unhandled exception in background task '{task_name}': {exc}", exc_info=exc)
     task.add_done_callback(_handle_task_result)
     return task

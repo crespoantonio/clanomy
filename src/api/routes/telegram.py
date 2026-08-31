@@ -346,12 +346,14 @@ async def telegram_webhook(
             welcome_text = (
                 f"👋 <b>Welcome to {settings.PROJECT_NAME}, {user_display_name}!</b>\n\n"
                 f"{plan_badge}"
-                "Ready to track your finances effortlessly?\n"
-                "💡 <b>Try sending me something right now:</b>\n"
-                "• 🎙️ <i>Send a voice note:</i> \"Coffee 4 dollars\"\n"
-                "• 💬 <i>Type an expense:</i> \"Spent $45 on groceries\"\n"
-                "• 💰 <i>Type an income:</i> \"Got paid $3,000 salary\"\n"
-                "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
+                "💡 <b>Quick Setup:</b>\n"
+                "Set your household default currency so Clanomy knows what currency to use when you log amounts without a currency (e.g. <i>\"500 on dinner\"</i> or <i>\"pesos\"</i>):\n"
+                "👉 Reply with <code>/currency USD</code>, <code>/currency ARS</code>, <code>/currency MXN</code>, <code>/currency EUR</code>, etc.\n\n"
+                "<b>Try sending me something right now:</b>\n"
+                "• 🎙️ <i>Send a voice note:</i> \"Coffee 4\"\n"
+                "• 💬 <i>Type an expense:</i> \"Spent 45 on groceries\"\n"
+                "• 💰 <i>Type an income:</i> \"Got paid 3,000 salary\"\n"
+                "• 📊 <i>Ask a question:</i> \"¿Cuáles fueron mis gastos de los últimos 15 días?\"\n\n"
                 "Type /help anytime to explore all commands & Notion sync."
             )
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
@@ -452,6 +454,7 @@ async def telegram_webhook(
                 "• \"Show breakdown for food & drinks\"\n"
                 "• \"What's our net savings this month?\"\n\n"
                 "<b>⚙️ Management Commands:</b>\n"
+                "• /currency - View or update household default currency (e.g. /currency ARS)\n"
                 "• /upgrade - View Pro plans & upgrade with Telegram Stars\n"
                 "• /family - View family workspace and members\n"
                 "• /invite - Generate invite link for household members\n"

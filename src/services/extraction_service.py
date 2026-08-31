@@ -121,7 +121,7 @@ class ExtractionService:
             self.model = settings.OLLAMA_MODEL
             self._initialized = True
 
-    def _fallback_regex_extract(self, text: str) -> ExtractionResult:
+    def _fallback_regex_extract(self, text: str, default_currency: Optional[str] = None) -> ExtractionResult:
         """Attempt to extract amount, type, category, and concept via regex and keyword heuristics as a last resort."""
         # Look for numbers (e.g. 15.50 or $15) with robust regex
         amount_match = re.search(r'\b(\d+(?:[.,]\d{1,2})?)\b', text.replace(',', ''))
@@ -133,8 +133,8 @@ class ExtractionService:
         
         amount = float(amount_match.group(1).replace(',', ''))
         
-        default_curr = (settings.DEFAULT_CURRENCY or "USD").upper()
-        currency = default_curr
+        effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
+        currency = effective_default_currency
         text_lower = text.lower()
         if re.search(r'\beuro?s?\b|€', text_lower):
             currency = "EUR"
@@ -148,7 +148,7 @@ class ExtractionService:
             currency = "CLP"
         elif re.search(r'\bpesos?\s+colombian[oa]s?\b|\bcop\b', text_lower):
             currency = "COP"
-        elif re.search(r'\bd[oó]lar(?:es)?\b|\busd\b|\$', text_lower):
+        elif re.search(r'\bd[oó]lar(?:es)?\b|\busd\b', text_lower) or ('$' in text_lower and effective_default_currency == "USD"):
             currency = "USD"
             
         # Classify intent (income vs expense)
@@ -256,18 +256,18 @@ class ExtractionService:
                 raise ExtractionError("Received empty response from Ollama")
             return content
 
-    async def extract(self, text: str, reference_time: Optional[datetime] = None) -> ExtractionResult:
+    async def extract(self, text: str, reference_time: Optional[datetime] = None, default_currency: Optional[str] = None) -> ExtractionResult:
         if not text or not text.strip():
             raise ValueError("Input text is empty or contains only whitespace")
 
         ref = reference_time or datetime.now(timezone.utc)
         current_date_str = ref.strftime("%Y-%m-%d %H:%M:%S UTC")
-        default_currency = (settings.DEFAULT_CURRENCY or "USD").upper()
+        effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
 
         system_prompt = f'''You are an expert bilingual (English & Spanish) financial data extraction parser.
 Your job is to extract transaction details from unstructured natural language text and return them in structured JSON format.
 
-Default Workspace Currency: {default_currency}
+Default Workspace Currency: {effective_default_currency}
 
 RULES:
 1. Determine the transaction 'type':
@@ -290,7 +290,7 @@ RULES:
    - "pesos chilenos", "clp" -> "CLP"
    - "pesos colombianos", "cop" -> "COP"
    - "reales", "brl" -> "BRL"
-   - CRITICAL DEFAULTING RULE: If the user says a generic ambiguous word like "pesos", "bucks", "mangos", "lucas" without specifying a country (e.g., "gasté 500 pesos en helado"), or if no currency is mentioned at all, you MUST set 'currency' to "{default_currency}".
+   - CRITICAL DEFAULTING RULE: If the user says a generic ambiguous word like "pesos", "bucks", "mangos", "lucas" without specifying a country (e.g., "gasté 500 pesos en helado"), or if no currency is mentioned at all, you MUST set 'currency' to "{effective_default_currency}".
 6. Extract 'transaction_date' as an ISO format YYYY-MM-DD string:
    - Current Date: {current_date_str}
    - If a relative date is specified like "yesterday", "ayer", "last Monday", "el lunes pasado", "3 days ago", "hace 3 días", compute the specific date based on Current Date.
@@ -318,11 +318,11 @@ Return ONLY the JSON matching the provided schema. Do not include any markdown f
                 return result
             except ValidationError as ve:
                 logger.warning(f"Pydantic validation failed on LLM output: {ve}. Attempting fallback regex parser.")
-                return self._fallback_regex_extract(text)
+                return self._fallback_regex_extract(text, default_currency=effective_default_currency)
                 
         except (ollama.ResponseError, ollama.RequestError, httpx.HTTPError, asyncio.TimeoutError, ConnectionError, OSError) as e:
             logger.error(f"AI engine connection/API error after retries: {e}. Attempting fallback regex parser.")
-            return self._fallback_regex_extract(text)
+            return self._fallback_regex_extract(text, default_currency=effective_default_currency)
         except Exception as e:
             logger.error(f"Extraction error: {e}")
             if isinstance(e, ExtractionError):

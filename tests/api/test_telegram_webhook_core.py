@@ -719,6 +719,50 @@ def test_webhook_rejects_excessive_voice_duration(app_client, mock_telegram, tel
     assert "Voice Note Too Long" in alert_msg
     assert "60 seconds" in alert_msg
 
+def test_webhook_currency_command_get_and_set(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook processes /currency to view and /currency ARS to update default currency."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=9805),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # 1. Check current currency
+    payload_get = telegram_payload_factory(text="/currency", user_id=9805)
+    resp = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload_get,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert resp.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Household Default Currency" in mock_telegram.messages[0]["text"]
+    assert "USD" in mock_telegram.messages[0]["text"]
+    mock_telegram.messages.clear()
+
+    # 2. Update currency to ARS
+    payload_set = telegram_payload_factory(text="/currency ARS", user_id=9805)
+    resp = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload_set,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert resp.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Default Currency Updated to ARS" in mock_telegram.messages[0]["text"]
+    mock_telegram.messages.clear()
+
+    # 3. Check currency again
+    resp = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload_get,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert resp.status_code == 200
+    assert "ARS" in mock_telegram.messages[0]["text"]
+
+
 
 
 

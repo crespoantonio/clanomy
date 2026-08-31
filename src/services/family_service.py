@@ -436,3 +436,58 @@ class FamilyService:
             logger.error(f"Failed to leave family for user_id={user_id}: {e}")
             return False, f"An error occurred while leaving the family: {e}", None
 
+    def get_family_default_currency(self, family_id: UUID) -> str:
+        """
+        Fetches the default currency for a family workspace.
+        Defaults to settings.DEFAULT_CURRENCY or USD if unset.
+        """
+        if not family_id:
+            return (settings.DEFAULT_CURRENCY or "USD").upper()
+        try:
+            with Session(self.engine) as session:
+                fam_uuid = family_id if isinstance(family_id, UUID) else UUID(str(family_id))
+                family = session.get(Family, fam_uuid)
+                if family and getattr(family, "default_currency", None):
+                    return family.default_currency.upper()
+        except Exception:
+            pass
+        return (settings.DEFAULT_CURRENCY or "USD").upper()
+
+    def set_family_default_currency(self, family_id: UUID, currency: str) -> str:
+        """
+        Updates the default currency for a family workspace.
+        Validates that currency is a valid 3-letter alphabetic ISO 4217 code or mapped alias.
+        """
+        start_time = time.time()
+        mapping = {
+            "dollar": "USD", "dollars": "USD", "usd": "USD", "$": "USD", "dolar": "USD", "dolares": "USD", "dólar": "USD", "dólares": "USD",
+            "euro": "EUR", "euros": "EUR", "eur": "EUR", "€": "EUR",
+            "pound": "GBP", "pounds": "GBP", "gbp": "GBP", "£": "GBP", "libra": "GBP", "libras": "GBP",
+            "peso mexicano": "MXN", "pesos mexicanos": "MXN", "pesos mexicanas": "MXN", "mxn": "MXN",
+            "peso argentino": "ARS", "pesos argentinos": "ARS", "pesos argentinas": "ARS", "ars": "ARS",
+            "peso chileno": "CLP", "pesos chilenos": "CLP", "pesos chilenas": "CLP", "clp": "CLP",
+            "peso colombiano": "COP", "pesos colombianos": "COP", "pesos colombianas": "COP", "cop": "COP",
+            "peso uruguayo": "UYU", "pesos uruguayos": "UYU", "pesos uruguayas": "UYU", "uyu": "UYU",
+            "real": "BRL", "reales": "BRL", "reais": "BRL", "brl": "BRL", "r$": "BRL",
+            "sol": "PEN", "soles": "PEN", "pen": "PEN", "s/": "PEN"
+        }
+        cleaned = (currency or "").strip().lower()
+        if cleaned in mapping:
+            normalized = mapping[cleaned]
+        elif len(cleaned) == 3 and cleaned.isalpha():
+            normalized = cleaned.upper()
+        else:
+            raise ValueError(f"Invalid currency code '{currency}'. Please provide a valid 3-letter ISO code like USD, ARS, MXN, EUR, GBP, CLP, COP, etc.")
+
+        with Session(self.engine) as session:
+            family = session.get(Family, family_id)
+            if not family:
+                raise ValueError("Family workspace not found.")
+            family.default_currency = normalized
+            session.add(family)
+            session.commit()
+            session.refresh(family)
+            self._log_3s_audit("set_family_default_currency", start_time)
+            return normalized
+
+

@@ -65,7 +65,7 @@ async def test_orchestrator_success_text(orchestrator, monkeypatch):
     await orchestrator.orchestrate(user_id=user_id, text="15 for Starbucks", audio_file_id=None, chat_id=12345)
     
     # Extract service was called
-    mock_extract.assert_called_once_with(text="15 for Starbucks")
+    mock_extract.assert_called_once_with(text="15 for Starbucks", default_currency="USD")
     
     # TelegramService was called
     mock_send_message.assert_called_once()
@@ -169,7 +169,7 @@ async def test_orchestrator_audio_success(orchestrator, monkeypatch):
     
     mock_get_file.assert_called_once_with("file_123")
     mock_transcribe.assert_called_once_with(audio_url="https://api.telegram.org/file/bot123/voice.ogg")
-    mock_extract.assert_called_once_with(text="20 for taxi")
+    mock_extract.assert_called_once_with(text="20 for taxi", default_currency="USD")
     mock_send_message.assert_called_once()
     assert "Saved 20.0" in mock_send_message.call_args[1]["text"]
 
@@ -869,7 +869,7 @@ async def test_orchestrator_income_audio_success(orchestrator, monkeypatch):
     await orchestrator.orchestrate(user_id=user_id, text=None, audio_file_id="audio_income_123", chat_id=12345)
 
     mock_transcribe.assert_called_once()
-    mock_extract.assert_called_once_with(text="earned 500 freelance consulting")
+    mock_extract.assert_called_once_with(text="earned 500 freelance consulting", default_currency="USD")
     mock_send_message.assert_called_once()
     assert "💰 Income Logged: +$500.00 USD" in mock_send_message.call_args[1]["text"]
 

@@ -188,10 +188,13 @@ class AIOrchestrator:
             "earn", "earned", "earning", "earnings", "income", "salary",
             "bonus", "freelance", "net", "cashflow", "cash flow", "balance",
             "leftover", "left over", "surplus", "deficit", "saved", "savings", "profit",
-            "undo", "change", "edit", "correct", "fix"
+            "undo", "change", "edit", "correct", "fix",
+            "currency", "moneda"
         }
         words = set(text.lower().split())
         text_lower = text.lower()
+        if "/currency" in text_lower or "currency" in text_lower or "moneda" in text_lower or "cambiar moneda" in text_lower or "set currency" in text_lower:
+            return True
         if "confirm delete" in text_lower or "delete account" in text_lower or "create family" in text_lower or "/createfamily" in text_lower or "invite" in text_lower or "/join_" in text_lower:
             return True
         if "/leavefamily" in text_lower or "leave family" in text_lower or "/removemember" in text_lower or "remove member" in text_lower:
@@ -497,6 +500,8 @@ class AIOrchestrator:
                             parsed_query = ParsedQueryIntent(intent="generate_invite")
                         elif raw_text == "/family" or raw_lower in ["my family", "family info", "family members"]:
                             parsed_query = ParsedQueryIntent(intent="family_info")
+                        elif raw_lower.startswith("/currency") or raw_lower == "currency" or raw_lower.startswith("currency ") or raw_lower.startswith("cambiar moneda") or raw_lower.startswith("set currency") or raw_lower.startswith("mi moneda es"):
+                            parsed_query = ParsedQueryIntent(intent="manage_currency")
                         elif raw_lower.startswith("/familytotal"):
                             parts = raw_lower.split()
                             timeframe = "this_month"
@@ -778,10 +783,50 @@ class AIOrchestrator:
                                     response_text = "⚠️ <b>Notion is not connected.</b>\nPlease run <code>/notion</code> to connect your workspace first."
                             else:
                                 response_text = "Unknown Notion command."
+                    elif parsed_query and parsed_query.intent == "manage_currency":
+                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        family_service = FamilyService()
+                        parts = text.strip().split()
+                        
+                        target_curr = None
+                        if len(parts) >= 2 and parts[1].lower() not in ["help", "info", "a", "to", "es"]:
+                            target_curr = parts[-1].strip().upper()
+                        elif len(parts) >= 3 and parts[1].lower() in ["a", "to", "es"]:
+                            target_curr = parts[2].strip().upper()
+                        elif len(parts) == 1 and parts[0].startswith("/currency") and len(parts[0]) > 9:
+                            target_curr = parts[0][9:].strip().upper()
+                            
+                        if target_curr:
+                            try:
+                                new_curr = await asyncio.to_thread(family_service.set_family_default_currency, family_id, target_curr)
+                                response_text = (
+                                    f"✅ <b>Default Currency Updated to {new_curr}!</b>\n\n"
+                                    f"Any future expenses or income logged without specifying a currency (e.g. <i>\"spent 500 on lunch\"</i> or <i>\"300 pesos\"</i>) "
+                                    f"will now automatically default to <b>{new_curr}</b>."
+                                )
+                            except ValueError as ve:
+                                response_text = f"⚠️ {ve}"
+                        else:
+                            curr = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
+                            response_text = (
+                                f"💵 <b>Household Default Currency:</b> <code>{curr}</code>\n\n"
+                                "To update your household default currency, reply with:\n"
+                                "• <code>/currency USD</code> (US Dollar)\n"
+                                "• <code>/currency ARS</code> (Argentine Peso)\n"
+                                "• <code>/currency MXN</code> (Mexican Peso)\n"
+                                "• <code>/currency EUR</code> (Euro)\n"
+                                "• <code>/currency CLP</code> (Chilean Peso)\n"
+                                "• <code>/currency COP</code> (Colombian Peso)\n"
+                                "• <code>/currency &lt;ISO_CODE&gt;</code> (Any 3-letter currency)"
+                            )
                     else:
                         # Default: log expense or income
+                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                        family_service = FamilyService()
+                        family_currency = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
+
                         extraction_service = ExtractionService()
-                        result = await extraction_service.extract(text=text)
+                        result = await extraction_service.extract(text=text, default_currency=family_currency)
                         extracted_data = result.model_dump()
                         
                         transaction_time = result.to_datetime()

@@ -104,7 +104,8 @@ class ParsedQueryIntent(BaseModel):
         "remove_member",
         "leave_family",
         "edit_last",
-        "undo_last"
+        "undo_last",
+        "manage_currency"
     ]
     timeframe: Optional[str] = "this_month"
     start_date: Optional[str] = None

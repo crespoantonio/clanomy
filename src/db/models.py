@@ -30,6 +30,9 @@ class Family(SQLModel, table=True):
     notified_day_50: bool = Field(default=False)
     notified_day_60: bool = Field(default=False)
 
+    # Household Currency Configuration
+    default_currency: str = Field(default="USD", sa_column_kwargs={"server_default": "USD"}, max_length=3)
+
     # Relationships
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     transactions: List["Transaction"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})

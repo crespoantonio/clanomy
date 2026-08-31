@@ -352,3 +352,27 @@ def test_leave_family_solo_notice(session: Session, family_service: FamilyServic
     assert success is False
     assert "already in your own personal workspace" in msg.lower()
 
+def test_family_default_currency_get_and_set(session: Session, family_service: FamilyService):
+    family = Family(name="Currency Test Fam")
+    session.add(family)
+    session.commit()
+
+    # Initial default should be USD
+    curr = family_service.get_family_default_currency(family.id)
+    assert curr == "USD"
+
+    # Set to ARS
+    updated = family_service.set_family_default_currency(family.id, "ARS")
+    assert updated == "ARS"
+    assert family_service.get_family_default_currency(family.id) == "ARS"
+
+    # Set via alias e.g. "pesos mexicanos"
+    updated_mxn = family_service.set_family_default_currency(family.id, "pesos mexicanos")
+    assert updated_mxn == "MXN"
+    assert family_service.get_family_default_currency(family.id) == "MXN"
+
+    # Invalid currency code raises ValueError
+    with pytest.raises(ValueError, match="Invalid currency code"):
+        family_service.set_family_default_currency(family.id, "INVALID_CODE")
+
+

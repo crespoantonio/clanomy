@@ -1,18 +1,35 @@
 # Clanomy 💰🤖
 
-Clanomy is an open-source, privacy-first, multi-tenant family financial assistant. It combines a high-performance FastAPI backend with a local-first AI pipeline (Faster-Whisper for voice transcription and Ollama for entity extraction) and application-level AES-256 encryption.
+Clanomy is an open-source, privacy-first, multi-tenant family financial assistant. It combines a high-performance FastAPI backend with AI pipeline options (local Faster-Whisper + Ollama or ultra-fast cloud inference with Groq / OpenAI) and application-level AES-256 zero-knowledge encryption.
 
 ---
 
 ## ✨ Features
 
-- **🎙️ Dual Natural Language Logging**: Log both expenses and income seamlessly via text or voice notes.
-- **🤖 Local AI Inference**: Built-in Faster-Whisper audio transcription and Ollama (LLaMA3) transaction parsing for complete privacy.
+- **🎙️ Dual Natural Language Logging**: Log both expenses and income seamlessly via voice notes or text in **English and Spanish** (*"Coffee $4"*, *"Spent 45 on groceries"*, *"Gané 3000 de sueldo"*, *"Gasté 500 en helado"*).
+- **🌐 Per-Family Currency & Multi-Currency Segregation**: Configure your household's default currency with `/currency <ISO_CODE>` (USD, ARS, MXN, EUR, CLP, COP, etc.). Multi-currency ledgers are strictly segregated without arbitrary exchange rate blending.
+- **🤖 Flexible AI Engine**: Runs 100% locally with Faster-Whisper + Ollama (LLaMA3) or via cloud inference with a single unified `AI_API_KEY` (Groq, OpenAI, Gemini).
 - **👨‍👩‍👧‍👦 Family Workspaces**: Multi-user ledger with per-member attribution, shared balances, and custom roles.
-- **📊 Conversational Financial Insights**: Ask queries like *"How much did we spend on groceries this month?"* or *"What is our net cash flow for February?"*.
+- **📊 Conversational Financial Insights**: Ask queries in Spanish or English like *"How much did we spend on groceries this month?"* or *"¿Cuáles fueron mis gastos de los últimos 15 días?"*.
 - **🔄 Real-Time Notion Sync**: Two-way encrypted synchronization directly into your family's personal Notion database.
 - **🔐 Zero-Knowledge Security**: Application-level AES-256 field encryption for all transaction amounts and concepts before database persistence.
 - **📦 100% Free & Unrestricted Self-Hosting**: Deploy on your own hardware or cloud with zero paywalls, tiers, or artificial limits.
+
+---
+
+## 🤖 Telegram Bot Commands
+
+When creating your bot with `@BotFather`, register the following command list:
+
+```text
+start - Start Clanomy and view workspace status
+currency - View or update household default currency (e.g. /currency ARS)
+family - Manage family members and shared ledger
+invite - Generate invite link for household members
+notion - Connect and mirror transactions to Notion
+export - Export financial logs to CSV or JSON
+help - View available commands and AI logging tips
+```
 
 ---
 
@@ -40,7 +57,7 @@ podman compose up -d --build
 - **Interactive API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Ollama AI Server:** [http://localhost:11434](http://localhost:11434)
 
-### 4. Pull AI Models
+### 4. Pull AI Models (if using Local Ollama)
 ```bash
 podman compose exec ollama ollama pull llama3
 ```
@@ -51,8 +68,9 @@ podman compose exec ollama ollama pull llama3
 
 For full, step-by-step guides on deploying Clanomy to production or home lab environments:
 
-- **[Self-Hosting Guide (Docker / Podman / Home Lab)](docs/self-hosting.md)**: Detailed instructions on running Clanomy on your own server, configuring reverse proxies, tunnels, and connecting your Telegram bot.
 - **[Cloud Deployment Guide (Always-Free Stack)](docs/deployment-guideline.md)**: Guide to hosting Clanomy on Render + Supabase + Groq with zero monthly infrastructure costs.
+- **[Self-Hosting Guide (Docker / Podman / Home Lab)](docs/self-hosting.md)**: Detailed instructions on running Clanomy on your own server, configuring reverse proxies, tunnels, and connecting your Telegram bot.
+- **[Complete Manual Testing Guide](docs/manual-testing-guide.md)**: Step-by-step manual testing scenarios for voice logging, multi-currency, and family features.
 
 ---
 
@@ -83,10 +101,11 @@ curl http://localhost:8000/health
 
 - **Field-Level Encryption**: Sensitive financial records (amounts, descriptions, notes) are encrypted at the application layer using `cryptography.fernet`.
 - **Tenant Isolation**: Workspace boundaries and user data are strictly isolated per family.
-- **Local AI Privacy**: Voice processing and LLM reasoning run locally, preventing financial leaks to third-party APIs.
+- **Local / Private AI**: Voice processing and LLM reasoning run on your chosen privacy stack (local GPU/CPU or zero-data-retention cloud AI).
 
 ---
 
 ## 📄 License & Architecture
 
 Clanomy is distributed under the open-core model. For architecture and sprint planning details, see the `_bmad-output/` directory.
+

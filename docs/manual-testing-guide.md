@@ -171,41 +171,64 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ## Step 6: Step-by-Step Testing Scenarios
 
-### 🧪 Test 1: Start Command
+### 🧪 Test 1: User Registration & Onboarding (`/start`)
 
-1. Open your bot on Telegram.
+1. Open Telegram and search for your bot.
 2. Click **Start** or send:
    ```text
    /start
    ```
 3. **Expected Output:**
-   Bot immediately replies:
-   > _"Welcome to Clanomy, [Your Name]! Your account is ready. You can now log your first expense by simply typing it, for example: '50 for lunch' or '100 for groceries'."_
+   Bot immediately replies with welcome message and onboarding tip:
+   > _"👋 Welcome to Clanomy, [Your Name]!_
+   > 
+   > _💡 Quick Setup:_
+   > _Set your household default currency so Clanomy knows what currency to use when you log amounts without a currency (e.g. '500 on dinner' or 'pesos'):_
+   > _👉 Reply with `/currency USD`, `/currency ARS`, `/currency MXN`, `/currency EUR`, etc."_
 
 ---
 
-### 🧪 Test 2: Text Expense Logging
+### 🧪 Test 2: Household Default Currency Configuration (`/currency`)
 
-1. Send a text message in Telegram:
+1. Check your active currency:
    ```text
-   Spent 45.50 on groceries at Walmart
+   /currency
    ```
-2. Check backend logs in your terminal:
-   ```powershell
-   podman logs -f clanomy-app
-   ```
-   You will see:
+   **Expected Output:**
+   > _"💵 Household Default Currency: USD_
+   > _To update your household default currency, reply with: /currency ARS, /currency MXN, /currency EUR, etc."_
+
+2. Change your default currency to Argentine Pesos (or Mexican Pesos, Euros):
    ```text
-   INFO: ExtractionService: Parsing financial intent...
-   INFO: [3s Audit] Total pipeline orchestration took 1.12 seconds
+   /currency ARS
    ```
-3. **Expected Output in Telegram:**
-   Bot replies:
-   > _"Saved 45.50 USD for 'groceries at Walmart' under category 'Food & Groceries'."_
+   **Expected Output:**
+   > _"✅ Default Currency Updated to ARS!_
+   > _Any future expenses or income logged without specifying a currency (e.g. 'spent 500 on lunch' or '300 pesos') will now automatically default to ARS."_
 
 ---
 
-### 🧪 Test 3: Voice Note Expense Logging
+### 🧪 Test 3: Text Expense Logging (Bilingual English & Spanish)
+
+1. Send an ambiguous expense in Spanish:
+   ```text
+   Gasté 500 en helado
+   ```
+2. **Expected Output in Telegram:**
+   Bot resolves default currency to ARS and replies:
+   > _"Saved 500.00 ARS for 'helado' under category 'Food/Drink'."_
+
+3. Send an explicit foreign currency expense:
+   ```text
+   Spent $45 on groceries
+   ```
+4. **Expected Output in Telegram:**
+   Bot extracts USD and replies:
+   > _"Saved 45.00 USD for 'groceries' under category 'Food/Drink'."_
+
+---
+
+### 🧪 Test 4: Voice Note Expense Logging
 
 1. In Telegram, record and send a voice message:
    > 🎙️ _"I paid twenty four dollars and fifty cents for an Uber ride to the airport."_
@@ -225,28 +248,19 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ---
 
-### 🧪 Test 4: Time-Based Aggregation Queries
+### 🧪 Test 5: Dynamic Timeframe & Spanish NLP Queries
 
-1. Send a text message to your bot asking about your spending:
+1. Send a query in Spanish with dynamic day offset:
    ```text
-   How much did I spend this week?
+   ¿Cuáles fueron mis gastos de los últimos 15 días?
    ```
-2. Check backend logs:
-   ```powershell
-   podman logs -f clanomy-app
-   ```
-   You will see the `[3s Audit]` logs for the query:
-   ```text
-   INFO: [3s Audit] Aggregation query took 0.02 seconds (timeframe: this_week, family_id: ...)
-   INFO: [3s Audit] Conversational summary generation took 1.24 seconds (llm_used: True)
-   ```
-3. **Expected Output in Telegram:**
-   Bot replies with a friendly conversational summary:
-   > _"Hi [Name]! You've spent 69.98 USD across 2 transactions this week. Your top spending category was groceries at Walmart!"_
+2. **Expected Output in Telegram:**
+   Bot responds in fluent Spanish with segregated totals per currency:
+   > _"Gastaste 500.00 ARS y 69.50 USD en los últimos 15 días en 2 transacciones."_
 
 ---
 
-### 🧪 Test 5: Category-Filtered Queries
+### 🧪 Test 6: Category-Filtered Queries
 
 1. Send a query specifically targeting a category or alias:
    ```text

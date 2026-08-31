@@ -171,21 +171,21 @@ class ExtractionService:
         )
             
     @retry(
-        stop=stop_after_attempt(settings.OLLAMA_MAX_RETRIES),
-        wait=wait_exponential(multiplier=settings.OLLAMA_RETRY_BACKOFF_MIN, max=settings.OLLAMA_RETRY_BACKOFF_MAX),
+        stop=stop_after_attempt(settings.AI_MAX_RETRIES),
+        wait=wait_exponential(multiplier=settings.AI_RETRY_BACKOFF_MIN, max=settings.AI_RETRY_BACKOFF_MAX),
         retry=retry_if_exception_type((httpx.HTTPError, asyncio.TimeoutError, ConnectionError, OSError)),
         reraise=True
     )
-    async def _call_groq(self, system_prompt: str, text: str) -> str:
-        logger.info(f"Calling Groq model {settings.GROQ_MODEL} for extraction...")
+    async def _call_cloud_ai(self, system_prompt: str, text: str) -> str:
+        logger.info(f"Calling Cloud AI model {settings.AI_MODEL} at {settings.AI_BASE_URL} for extraction...")
         from src.core.http_client import get_http_client
         client = get_http_client()
         headers = {
-            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+            "Authorization": f"Bearer {settings.AI_API_KEY}",
             "Content-Type": "application/json"
         }
         payload = {
-            "model": settings.GROQ_MODEL,
+            "model": settings.AI_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Extract transaction details from this text:\n```\n{text}\n```"}
@@ -194,7 +194,7 @@ class ExtractionService:
             "temperature": 0.0
         }
         response = await client.post(
-            f"{settings.GROQ_BASE_URL}/chat/completions",
+            f"{settings.AI_BASE_URL}/chat/completions",
             headers=headers,
             json=payload,
             timeout=30.0
@@ -203,12 +203,12 @@ class ExtractionService:
         data = response.json()
         content = data["choices"][0]["message"]["content"]
         if not content:
-            raise ExtractionError("Received empty response from Groq")
+            raise ExtractionError("Received empty response from Cloud AI")
         return content
 
     @retry(
-        stop=stop_after_attempt(settings.OLLAMA_MAX_RETRIES),
-        wait=wait_exponential(multiplier=settings.OLLAMA_RETRY_BACKOFF_MIN, max=settings.OLLAMA_RETRY_BACKOFF_MAX),
+        stop=stop_after_attempt(settings.AI_MAX_RETRIES),
+        wait=wait_exponential(multiplier=settings.AI_RETRY_BACKOFF_MIN, max=settings.AI_RETRY_BACKOFF_MAX),
         retry=retry_if_exception_type((ollama.ResponseError, ollama.RequestError, asyncio.TimeoutError, ConnectionError, OSError)),
         reraise=True
     )
@@ -219,8 +219,8 @@ class ExtractionService:
                 self.client.chat(
                     model=self.model,
                     messages=[
-                        {'role': 'system', 'content': system_prompt},
-                        {'role': 'user', 'content': f"Extract transaction details from this text:\n```\n{text}\n```"}
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Extract transaction details from this text:\n```\n{text}\n```"}
                     ],
                     format=ExtractionResult.model_json_schema(),
                 ),
@@ -271,8 +271,8 @@ Return ONLY the JSON matching the provided schema. Do not include any markdown f
         start_time = time.time()
         
         try:
-            if settings.GROQ_API_KEY and settings.GROQ_API_KEY.strip():
-                content = await self._call_groq(system_prompt, text)
+            if settings.AI_API_KEY and settings.AI_API_KEY.strip():
+                content = await self._call_cloud_ai(system_prompt, text)
             else:
                 content = await self._call_ollama(system_prompt, text)
             

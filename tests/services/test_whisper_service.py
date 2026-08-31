@@ -205,8 +205,8 @@ async def test_transcribe_model_failed_init_caching():
         mock_class.assert_called_once()
 
 @pytest.mark.anyio
-async def test_transcribe_via_groq_whisper(monkeypatch):
-    monkeypatch.setattr(settings, "GROQ_API_KEY", "gsk_test_groq_key")
+async def test_transcribe_via_cloud_whisper(monkeypatch):
+    monkeypatch.setattr(settings, "AI_API_KEY", "gsk_test_groq_key")
     WhisperService._instance = None
     service = WhisperService()
     

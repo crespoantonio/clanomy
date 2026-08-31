@@ -94,14 +94,14 @@ In self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`), Clanomy runs completely unre
 
 ---
 
-## 🧠 Step 3: Get AI API Key (Groq Cloud)
+## 🧠 Step 3: Get AI API Key (Groq / OpenAI Cloud)
 
 Groq provides sub-second LLM and Whisper transcription inference for free:
 
 1. Go to [https://console.groq.com](https://console.groq.com) and log in.
 2. On the left sidebar, click **API Keys**.
 3. Click **Create API Key**, name it (e.g. `clanomy-selfhosted`), and copy the key (starts with `gsk_`).
-4. Save this key as `GROQ_API_KEY`.
+4. Save this key as `AI_API_KEY`.
 
 ---
 
@@ -150,12 +150,13 @@ Generate cryptographic keys locally to protect your zero-knowledge encrypted dat
 | Variable Key | Recommended Self-Hosted Value | Description |
 | :--- | :--- | :--- |
 | `PYTHON_VERSION` | `3.12.8` | Pins stable Python runtime for C-extensions |
+| `PYTHONUNBUFFERED` | `1` | Real-time live log streaming in Render console |
 | `DATABASE_URL` | `postgresql+psycopg://postgres.[ref]:[escaped_pwd]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require` | Supabase IPv4 Pooler connection URI |
 | `ENCRYPTION_KEY` | *(Your 32-byte Fernet key from Step 4)* | AES-256 Zero-Knowledge DB encryption |
 | `TELEGRAM_BOT_TOKEN` | *(Your BotFather HTTP API token from Step 1)* | Telegram Bot API authentication |
 | `MESSAGING_WEBHOOK_SECRET` | *(Your 32-character secret from Step 4)* | Validates `X-Telegram-Bot-Api-Secret-Token` |
 | `ENABLE_SUBSCRIPTIONS` | `false` | Disables paywalls and unlocks all features for free |
-| `GROQ_API_KEY` | `gsk_...` *(From Step 3)* | Fast cloud AI extraction & voice notes |
+| `AI_API_KEY` | `gsk_...` *(From Step 3)* | Fast cloud AI extraction, queries & voice notes |
 | `DEFAULT_CURRENCY` | `USD` | Base default currency (e.g. `USD`, `EUR`, `BRL`) |
 | `ALLOWED_TELEGRAM_USERS` | `""` *(or comma-separated IDs)* | Restrict bot access to your Telegram ID(s) |
 | `ENABLE_DOCS` | `false` | Disables public `/docs` swagger page |

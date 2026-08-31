@@ -29,11 +29,10 @@ def test_webhook_success_registration(app_client, mock_telegram, telegram_payloa
     welcome = mock_telegram.messages[0]["text"]
     assert "Welcome to Clanomy" in welcome
     assert "60-Day Family Pro Trial" in welcome
-    assert "Voice & Text Logging" in welcome
-    assert "Dual Income & Expense Tracking" in welcome
-    assert "Ask AI & Cash Flow Queries" in welcome
-    assert "Notion Mirroring" in welcome
-    assert "Family Sharing" in welcome
+    assert "Send a voice note" in welcome
+    assert "Type an expense" in welcome
+    assert "Type an income" in welcome
+    assert "Ask a question" in welcome
 
 def test_webhook_log_text_expense(app_client, mock_telegram, telegram_payload_factory):
     """[P0] Webhook should process text expense and extract via LLM."""

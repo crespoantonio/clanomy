@@ -37,18 +37,18 @@ class Settings(BaseSettings):
     WHISPER_VAD_FILTER: bool = False
     WHISPER_MAX_CONCURRENT: int = 1
     
-    # Ollama settings (Local AI inference)
+    # AI Engine Configuration (Unified Provider / OpenAI-Compatible Standard)
+    AI_API_KEY: Optional[str] = None
+    AI_BASE_URL: str = "https://api.groq.com/openai/v1"
+    AI_MODEL: str = "llama-3.3-70b-versatile"
+    AI_WHISPER_MODEL: str = "whisper-large-v3-turbo"
+    AI_MAX_RETRIES: int = 3
+    AI_RETRY_BACKOFF_MIN: float = 0.5
+    AI_RETRY_BACKOFF_MAX: float = 4.0
+
+    # Local Ollama Fallback (Used when AI_API_KEY is empty / self-hosting)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
-    OLLAMA_MAX_RETRIES: int = 3
-    OLLAMA_RETRY_BACKOFF_MIN: float = 0.5
-    OLLAMA_RETRY_BACKOFF_MAX: float = 4.0
-
-    # Groq settings (High-speed Cloud AI inference)
-    GROQ_API_KEY: Optional[str] = None
-    GROQ_MODEL: str = "qwen/qwen3.8-27b"
-    GROQ_WHISPER_MODEL: str = "whisper-large-v3-turbo"
-    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
 
     # HTTP Client Pool Settings
     HTTP_POOL_MAX_CONNECTIONS: int = 50

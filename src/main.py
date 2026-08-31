@@ -1,3 +1,4 @@
+import sys
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Response, Request, status
@@ -9,7 +10,12 @@ from src.core.http_client import HTTPClientManager
 from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True
+)
 logger = logging.getLogger("clanomy")
 
 @asynccontextmanager

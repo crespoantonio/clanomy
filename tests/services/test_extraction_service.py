@@ -282,8 +282,8 @@ async def test_fallback_regex_extract_dual_intent(service, mock_ollama_client):
     assert res8.currency == "USD"
 
 @pytest.mark.anyio
-async def test_extract_via_groq_success(monkeypatch):
-    monkeypatch.setattr(settings, "GROQ_API_KEY", "gsk_test_12345")
+async def test_extract_via_cloud_ai_success(monkeypatch):
+    monkeypatch.setattr(settings, "AI_API_KEY", "gsk_test_12345")
     ExtractionService._instance = None
     service = ExtractionService()
     

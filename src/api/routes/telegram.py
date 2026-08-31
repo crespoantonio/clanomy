@@ -346,13 +346,13 @@ async def telegram_webhook(
             welcome_text = (
                 f"👋 <b>Welcome to {settings.PROJECT_NAME}, {user_display_name}!</b>\n\n"
                 f"{plan_badge}"
-                "Here is what you can do with Clanomy:\n"
-                "🎙️ <b>Voice & Text Logging:</b> Send voice notes or type expenses & income (e.g. <i>'Spent $45 on groceries'</i> or <i>'Got $3,500 salary'</i>).\n"
-                "💡 <b>Dual Income & Expense Tracking:</b> Automatically parses, categorizes, and updates your monthly cash flow.\n"
-                "💬 <b>Ask AI & Cash Flow Queries:</b> Ask questions like <i>'How much did we spend on food this month?'</i> or <i>'What\\'s our net savings?'</i>.\n"
-                "📊 <b>Notion Mirroring:</b> Real-time synchronization with your Notion database via /notion.\n"
-                "👨‍👩‍👧‍👦 <b>Family Sharing:</b> Share a unified household ledger using /invite and manage members with /family.\n\n"
-                "Go ahead and log your first transaction now, or ask a question!"
+                "Ready to track your finances effortlessly?\n"
+                "💡 <b>Try sending me something right now:</b>\n"
+                "• 🎙️ <i>Send a voice note:</i> \"Coffee 4 dollars\"\n"
+                "• 💬 <i>Type an expense:</i> \"Spent $45 on groceries\"\n"
+                "• 💰 <i>Type an income:</i> \"Got paid $3,000 salary\"\n"
+                "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
+                "Type /help anytime to explore all commands & Notion sync."
             )
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
             return {"status": "ok"}
@@ -438,6 +438,29 @@ async def telegram_webhook(
                     family_id=family_id_str
                 )
                 return {"status": "ok"}
+
+        # Process /help command
+        if text and (text.strip().lower() == "/help" or text.strip().lower().startswith("/help")):
+            help_text = (
+                "🤖 <b>Clanomy Assistant - Command Reference</b>\n\n"
+                "<b>💡 Logging Transactions:</b>\n"
+                "• 🎙️ <i>Voice Note:</i> Just send an audio message (e.g. \"Coffee $4.50\" or \"Salary $3,500\")\n"
+                "• 💬 <i>Text:</i> \"Spent 25 on Uber\", \"Bought shoes for 60 EUR\", \"Got paid 3000 USD\"\n"
+                "• ✏️ <i>Corrections:</i> \"Change last amount to 35\", \"Change category to Transport\", \"Undo\"\n\n"
+                "<b>📊 Insights & Queries:</b>\n"
+                "• \"How much did we spend this month?\"\n"
+                "• \"Show breakdown for food & drinks\"\n"
+                "• \"What's our net savings this month?\"\n\n"
+                "<b>⚙️ Management Commands:</b>\n"
+                "• /upgrade - View Pro plans & upgrade with Telegram Stars\n"
+                "• /family - View family workspace and members\n"
+                "• /invite - Generate invite link for household members\n"
+                "• /notion - Connect and test your Notion database mirror\n"
+                "• /export - Download full ledger as CSV or JSON\n"
+                "• /deleteaccount - Permanently delete your account and data"
+            )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=help_text)
+            return {"status": "ok"}
 
         # Determine if there is text or audio to process
         audio_file_id = None

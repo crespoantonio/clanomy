@@ -38,7 +38,7 @@ def test_run_migrations_sqlite_isolated(tmp_path):
     with Session(test_engine) as session:
         # Check alembic_version table
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0002_subscription_schema_expansion"
+        assert version_result[0] == "0002_subscription_schema"
         
         # Check family table
         family_cols = session.exec(text("PRAGMA table_info(family)")).all()
@@ -82,7 +82,7 @@ def test_run_migrations_helper_isolated(monkeypatch, tmp_path):
     test_engine = create_engine(test_db_url)
     with Session(test_engine) as session:
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0002_subscription_schema_expansion"
+        assert version_result[0] == "0002_subscription_schema"
 
 def test_run_migrations_with_percent_encoded_url(monkeypatch, tmp_path):
     """Verify run_migrations() handles database URLs with % encoding (e.g. passwords)."""
@@ -97,5 +97,5 @@ def test_run_migrations_with_percent_encoded_url(monkeypatch, tmp_path):
     test_engine = create_engine(test_db_url)
     with Session(test_engine) as session:
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0002_subscription_schema_expansion"
+        assert version_result[0] == "0002_subscription_schema"
 

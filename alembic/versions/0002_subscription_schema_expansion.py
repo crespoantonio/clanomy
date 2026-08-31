@@ -1,6 +1,6 @@
 """Subscription schema expansion for trials and quota tracking
 
-Revision ID: 0002_subscription_schema_expansion
+Revision ID: 0002_subscription_schema
 Revises: 0001_initial_baseline
 Create Date: 2026-08-26 13:20:00.000000
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 import sqlmodel
 
 # revision identifiers, used by Alembic.
-revision: str = '0002_subscription_schema_expansion'
+revision: str = '0002_subscription_schema'
 down_revision: Union[str, None] = '0001_initial_baseline'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

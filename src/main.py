@@ -9,7 +9,8 @@ from src.core.http_client import HTTPClientManager
 from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("clanomy")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,12 +54,16 @@ app = FastAPI(
 
 @app.middleware("http")
 async def security_and_origin_middleware(request: Request, call_next):
+    # Log incoming request path (scrubbing query params to prevent sensitive data leakage)
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info(f"Incoming HTTP {request.method} {request.url.path} from {client_ip}")
+
     # 1. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
-    # Allows /health probe pass-through without origin secret for uptime monitoring
-    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path != "/health":
+    # Allows /health probe and /api/v1/telegram/webhook pass-through (webhook is authenticated by secret token)
+    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in ("/health", "/api/v1/telegram/webhook"):
         origin_header = request.headers.get("X-Origin-Verify-Secret") or request.headers.get("X-Clanomy-Origin-Key")
         if not verify_origin_secret(origin_header):
-            logger.warning(f"Direct origin access attempt blocked on {request.url.path}")
+            logger.warning(f"Direct origin access attempt blocked on {request.url.path} from {client_ip}")
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Direct origin access forbidden"}

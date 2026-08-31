@@ -86,7 +86,18 @@ class Settings(BaseSettings):
             raise ValueError("OLLAMA_MODEL cannot be empty")
         return v.strip()
 
+    @field_validator("ENCRYPTION_KEY")
+    def validate_encryption_key(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("ENCRYPTION_KEY cannot be empty")
+        from cryptography.fernet import Fernet
+        try:
+            Fernet(v.strip().encode())
+        except Exception as e:
+            raise ValueError(f"ENCRYPTION_KEY must be a valid 32-byte URL-safe base64 Fernet key. Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\". Error: {e}")
+        return v.strip()
+
     # Configuration
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
 settings = Settings()

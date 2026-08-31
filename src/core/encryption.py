@@ -1,14 +1,14 @@
 import binascii
+from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
 from src.core.config import settings
 
 class EncryptionService:
-    def __init__(self):
-        # Fernet requires a 32-byte URL-safe base64-encoded key
+    def __init__(self, key: Optional[str] = None):
+        raw_key = key if key is not None else settings.ENCRYPTION_KEY
         try:
-            self.fernet = Fernet(settings.ENCRYPTION_KEY.encode())
+            self.fernet = Fernet(raw_key.encode() if isinstance(raw_key, str) else raw_key)
         except Exception as e:
-            # Re-raise with more context for easier debugging
             raise ValueError(f"Invalid ENCRYPTION_KEY format. Must be 32-byte base64. Error: {e}")
 
     def encrypt(self, plaintext: str) -> str:

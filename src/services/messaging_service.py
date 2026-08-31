@@ -1,5 +1,6 @@
 from typing import Dict, Any, Tuple
 from sqlmodel import Session, select
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone, timedelta
 from src.db.models import User, Family
 
@@ -11,6 +12,7 @@ class MessagingService:
         """
         Retrieves an existing user by platform ID (telegram_id) or creates a new User and Family.
         Updates user info (username, full_name) if it has changed.
+        Handles concurrent creation gracefully via IntegrityError rollback.
         """
         platform_id = user_data.get("id")
         if not platform_id:
@@ -56,20 +58,30 @@ class MessagingService:
             trial_ends_at=trial_ends_at
         )
         self.session.add(family)
-        self.session.flush() # Get family.id without committing
+        try:
+            self.session.flush() # Get family.id without committing
 
-        user = User(
-            telegram_id=platform_id,
-            username=username,
-            full_name=full_name,
-            family_id=family.id,
-            has_used_trial=True,
-            is_admin=True
-        )
-        self.session.add(user)
-        self.session.commit() # Atomic commit for both
-        
-        self.session.refresh(family)
-        self.session.refresh(user)
+            user = User(
+                telegram_id=platform_id,
+                username=username,
+                full_name=full_name,
+                family_id=family.id,
+                has_used_trial=True,
+                is_admin=True
+            )
+            self.session.add(user)
+            self.session.commit() # Atomic commit for both
+            
+            self.session.refresh(family)
+            self.session.refresh(user)
 
-        return user, family
+            return user, family
+        except IntegrityError:
+            self.session.rollback()
+            # Concurrent creation handled: fetch the existing user created by parallel request
+            user = self.session.exec(select(User).where(User.telegram_id == platform_id)).first()
+            if user:
+                family = self.session.get(Family, user.family_id)
+                return user, family
+            raise
+

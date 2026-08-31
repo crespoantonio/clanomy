@@ -281,3 +281,30 @@ async def test_fallback_regex_extract_dual_intent(service, mock_ollama_client):
     assert res8.amount == 50.0
     assert res8.currency == "USD"
 
+@pytest.mark.anyio
+async def test_extract_via_groq_success(monkeypatch):
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "gsk_test_12345")
+    ExtractionService._instance = None
+    service = ExtractionService()
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": '{"type": "expense", "amount": 25.5, "category": "Food/Drink", "concept": "Dinner", "currency": "USD"}'
+                }
+            }
+        ]
+    }
+    
+    with patch("src.core.http_client.HTTPClientManager.client") as mock_client:
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        result = await service.extract("Dinner $25.50")
+        assert result.amount == 25.5
+        assert result.category == "Food/Drink"
+        assert result.concept == "Dinner"
+        assert result.type == "expense"
+
+

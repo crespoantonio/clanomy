@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional, Union, Literal
 from pydantic import BaseModel, Field, field_validator, ValidationError
 import ollama
+import httpx
 from src.core.config import settings
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
@@ -172,6 +173,42 @@ class ExtractionService:
     @retry(
         stop=stop_after_attempt(settings.OLLAMA_MAX_RETRIES),
         wait=wait_exponential(multiplier=settings.OLLAMA_RETRY_BACKOFF_MIN, max=settings.OLLAMA_RETRY_BACKOFF_MAX),
+        retry=retry_if_exception_type((httpx.HTTPError, asyncio.TimeoutError, ConnectionError, OSError)),
+        reraise=True
+    )
+    async def _call_groq(self, system_prompt: str, text: str) -> str:
+        logger.info(f"Calling Groq model {settings.GROQ_MODEL} for extraction...")
+        from src.core.http_client import get_http_client
+        client = get_http_client()
+        headers = {
+            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": settings.GROQ_MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Extract transaction details from this text:\n```\n{text}\n```"}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.0
+        }
+        response = await client.post(
+            f"{settings.GROQ_BASE_URL}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30.0
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        if not content:
+            raise ExtractionError("Received empty response from Groq")
+        return content
+
+    @retry(
+        stop=stop_after_attempt(settings.OLLAMA_MAX_RETRIES),
+        wait=wait_exponential(multiplier=settings.OLLAMA_RETRY_BACKOFF_MIN, max=settings.OLLAMA_RETRY_BACKOFF_MAX),
         retry=retry_if_exception_type((ollama.ResponseError, ollama.RequestError, asyncio.TimeoutError, ConnectionError, OSError)),
         reraise=True
     )
@@ -234,17 +271,20 @@ Return ONLY the JSON matching the provided schema. Do not include any markdown f
         start_time = time.time()
         
         try:
-            content = await self._call_ollama(system_prompt, text)
+            if settings.GROQ_API_KEY and settings.GROQ_API_KEY.strip():
+                content = await self._call_groq(system_prompt, text)
+            else:
+                content = await self._call_ollama(system_prompt, text)
             
             try:
                 result = ExtractionResult.model_validate_json(content)
                 return result
             except ValidationError as ve:
-                logger.warning(f"Pydantic validation failed on Ollama output: {ve}. Attempting fallback regex parser.")
+                logger.warning(f"Pydantic validation failed on LLM output: {ve}. Attempting fallback regex parser.")
                 return self._fallback_regex_extract(text)
                 
-        except (ollama.ResponseError, ollama.RequestError, asyncio.TimeoutError, ConnectionError, OSError) as e:
-            logger.error(f"Ollama connection/API error after retries: {e}. Attempting fallback regex parser.")
+        except (ollama.ResponseError, ollama.RequestError, httpx.HTTPError, asyncio.TimeoutError, ConnectionError, OSError) as e:
+            logger.error(f"AI engine connection/API error after retries: {e}. Attempting fallback regex parser.")
             return self._fallback_regex_extract(text)
         except Exception as e:
             logger.error(f"Extraction error: {e}")

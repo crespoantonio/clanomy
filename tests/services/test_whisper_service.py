@@ -1,8 +1,9 @@
 import io
 import pytest
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 import httpx
+from src.core.config import settings
 from src.services.whisper_service import WhisperService, InferenceError
 
 @pytest.fixture(autouse=True)
@@ -202,3 +203,20 @@ async def test_transcribe_model_failed_init_caching():
         with pytest.raises(InferenceError, match="WhisperModel initialization previously failed"):
             await service.transcribe(audio_bytes=b"fake-bytes")
         mock_class.assert_called_once()
+
+@pytest.mark.anyio
+async def test_transcribe_via_groq_whisper(monkeypatch):
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "gsk_test_groq_key")
+    WhisperService._instance = None
+    service = WhisperService()
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"text": "Coffee for four dollars"}
+    
+    with patch("src.core.http_client.HTTPClientManager.client") as mock_client:
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        text, lang = await service.transcribe(audio_bytes=b"fake_audio_stream")
+        assert text == "Coffee for four dollars"
+        assert lang == "en"
+

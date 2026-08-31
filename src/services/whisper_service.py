@@ -133,7 +133,46 @@ class WhisperService:
             if not audio_bytes or len(audio_bytes) == 0:
                 raise InferenceError(f"Downloaded audio from {audio_url} is empty")
 
-        # 3. Write audio to a temporary file for Whisper processing
+        # 3. Cloud Groq Whisper Inference (if GROQ_API_KEY is configured)
+        if settings.GROQ_API_KEY and settings.GROQ_API_KEY.strip():
+            try:
+                inference_start_time = time.perf_counter()
+                client = get_http_client()
+                headers = {"Authorization": f"Bearer {settings.GROQ_API_KEY}"}
+                files = {"file": ("audio.ogg", audio_bytes, "audio/ogg")}
+                data = {
+                    "model": settings.GROQ_WHISPER_MODEL,
+                    "response_format": "json",
+                    "temperature": "0.0"
+                }
+                if language:
+                    data["language"] = language
+                
+                resp = await client.post(
+                    f"{settings.GROQ_BASE_URL}/audio/transcriptions",
+                    headers=headers,
+                    files=files,
+                    data=data,
+                    timeout=30.0
+                )
+                resp.raise_for_status()
+                result_data = resp.json()
+                text = (result_data.get("text") or "").strip()
+                detected_lang = language or "en"
+                inference_duration = time.perf_counter() - inference_start_time
+                total_duration = time.perf_counter() - total_start_time
+                logger.info(
+                    f"[3s Audit] Groq Whisper transcription took {inference_duration:.4f} seconds "
+                    f"| Total transaction took {total_duration:.4f} seconds (model: {settings.GROQ_WHISPER_MODEL})"
+                )
+                return text, detected_lang
+            except Exception as e:
+                logger.error(f"Groq Whisper transcription failed: {e}", exc_info=True)
+                if not isinstance(e, InferenceError):
+                    raise InferenceError(f"Groq Whisper transcription failed: {e}")
+                raise
+
+        # 4. Local faster-whisper Fallback (Write audio to temporary file)
         # On Windows, we must close the file before passing the path to WhisperModel
         # to prevent file sharing/locking violations.
         temp_file_path = None

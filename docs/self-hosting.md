@@ -61,6 +61,12 @@ TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_FROM_BOTFATHER
 
 # Create a strong secret for Telegram to authenticate webhooks
 MESSAGING_WEBHOOK_SECRET=a_very_long_secure_random_string
+
+# (Optional) Origin Shielding token if placing behind Cloudflare proxy/tunnel
+CLOUDFLARE_ORIGIN_SECRET=
+
+# (Optional) API Documentation Stealth Mode (defaults to false to hide /docs in production)
+ENABLE_DOCS=false
 ```
 
 ### 4. Start the Stack
@@ -129,10 +135,15 @@ To prevent unauthorized users from using your GPU/CPU compute, AI inference, or 
    - **Group Privacy:** Ensure it is **Enabled** so the bot only reads messages directed at it if added to a group.
    - **Allow Groups? / `join_groups`:** Set to **Turn groups off** if you only plan to use private chats with your household.
 
+4. **Origin Shielding & Stealth API:**
+   - Set `CLOUDFLARE_ORIGIN_SECRET` if using Cloudflare Tunnels/Proxy to prevent direct port-8000 access.
+   - Keep `ENABLE_DOCS=false` to prevent automated scanners from introspecting `/docs` or `/openapi.json`.
+
 ---
 
 ## 🔒 Security Best Practices
 - **Strict Environment Enforcement**: `ENCRYPTION_KEY`, `TELEGRAM_BOT_TOKEN`, and `MESSAGING_WEBHOOK_SECRET` are strictly required with no insecure fallback defaults. The container fails fast at startup if any variable is missing.
+- **HTTP Security Headers Middleware**: Responses automatically include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, and HSTS headers while stripping the `Server` identity header.
 - **Never expose your PostgreSQL database to the internet.** Ensure port `5432` is firewalled or bound only to localhost/container network.
 - **Keep your `ENCRYPTION_KEY` safe.** If you lose this key, your transaction amounts and concepts will be permanently unreadable, even to you. Back it up securely.
 - **Set `ALLOWED_TELEGRAM_USERS`** to prevent strangers from triggering local Whisper/Ollama inference.
@@ -141,3 +152,4 @@ To prevent unauthorized users from using your GPU/CPU compute, AI inference, or 
 - **Cloudflare Edge Defense**: When self-hosting on a public IP, place Cloudflare in front with **Full (Strict)** SSL and WAF rules to drop non-Telegram scanner bots before they reach your server.
 
 Enjoy true zero-friction, privacy-first financial tracking! 💸🤖
+

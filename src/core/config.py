@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     TELEGRAM_BOT_USERNAME: Optional[str] = None
     MESSAGING_WEBHOOK_SECRET: str
+    CLOUDFLARE_ORIGIN_SECRET: Optional[str] = None  # Optional secret header token to block direct origin access
+    ENABLE_DOCS: bool = False  # Set to True to expose Swagger/OpenAPI docs (/docs, /redoc, /openapi.json)
     USER_COOLDOWN_SECONDS: float = 0.5
     ALLOWED_TELEGRAM_USERS: str = ""  # Comma-separated list of allowed Telegram usernames or IDs (empty = open to all)
     MAX_VOICE_DURATION_SECONDS: int = 60  # Maximum allowable voice note duration in seconds before fast-fail rejection

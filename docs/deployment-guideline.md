@@ -64,6 +64,8 @@ To ensure all financial data is encrypted and secure, we need two secret keys.
 2. **Webhook Secret:** This proves that messages are actually coming from Telegram.
    * Just mash your keyboard to make a random string (e.g., `my_super_secret_telegram_string_2026`). No spaces.
    * Save this in your notepad as `MESSAGING_WEBHOOK_SECRET`.
+3. **Origin Shield Secret (Optional):** If using Cloudflare proxy/tunnel to shield Render origin:
+   * Generate a 32-character random hex string as `CLOUDFLARE_ORIGIN_SECRET`.
 
 ---
 
@@ -87,6 +89,8 @@ Now we will put the code on a server that runs 24/7 for free.
    * Key: `ENCRYPTION_KEY` | Value: (Your Fernet key)
    * Key: `TELEGRAM_BOT_TOKEN` | Value: (Your BotFather token)
    * Key: `MESSAGING_WEBHOOK_SECRET` | Value: (Your random keyboard mash)
+   * Key: `CLOUDFLARE_ORIGIN_SECRET` | Value: (Optional: Your origin shield secret)
+   * Key: `ENABLE_DOCS` | Value: `false`
    * Key: `GROQ_API_KEY` | Value: (Your `gsk_...` key)
    * Key: `DEFAULT_CURRENCY` | Value: `USD`
    * Key: `ALLOWED_TELEGRAM_USERS` | Value: (Your Telegram username, e.g. `your_username` or numeric ID to lock the bot to only you)

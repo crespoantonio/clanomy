@@ -1,10 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Response, status
+from fastapi import FastAPI, Depends, Response, Request, status
+from fastapi.responses import JSONResponse
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db, run_migrations
 from src.core.config import settings
 from src.core.http_client import HTTPClientManager
+from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,40 @@ async def lifespan(app: FastAPI):
     # Close HTTP client pool
     await HTTPClientManager().close()
 
-app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    lifespan=lifespan,
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if settings.ENABLE_DOCS else None,
+)
+
+@app.middleware("http")
+async def security_and_origin_middleware(request: Request, call_next):
+    # 1. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
+    # Allows /health probe pass-through without origin secret for uptime monitoring
+    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path != "/health":
+        origin_header = request.headers.get("X-Origin-Verify-Secret") or request.headers.get("X-Clanomy-Origin-Key")
+        if not verify_origin_secret(origin_header):
+            logger.warning(f"Direct origin access attempt blocked on {request.url.path}")
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Direct origin access forbidden"}
+            )
+
+    # 2. Process Request
+    response = await call_next(request)
+
+    # 3. HTTP Security Headers Injection
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if "server" in response.headers:
+        del response.headers["server"]
+
+    return response
 
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
@@ -47,6 +82,7 @@ app.include_router(telegram_router, prefix="/api/v1")
 @app.get("/")
 async def root():
     return {"message": f"Welcome to {settings.PROJECT_NAME}"}
+
 
 @app.get("/health")
 async def health_check(response: Response, session: Session = Depends(get_session)):

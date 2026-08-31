@@ -107,38 +107,24 @@ class TelegramService:
         Subscription period: 2592000 (30 days in seconds).
         Payload identifier: sub_solo_pro_{family_id} or sub_family_pro_{family_id}.
         """
-        tier_configs = {
-            "solo_pro": {
-                "title": "Clanomy Solo Pro",
-                "description": "⭐️ Unlimited AI text & voice transaction logs and smart queries for 1 individual user.",
-                "stars": 150,
-                "payload": f"sub_solo_pro_{family_id}"
-            },
-            "family_pro": {
-                "title": "Clanomy Family Pro",
-                "description": "⭐️ Unlimited AI logging, Notion sync, and shared ledger for up to 5 family members.",
-                "stars": 300,
-                "payload": f"sub_family_pro_{family_id}"
-            }
-        }
+        from src.core.subscription_config import get_tier_config
+        config = get_tier_config(plan_type)
 
-        if plan_type not in tier_configs:
+        if not config:
             raise ValueError(f"Invalid subscription plan type for invoice: {plan_type}")
-
-        config = tier_configs[plan_type]
 
         try:
             client = get_http_client()
             body = {
                 "chat_id": chat_id,
-                "title": config["title"],
-                "description": config["description"],
-                "payload": config["payload"],
+                "title": config.title,
+                "description": config.description,
+                "payload": f"sub_{config.code}_{family_id}",
                 "provider_token": "",
                 "currency": "XTR",
-                "prices": [{"label": config["title"], "amount": config["stars"]}],
-                "subscription_period": 2592000,
-                "start_parameter": f"sub_{plan_type}"
+                "prices": [{"label": config.title, "amount": config.stars}],
+                "subscription_period": config.subscription_period_seconds,
+                "start_parameter": f"sub_{config.code}"
             }
             response = await client.post(
                 f"{self.api_url}/sendInvoice",

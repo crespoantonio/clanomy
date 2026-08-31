@@ -5,10 +5,18 @@ from sqlmodel import Session
 from src.db.models import Family
 from src.core.config import settings
 
+from src.core.subscription_config import (
+    SUBSCRIPTION_TIERS,
+    SubscriptionTier,
+    FREE_TIER_MONTHLY_LIMIT,
+    TRIAL_DURATION_DAYS,
+    get_tier_config
+)
+
 # Strict mapping of allowed Telegram Star invoice payloads to internal plan types
 ALLOWED_PAID_PLANS: Dict[str, str] = {
-    "sub_solo_pro": "solo_pro",
-    "sub_family_pro": "family_pro",
+    f"sub_{code}": tier.internal_plan
+    for code, tier in SUBSCRIPTION_TIERS.items()
 }
 
 VALID_PLAN_TYPES: Set[str] = {"free", "trial", "solo_pro", "family_pro", "lifetime_pro"}
@@ -107,7 +115,7 @@ def extract_plan_and_family_id(invoice_payload: str) -> Tuple[str, Optional[str]
     if invoice_payload in ALLOWED_PAID_PLANS:
         return ALLOWED_PAID_PLANS[invoice_payload], None
 
-    for prefix, plan_type in ALLOWED_PAID_PLANS.items():
+    for prefix, plan_type in sorted(ALLOWED_PAID_PLANS.items(), key=lambda x: len(x[0]), reverse=True):
         if invoice_payload.startswith(f"{prefix}_"):
             family_id_str = invoice_payload[len(prefix)+1:]
             if family_id_str:
@@ -164,11 +172,18 @@ def handle_successful_payment(
     elif target_plan == "family_pro":
         family.max_members = 5
 
+    # Determine period duration from matching tier config (longest prefix match)
+    duration_days = 30
+    for code, tier in sorted(SUBSCRIPTION_TIERS.items(), key=lambda x: len(x[0]), reverse=True):
+        if invoice_payload == f"sub_{code}" or invoice_payload.startswith(f"sub_{code}_"):
+            duration_days = tier.duration_days
+            break
+
     current_time = now or datetime.now(timezone.utc)
     if expiration_timestamp:
         family.current_period_end = datetime.fromtimestamp(expiration_timestamp, tz=timezone.utc)
     else:
-        family.current_period_end = current_time + timedelta(days=30)
+        family.current_period_end = current_time + timedelta(days=duration_days)
 
     if charge_id:
         family.telegram_payment_charge_id = charge_id

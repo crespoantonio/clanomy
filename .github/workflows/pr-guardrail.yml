@@ -29,10 +29,12 @@ jobs:
           # Protected files/paths list:
           # - README.md (project branding and donation links)
           # - src/services/subscription_service.py (billing and tier logic)
+          # - src/core/subscription_config.py (pricing, tier parameters, and duration constants)
           # - .github/workflows/** (CI and security actions)
           PROTECTED_PATTERNS=(
             "^README\.md$"
             "^src/services/subscription_service\.py$"
+            "^src/core/subscription_config\.py$"
             "^\.github/workflows/"
           )
 

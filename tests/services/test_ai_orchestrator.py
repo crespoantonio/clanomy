@@ -529,6 +529,9 @@ async def test_orchestrator_notion_commands(mock_notion_cls, orchestrator, monke
     mock_session_class.return_value.__enter__.return_value = mock_session
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
     
+    mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
+    mock_session.get.return_value = mock_family
+    
     mock_notion = mock_notion_cls.return_value
     mock_notion.validate_token = AsyncMock(return_value=True)
     mock_notion.search_databases = AsyncMock(return_value=[{"id": "db1", "title": "Budget"}])
@@ -577,7 +580,12 @@ async def test_orchestrator_expense_mirroring(mock_notion_cls, orchestrator, mon
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
 
     mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony", username="tony")
-    mock_session.get.return_value = mock_user
+    mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
+    def mock_get_1(model_cls, pk):
+        if getattr(model_cls, "__name__", "") == "Family":
+            return mock_family
+        return mock_user
+    mock_session.get.side_effect = mock_get_1
 
     class MockEncryptionService:
         def encrypt(self, text): return f"encrypted_{text}"
@@ -638,7 +646,12 @@ async def test_orchestrator_expense_mirroring_error(mock_notion_cls, orchestrato
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
 
     mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony")
-    mock_session.get.return_value = mock_user
+    mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
+    def mock_get_2(model_cls, pk):
+        if getattr(model_cls, "__name__", "") == "Family":
+            return mock_family
+        return mock_user
+    mock_session.get.side_effect = mock_get_2
 
     class MockEncryptionService:
         def encrypt(self, text): return f"encrypted_{text}"
@@ -675,6 +688,9 @@ async def test_orchestrator_notion_test_sync_commands(mock_notion_cls, orchestra
     mock_session_class = MagicMock()
     mock_session_class.return_value.__enter__.return_value = mock_session
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    
+    mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
+    mock_session.get.return_value = mock_family
     
     mock_notion = mock_notion_cls.return_value
     mock_notion.get_family_notion_status.return_value = {"is_connected": True}

@@ -367,6 +367,10 @@ class AIOrchestrator:
         """Background task for Notion Mirroring. Fails silently with logs."""
         try:
             with Session(engine) as session:
+                family = session.get(Family, family_id)
+                from src.services.subscription_service import has_unlimited_access
+                if family and not has_unlimited_access(family):
+                    return
                 notion_service = NotionService(session)
                 await notion_service.mirror_transaction(
                     family_id=family_id,
@@ -636,9 +640,16 @@ class AIOrchestrator:
                         parts = raw_text.split()
                         
                         with Session(engine) as session:
+                            family = session.get(Family, family_id)
                             notion_service = NotionService(session)
-                            
-                            if raw_lower == "/notion" or raw_lower == "connect notion":
+                            from src.services.subscription_service import has_unlimited_access
+                            if family and not has_unlimited_access(family):
+                                response_text = (
+                                    "⭐️ <b>Notion Mirroring is a Pro Feature</b>\n\n"
+                                    "Real-time Notion database synchronization is available on <b>Solo Pro</b> and <b>Family Pro</b> plans.\n\n"
+                                    "Type /upgrade to connect your Notion database."
+                                )
+                            elif raw_lower == "/notion" or raw_lower == "connect notion":
                                 response_text = (
                                     "🔗 <b>Connect your Notion Workspace</b>\n\n"
                                     "Follow these quick steps:\n"

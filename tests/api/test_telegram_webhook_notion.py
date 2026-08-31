@@ -114,3 +114,71 @@ def test_webhook_notion_disconnect(app_client, mock_telegram, telegram_payload_f
     assert response.status_code == 200
     disconnect_text = mock_telegram.messages[-1]["text"].lower()
     assert "disconnected" in disconnect_text
+
+def test_webhook_notion_blocked_on_free_tier(app_client, mock_telegram, telegram_payload_factory, mock_notion_service):
+    """[P0] Webhook should block Notion access on Free tier and prompt upgrade."""
+    from sqlmodel import Session, select
+    from src.db.session import engine
+    from src.db.models import User, Family
+
+    user_id = 913
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # Manually transition family to free tier
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
+        family = session.get(Family, user.family_id)
+        family.plan_type = "free"
+        family.subscription_status = "active"
+        session.add(family)
+        session.commit()
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/notion", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    text = mock_telegram.messages[-1]["text"]
+    assert "Notion Mirroring is a Pro Feature" in text
+    assert "/upgrade" in text
+
+def test_webhook_notion_allowed_on_solo_pro(app_client, mock_telegram, telegram_payload_factory, mock_notion_service):
+    """[P0] Webhook should allow Notion access on Solo Pro tier."""
+    from sqlmodel import Session, select
+    from src.db.session import engine
+    from src.db.models import User, Family
+
+    user_id = 914
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # Set family to solo_pro
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
+        family = session.get(Family, user.family_id)
+        family.plan_type = "solo_pro"
+        family.subscription_status = "active"
+        session.add(family)
+        session.commit()
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/notion", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    text = mock_telegram.messages[-1]["text"]
+    assert "Connect your Notion Workspace" in text
+

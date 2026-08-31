@@ -230,4 +230,37 @@ def test_handle_recurring_renewal_and_cancellation():
         assert failed.subscription_status == "expired"
         assert failed.plan_type == "free"
 
+def test_handle_successful_payment_annual():
+    from sqlmodel import Session, create_engine, SQLModel
+    from sqlalchemy.pool import StaticPool
+    from src.services.subscription_service import handle_successful_payment
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        now = datetime.now(timezone.utc)
+        family = Family(name="Annual Test Family", plan_type="free", subscription_status="active")
+        session.add(family)
+        session.commit()
+        session.refresh(family)
+
+        res = handle_successful_payment(
+            session=session,
+            family=family,
+            invoice_payload=f"sub_family_pro_annual_{family.id}",
+            charge_id="tg_annual_charge_999",
+            now=now
+        )
+        assert res["status"] == "upgraded"
+        assert family.plan_type == "family_pro"
+        assert family.max_members == 5
+        assert family.telegram_payment_charge_id == "tg_annual_charge_999"
+        
+        # Verify 365 days period duration
+        period_end = family.current_period_end.replace(tzinfo=timezone.utc) if family.current_period_end.tzinfo is None else family.current_period_end
+        delta = (period_end - now).days
+        assert delta >= 364
+
+
 

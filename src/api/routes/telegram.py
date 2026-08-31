@@ -371,7 +371,7 @@ async def telegram_webhook(
                 return {"status": "ok"}
 
             parts = text.split()
-            arg = parts[1].lower() if len(parts) > 1 else None
+            arg = "_".join(parts[1:]).lower() if len(parts) > 1 else None
             
             family_id_str = str(family.id) if family else (str(user.family_id) if user and user.family_id else "")
 
@@ -391,21 +391,38 @@ async def telegram_webhook(
                     family_id=family_id_str
                 )
                 return {"status": "ok"}
+            elif arg in ["solo_annual", "solo_yearly", "annual_solo", "yearly_solo"]:
+                background_tasks.add_task(
+                    telegram_service.send_subscription_invoice,
+                    chat_id=chat_id,
+                    plan_type="solo_pro_annual",
+                    family_id=family_id_str
+                )
+                return {"status": "ok"}
+            elif arg in ["family_annual", "family_yearly", "annual_family", "yearly_family", "annual", "yearly"]:
+                background_tasks.add_task(
+                    telegram_service.send_subscription_invoice,
+                    chat_id=chat_id,
+                    plan_type="family_pro_annual",
+                    family_id=family_id_str
+                )
+                return {"status": "ok"}
             else:
                 intro_msg = (
                     "⭐️ <b>Upgrade to Clanomy Pro</b>\n\n"
                     "Choose the plan that fits your needs with seamless, auto-renewing Telegram Stars billing (Apple Pay / Google Pay / Card):\n\n"
-                    "1️⃣ <b>Solo Pro (150 Stars / month)</b>\n"
+                    "1️⃣ <b>Solo Pro (200 Stars / month)</b>\n"
                     "• Unlimited text & voice expense & income logging\n"
+                    "• Real-time Notion database mirroring\n"
                     "• AI Natural language queries & cash flow insights\n"
                     "• CSV & JSON financial exports\n"
                     "• 1 User\n\n"
-                    "2️⃣ <b>Family Pro (300 Stars / month)</b>\n"
+                    "2️⃣ <b>Family Pro (450 Stars / month)</b>\n"
                     "• Everything in Solo Pro\n"
                     "• Up to 5 Family Members with shared ledger\n"
-                    "• Real-time Notion database mirroring\n"
                     "• Per-member spending attribution & budget visibility\n\n"
-                    "<i>Invoices for both options are attached below. Tap <b>Pay</b> on your chosen tier to activate immediately!</i>"
+                    "🎁 <i>Annual Savings: Type <code>/upgrade annual</code> to get 2 Months Free on annual subscriptions (2,000 & 4,500 Stars)!</i>\n\n"
+                    "<i>Invoices are attached below. Tap <b>Pay</b> on your chosen tier to activate immediately!</i>"
                 )
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=intro_msg)
                 background_tasks.add_task(

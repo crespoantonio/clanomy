@@ -1,6 +1,13 @@
-# Deployment Guide: Clanomy (Render + Supabase + Groq + Telegram Stars)
+# Deployment Guide: Clanomy (Render + Supabase + Groq Cloud)
 
-This guide provides step-by-step instructions to deploy **Clanomy** to the cloud on an **Always-Free ($0.00/month)** architecture with native **Telegram Stars In-App Subscriptions & AI Logging**. It is designed to be beginner-friendly, rigorous, and production-ready.
+This guide provides step-by-step instructions to deploy your own self-hosted **Clanomy** instance to the cloud on an **Always-Free ($0.00/month)** stack using **Render**, **Supabase**, and **Groq Cloud**.
+
+In self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`), Clanomy runs completely unrestricted with:
+* **Unlimited voice & text transaction logging** (both expenses and income).
+* **Multi-user family workspaces** with shared ledgers and member attribution.
+* **Real-time encrypted Notion database synchronization**.
+* **Zero-Knowledge AES-256 field encryption**.
+* **Zero paywalls, tiers, quotas, or fees**.
 
 ---
 
@@ -8,54 +15,48 @@ This guide provides step-by-step instructions to deploy **Clanomy** to the cloud
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                CLANOMY CLOUD ARCHITECTURE                               │
+│                           SELF-HOSTED CLOUD ARCHITECTURE                                │
 │                                                                                         │
-│  [ Telegram User / Client ] ──► (Voice Notes / Text / In-App Stars Payments)            │
+│  [ Telegram User / Family ] ──► (Voice Notes & Text Expenses/Income)                    │
 │                 │                                                                       │
 │                 ▼ (HTTPS Webhook + X-Telegram-Bot-Api-Secret-Token)                     │
 │  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
 │  │                            RENDER WEB SERVICE (Compute)                           │  │
 │  │  • FastAPI Application (Python 3.12 / Uvicorn on Port $PORT)                      │  │
 │  │  • Automatic Alembic Database Migrations on Lifespan Startup                      │  │
-│  │  • Quota Gating Engine (ENABLE_SUBSCRIPTIONS=true)                                │  │
-│  │  • Pre-Checkout Query & Successful Payment Handlers                               │  │
+│  │  • Unrestricted Self-Hosted Mode (ENABLE_SUBSCRIPTIONS=false)                      │  │
+│  │  • Real-time Notion Synchronizer & AI Orchestrator                                 │  │
 │  └───────────────────┬─────────────────────────────────────────────┬─────────────────┘  │
-│                      │ (Encrypted Ledger & Quotas)                 │ (AI Extraction)    │
+│                      │ (AES-256 Encrypted Ledger)                  │ (AI Extraction)    │
 │                      ▼                                             ▼                    │
 │  ┌────────────────────────────────────────┐     ┌────────────────────────────────────┐  │
 │  │       SUPABASE (PostgreSQL)            │     │       GROQ CLOUD (AI Engine)       │  │
 │  │  • AES-256 Zero-Knowledge Encrypted DB │     │  • Whisper-Large-v3 Voice (150ms)  │  │
 │  │  • IPv4 PgBouncer Connection Pooler    │     │  • Llama-3.3-70b Extraction (200ms)│  │
-│  │  • Auto-Managed Tables & Subscriptions │     │  • Zero Container RAM Footprint    │  │
+│  │  • Free Tier Managed Postgres          │     │  • Zero Container RAM Footprint    │  │
 │  └────────────────────────────────────────┘     └────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-* **Telegram:** Chat client where users log transactions and purchase Pro subscriptions via Apple Pay / Google Pay / Telegram Stars (`XTR`).
-* **Render:** Cloud hosting platform running the FastAPI application and webhook listener.
-* **Supabase:** Managed PostgreSQL database storing AES-256 encrypted financial transactions, families, and subscription quotas.
-* **Groq:** Ultra-fast cloud AI inference engine executing Whisper voice transcription and Llama data extraction in <350ms with 0MB RAM burden on Render.
+* **Telegram:** Chat client where you and your family log expenses and view financial insights.
+* **Render:** Cloud hosting platform running the FastAPI application and webhook listener on the free tier.
+* **Supabase:** Managed PostgreSQL database storing AES-256 encrypted transactions, users, and family workspaces.
+* **Groq Cloud:** Ultra-fast AI inference engine executing Whisper voice transcription and Llama data extraction in <350ms with 0MB RAM burden on Render.
 
 ---
 
-## 🛠️ Step 1: Create Telegram Bot & Enable Stars Payments (BotFather)
+## 🛠️ Step 1: Create Your Telegram Bot (BotFather)
 
-1. Open Telegram and search for `@BotFather` (official bot with the blue checkmark).
+1. Open Telegram and search for `@BotFather` (the official bot with the blue checkmark).
 2. **Create Bot:**
    * Send `/newbot`.
-   * Provide a display name (e.g. `Clanomy AI`).
-   * Provide a username ending in `bot` (e.g. `ClanomyFinanceBot`).
+   * Provide a display name (e.g. `My Family Finance AI`).
+   * Provide a username ending in `bot` (e.g. `MyFamilyClanomyBot`).
    * Copy the HTTP API token (e.g. `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`). Save it as `TELEGRAM_BOT_TOKEN`.
-3. **Enable Telegram Stars Payments:**
-   * Send `/mybots` to `@BotFather`.
-   * Select your bot ➔ **Bot Settings** ➔ **Payments**.
-   * Select **Telegram Stars** (available with 0 registration fees).
-   * Enable Test Mode if testing in Sandbox, or Live Mode for production billing.
-4. **Register Bot Commands:**
+3. **Register Bot Commands:**
    * Send `/setcommands` to `@BotFather`, select your bot, and paste:
      ```text
      start - Start Clanomy and view workspace status
-     upgrade - View Pro subscription tiers and upgrade with Telegram Stars
      family - Manage family members and shared ledger
      invite - Generate invite link for household members
      notion - Connect and mirror transactions to Notion
@@ -65,12 +66,12 @@ This guide provides step-by-step instructions to deploy **Clanomy** to the cloud
 
 ---
 
-## 💾 Step 2: Set Up Database & Connection Pooler (Supabase)
+## 💾 Step 2: Set Up Database (Supabase)
 
 1. Go to [https://supabase.com](https://supabase.com) and click **Start your project** (sign in with GitHub).
 2. Click **New Project**, choose your organization, and name your project (e.g. `clanomy-db`).
-3. **Set Database Password:** Choose a strong password and save it in your notepad.
-4. **Choose Region:** Pick the region closest to your users (e.g. `US East (N. Virginia)` / `us-east-1` or `South America (São Paulo)` / `sa-east-1`).
+3. **Set Database Password:** Choose a strong password and save it securely.
+4. **Choose Region:** Pick the region closest to you (e.g. `US East (N. Virginia)` / `us-east-1` or `South America (São Paulo)` / `sa-east-1`).
 5. Click **Create new project**.
 6. **Obtain the Connection Pooler URI (IPv4 Safe):**
    * In the Supabase left sidebar, click **⚙️ Project Settings** ➔ **Database**.
@@ -93,13 +94,13 @@ This guide provides step-by-step instructions to deploy **Clanomy** to the cloud
 
 ---
 
-## 🧠 Step 3: Get AI Brain API Key (Groq)
+## 🧠 Step 3: Get AI API Key (Groq Cloud)
 
 Groq provides sub-second LLM and Whisper transcription inference for free:
 
 1. Go to [https://console.groq.com](https://console.groq.com) and log in.
 2. On the left sidebar, click **API Keys**.
-3. Click **Create API Key**, name it (e.g. `clanomy-prod`), and copy the key (starts with `gsk_`).
+3. Click **Create API Key**, name it (e.g. `clanomy-selfhosted`), and copy the key (starts with `gsk_`).
 4. Save this key as `GROQ_API_KEY`.
 
 ---
@@ -142,32 +143,32 @@ Generate cryptographic keys locally to protect your zero-knowledge encrypted dat
    * **Runtime:** `Python 3`.
    * **Build Command:** `pip install -r requirements.txt`
    * **Start Command:** `uvicorn src.main:app --host 0.0.0.0 --port $PORT`
-   * **Instance Type:** `Free` (or `Starter`).
+   * **Instance Type:** `Free`.
 6. **Environment Variables Configuration:**
    Expand the **Environment Variables** section and add:
 
-| Variable Key | Recommended Production Value | Description |
+| Variable Key | Recommended Self-Hosted Value | Description |
 | :--- | :--- | :--- |
 | `PYTHON_VERSION` | `3.12.8` | Pins stable Python runtime for C-extensions |
 | `DATABASE_URL` | `postgresql+psycopg://postgres.[ref]:[escaped_pwd]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require` | Supabase IPv4 Pooler connection URI |
 | `ENCRYPTION_KEY` | *(Your 32-byte Fernet key from Step 4)* | AES-256 Zero-Knowledge DB encryption |
 | `TELEGRAM_BOT_TOKEN` | *(Your BotFather HTTP API token from Step 1)* | Telegram Bot API authentication |
 | `MESSAGING_WEBHOOK_SECRET` | *(Your 32-character secret from Step 4)* | Validates `X-Telegram-Bot-Api-Secret-Token` |
-| `ENABLE_SUBSCRIPTIONS` | `true` | Enables quotas, tiers, and Telegram Stars billing |
+| `ENABLE_SUBSCRIPTIONS` | `false` | Disables paywalls and unlocks all features for free |
 | `GROQ_API_KEY` | `gsk_...` *(From Step 3)* | Fast cloud AI extraction & voice notes |
 | `DEFAULT_CURRENCY` | `USD` | Base default currency (e.g. `USD`, `EUR`, `BRL`) |
-| `ALLOWED_TELEGRAM_USERS` | `""` | Empty string allows public commercial signups |
-| `ENABLE_DOCS` | `false` | Disables `/docs` and `/openapi.json` from public crawlers |
+| `ALLOWED_TELEGRAM_USERS` | `""` *(or comma-separated IDs)* | Restrict bot access to your Telegram ID(s) |
+| `ENABLE_DOCS` | `false` | Disables public `/docs` swagger page |
 
 7. Click **Deploy Web Service**.
-8. Render will build and deploy your service. On startup, Clanomy automatically runs `alembic upgrade head`, creating all required tables (`families`, `users`, `transactions`, `subscriptions`) in Supabase.
+8. Render will build and deploy your service. On startup, Clanomy automatically runs `alembic upgrade head`, creating all required tables (`family`, `user`, `transaction`, `familyinvite`) in Supabase.
 9. When the status turns green (**Live**), copy your service URL (e.g. `https://clanomy-api.onrender.com`).
 
 ---
 
 ## 🔗 Step 6: Register Webhook with Telegram
 
-Register your live Render URL and secret token with Telegram's servers:
+Register your live Render URL and secret token with Telegram:
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
@@ -175,7 +176,7 @@ curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
      -d '{
        "url": "https://<YOUR_RENDER_URL>/api/v1/telegram/webhook",
        "secret_token": "<MESSAGING_WEBHOOK_SECRET>",
-       "allowed_updates": ["message", "pre_checkout_query"]
+       "allowed_updates": ["message"]
      }'
 ```
 
@@ -205,21 +206,20 @@ curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
    * Verify instant response confirming the logged transaction with category `Food/Drink`.
 3. **Voice Note Logging:**
    * Send a 5-second voice message: `"Coffee 4 dollars"`.
-   * Verify Groq transcribes and logs the transaction.
-4. **Subscription Quotas & Upgrade Invoice Flow:**
-   * Send `/upgrade` to the bot.
-   * Verify the bot issues 1-tap invoices for **Solo Pro (150 Stars)** and **Family Pro (300 Stars)**.
-   * In sandbox/live mode, tap Pay to complete checkout. Verify instant confirmation and account tier upgrade.
-5. **Admin VIP Override (Optional):**
-   To grant lifetime VIP status to your own user account without charging Stars, run from Render Shell or locally:
-   ```bash
-   python scripts/grant_lifetime_pro.py --telegram-id <YOUR_TELEGRAM_NUMERIC_ID>
-   ```
+   * Verify Groq Cloud transcribes and logs the transaction in under a second.
+4. **Income Logging:**
+   * Send a text message: `"Got paid $3,000 salary from Acme Corp"`.
+   * Verify Clanomy records income and displays a cash flow snapshot.
+5. **Family Workspace Collaboration:**
+   * Send `/family` to view your workspace ledger.
+   * Send `/invite` to generate an invite link for your partner or household members.
+6. **Notion Database Synchronization:**
+   * Send `/notion` to connect your personal Notion database for real-time two-way mirroring.
 
 ---
 
 ## 🛡️ Production Best Practices & Troubleshooting
 
-* **Render Free Tier Cold Starts:** Render Free web services spin down after 15 minutes of inactivity. For 100% instant responses and 0-delay `pre_checkout_query` validation, set up an external free monitor (e.g. [UptimeRobot](https://uptimerobot.com)) to ping `https://<YOUR_RENDER_URL>/health` every 10 minutes, or upgrade to Render Starter ($7/mo).
+* **Render Free Tier Cold Starts:** Render Free web services spin down after 15 minutes of inactivity. For instant bot responses 24/7, set up a free monitor (e.g. [UptimeRobot](https://uptimerobot.com) or [Cron-Job.org](https://cron-job.org)) to ping `https://<YOUR_RENDER_URL>/health` every 10 minutes.
 * **Password Encoding in Alembic:** If your database password contains special characters (`@`, `!`, `*`, `$`), the migration runner in `src/db/session.py` automatically escapes `%` signs to `%%` for Python's `configparser`.
-* **Zero Card Storage (PCI-DSS):** Clanomy never sees or stores card numbers; payments are settled natively through Apple Pay / Google Pay / Telegram Stars and verified cryptographically via `pre_checkout_query` webhooks.
+* **Access Whitelisting:** If you want your bot to be completely private to only you and your family, put your Telegram numeric IDs in `ALLOWED_TELEGRAM_USERS` (e.g. `12345678,87654321`). Any unauthorized Telegram user will be rejected.

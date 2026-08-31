@@ -140,8 +140,8 @@ def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_pay
     assert len(mock_telegram.messages) == 3
     intro = mock_telegram.messages[0]["text"]
     assert "Upgrade to Clanomy Pro" in intro
-    assert "Solo Pro (150 Stars / month)" in intro
-    assert "Family Pro (300 Stars / month)" in intro
+    assert "Solo Pro (200 Stars / month)" in intro
+    assert "Family Pro (450 Stars / month)" in intro
 
     invoices = [m for m in mock_telegram.messages if m.get("type") == "invoice"]
     assert len(invoices) == 2

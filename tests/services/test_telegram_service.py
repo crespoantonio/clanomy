@@ -68,7 +68,7 @@ async def test_send_subscription_invoice_solo_pro_success(telegram_service):
         assert json_body["currency"] == "XTR"
         assert json_body["subscription_period"] == 2592000
         assert json_body["provider_token"] == ""
-        assert json_body["prices"] == [{"label": "Clanomy Solo Pro", "amount": 150}]
+        assert json_body["prices"] == [{"label": "Clanomy Solo Pro", "amount": 200}]
 
 @pytest.mark.anyio
 async def test_send_subscription_invoice_family_pro_success(telegram_service):
@@ -94,7 +94,7 @@ async def test_send_subscription_invoice_family_pro_success(telegram_service):
         assert json_body["currency"] == "XTR"
         assert json_body["subscription_period"] == 2592000
         assert json_body["provider_token"] == ""
-        assert json_body["prices"] == [{"label": "Clanomy Family Pro", "amount": 300}]
+        assert json_body["prices"] == [{"label": "Clanomy Family Pro", "amount": 450}]
 
 @pytest.mark.anyio
 async def test_send_subscription_invoice_invalid_plan(telegram_service):

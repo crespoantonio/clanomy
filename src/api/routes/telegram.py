@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Header, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
+from datetime import datetime, timezone
 import time
 import uuid
 import logging
@@ -321,15 +322,30 @@ async def telegram_webhook(
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=msg)
                 return {"status": "ok"}
 
-            trial_badge = ""
-            if family and family.plan_type == "trial":
-                trial_badge = "⭐️ <b>60-Day Family Pro Trial:</b> You are enjoying 60 days of unlimited logs and family features for free!\n\n"
-            elif family and family.plan_type == "free":
-                trial_badge = "📦 <b>Plan:</b> Free Plan (30 free transaction logs per month). Type /upgrade anytime for unlimited logs.\n\n"
+            # Dynamic Plan Badge based on exact subscription tier and quota
+            plan_badge = ""
+            if family:
+                if family.plan_type == "trial":
+                    days_left = 60
+                    if family.trial_ends_at:
+                        now_utc = datetime.now(timezone.utc)
+                        trial_end = family.trial_ends_at if family.trial_ends_at.tzinfo else family.trial_ends_at.replace(tzinfo=timezone.utc)
+                        days_left = max(0, (trial_end - now_utc).days)
+                    plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs and family features!\n\n"
+                elif family.plan_type == "free":
+                    used = getattr(family, "monthly_tx_count", 0)
+                    plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/30 logs used this month). Type /upgrade anytime for unlimited logs.\n\n"
+                elif family.plan_type == "solo_pro":
+                    plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text & voice logs, personal workspace).\n\n"
+                elif family.plan_type == "family_pro":
+                    plan_badge = "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — Unlimited text & voice logs, shared family ledger & Notion sync).\n\n"
+                elif family.plan_type == "lifetime_pro":
+                    plan_badge = "👑 <b>Plan:</b> Lifetime Pro (Permanent active status).\n\n"
 
+            user_display_name = user.full_name or from_user.get("first_name") or "User"
             welcome_text = (
-                f"👋 <b>Welcome to {settings.PROJECT_NAME}, {from_user.get('first_name') or 'User'}!</b>\n\n"
-                f"{trial_badge}"
+                f"👋 <b>Welcome to {settings.PROJECT_NAME}, {user_display_name}!</b>\n\n"
+                f"{plan_badge}"
                 "Here is what you can do with Clanomy:\n"
                 "🎙️ <b>Voice & Text Logging:</b> Send voice notes or type expenses & income (e.g. <i>'Spent $45 on groceries'</i> or <i>'Got $3,500 salary'</i>).\n"
                 "💡 <b>Dual Income & Expense Tracking:</b> Automatically parses, categorizes, and updates your monthly cash flow.\n"

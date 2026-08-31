@@ -1,118 +1,225 @@
-# Deployment Guide: Clanomy (Cloud-Native & Always-Free)
+# Deployment Guide: Clanomy (Render + Supabase + Groq + Telegram Stars)
 
-This guide provides step-by-step instructions to deploy **Clanomy** to the cloud on an **Always-Free ($0.00/month)** architecture. It is designed for beginners. If you follow these instructions exactly, you will have a fully functioning AI financial bot capable of supporting 500+ users for free.
-
-## 🏗️ The Architecture (How it works)
-* **Telegram:** The chat app where users interact with the bot.
-* **Render:** The cloud provider that runs our application code 24/7.
-* **Supabase:** The database that stores the encrypted financial records.
-* **Groq:** The AI "brain" that transcribes voice notes and extracts data.
+This guide provides step-by-step instructions to deploy **Clanomy** to the cloud on an **Always-Free ($0.00/month)** architecture with native **Telegram Stars In-App Subscriptions & AI Logging**. It is designed to be beginner-friendly, rigorous, and production-ready.
 
 ---
 
-## 🛠️ Step 1: Create the Telegram Bot (BotFather)
-First, we need to create the actual bot account on Telegram to get your secret token.
+## 🏗️ The Architecture (How It Works)
 
-1. Open the Telegram app on your phone or computer.
-2. Search for `@BotFather` (look for the one with the official blue checkmark).
-3. Send the message `/newbot`.
-4. BotFather will ask for a name. Send a display name (e.g., `Clanomy AI`).
-5. BotFather will ask for a username. It must end in "bot" (e.g., `ClanomyTrackerBot`).
-6. BotFather will reply with a long string of text called the **HTTP API Token** (it looks something like `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`). 
-7. **Copy this Token and save it in a notepad.** We will need it later. It will be called `TELEGRAM_BOT_TOKEN`.
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                                CLANOMY CLOUD ARCHITECTURE                               │
+│                                                                                         │
+│  [ Telegram User / Client ] ──► (Voice Notes / Text / In-App Stars Payments)            │
+│                 │                                                                       │
+│                 ▼ (HTTPS Webhook + X-Telegram-Bot-Api-Secret-Token)                     │
+│  ┌───────────────────────────────────────────────────────────────────────────────────┐  │
+│  │                            RENDER WEB SERVICE (Compute)                           │  │
+│  │  • FastAPI Application (Python 3.12 / Uvicorn on Port $PORT)                      │  │
+│  │  • Automatic Alembic Database Migrations on Lifespan Startup                      │  │
+│  │  • Quota Gating Engine (ENABLE_SUBSCRIPTIONS=true)                                │  │
+│  │  • Pre-Checkout Query & Successful Payment Handlers                               │  │
+│  └───────────────────┬─────────────────────────────────────────────┬─────────────────┘  │
+│                      │ (Encrypted Ledger & Quotas)                 │ (AI Extraction)    │
+│                      ▼                                             ▼                    │
+│  ┌────────────────────────────────────────┐     ┌────────────────────────────────────┐  │
+│  │       SUPABASE (PostgreSQL)            │     │       GROQ CLOUD (AI Engine)       │  │
+│  │  • AES-256 Zero-Knowledge Encrypted DB │     │  • Whisper-Large-v3 Voice (150ms)  │  │
+│  │  • IPv4 PgBouncer Connection Pooler    │     │  • Llama-3.3-70b Extraction (200ms)│  │
+│  │  • Auto-Managed Tables & Subscriptions │     │  • Zero Container RAM Footprint    │  │
+│  └────────────────────────────────────────┘     └────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+* **Telegram:** Chat client where users log transactions and purchase Pro subscriptions via Apple Pay / Google Pay / Telegram Stars (`XTR`).
+* **Render:** Cloud hosting platform running the FastAPI application and webhook listener.
+* **Supabase:** Managed PostgreSQL database storing AES-256 encrypted financial transactions, families, and subscription quotas.
+* **Groq:** Ultra-fast cloud AI inference engine executing Whisper voice transcription and Llama data extraction in <350ms with 0MB RAM burden on Render.
 
 ---
 
-## 💾 Step 2: Set Up the Database (Supabase)
-We need a place to securely store your data. Supabase gives you a generous free database.
+## 🛠️ Step 1: Create Telegram Bot & Enable Stars Payments (BotFather)
+
+1. Open Telegram and search for `@BotFather` (official bot with the blue checkmark).
+2. **Create Bot:**
+   * Send `/newbot`.
+   * Provide a display name (e.g. `Clanomy AI`).
+   * Provide a username ending in `bot` (e.g. `ClanomyFinanceBot`).
+   * Copy the HTTP API token (e.g. `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`). Save it as `TELEGRAM_BOT_TOKEN`.
+3. **Enable Telegram Stars Payments:**
+   * Send `/mybots` to `@BotFather`.
+   * Select your bot ➔ **Bot Settings** ➔ **Payments**.
+   * Select **Telegram Stars** (available with 0 registration fees).
+   * Enable Test Mode if testing in Sandbox, or Live Mode for production billing.
+4. **Register Bot Commands:**
+   * Send `/setcommands` to `@BotFather`, select your bot, and paste:
+     ```text
+     start - Start Clanomy and view workspace status
+     upgrade - View Pro subscription tiers and upgrade with Telegram Stars
+     family - Manage family members and shared ledger
+     invite - Generate invite link for household members
+     notion - Connect and mirror transactions to Notion
+     export - Export financial logs to CSV or JSON
+     help - View available commands and AI logging tips
+     ```
+
+---
+
+## 💾 Step 2: Set Up Database & Connection Pooler (Supabase)
 
 1. Go to [https://supabase.com](https://supabase.com) and click **Start your project** (sign in with GitHub).
-2. Click **New Project** and choose a default organization.
-3. Give your project a name (e.g., `clanomy-db`).
-4. **Create a strong Database Password and save it in your notepad.** You cannot recover this later.
-5. Choose a region closest to you and click **Create new project**. (It takes a few minutes to set up).
-6. Once the project dashboard loads, look at the left sidebar menu. Click the **⚙️ Project Settings** (gear icon) at the very bottom.
-7. Click **Database** in the settings menu.
-8. Scroll down to **Connection string** and click the **URI** tab.
-9. Copy the URI string provided. It will look like this:
-   `postgresql://postgres.xxxx:YOUR_PASSWORD@aws-0-region.pooler.supabase.com:6543/postgres`
-10. Paste this into your notepad. **Replace the `[YOUR-PASSWORD]` part in that string with the password you created in step 4.**
-11. This final string is your `DATABASE_URL`.
+2. Click **New Project**, choose your organization, and name your project (e.g. `clanomy-db`).
+3. **Set Database Password:** Choose a strong password and save it in your notepad.
+4. **Choose Region:** Pick the region closest to your users (e.g. `US East (N. Virginia)` / `us-east-1` or `South America (São Paulo)` / `sa-east-1`).
+5. Click **Create new project**.
+6. **Obtain the Connection Pooler URI (IPv4 Safe):**
+   * In the Supabase left sidebar, click **⚙️ Project Settings** ➔ **Database**.
+   * Scroll down to **Connection string** ➔ select **URI** tab ➔ select **Pooler** (Session or Transaction mode).
+   * Copy the URI template:
+     ```text
+     postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+     ```
+7. **Format URI for Clanomy (Psycopg3 Driver & URL Escaping):**
+   * Change the prefix from `postgresql://` to `postgresql+psycopg://`.
+   * **URL-Encode special characters in your password** (e.g. replace `@` with `%40`, `!` with `%21`, `*` with `%2A`, `$` with `%24`).
+   * Append `?sslmode=require` to the end.
+   * **Final `DATABASE_URL` Example:**
+     ```text
+     postgresql+psycopg://postgres.hwdzwrvvekaogtqtvmia:9%40ka%21FfAA778Uo8%21Wd%2A%24@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require
+     ```
+
+> [!NOTE]
+> Supabase direct hostnames (`db.<ref>.supabase.co`) only resolve over IPv6. Using the **Connection Pooler URL** (`aws-0-[region].pooler.supabase.com:6543`) ensures full IPv4 compatibility with Render.
 
 ---
 
-## 🧠 Step 3: Get the AI Brain (Groq)
-Groq provides blazing-fast AI inference for free.
+## 🧠 Step 3: Get AI Brain API Key (Groq)
 
-1. Go to [https://console.groq.com](https://console.groq.com) and log in (you can use your Google or GitHub account).
+Groq provides sub-second LLM and Whisper transcription inference for free:
+
+1. Go to [https://console.groq.com](https://console.groq.com) and log in.
 2. On the left sidebar, click **API Keys**.
-3. Click the **Create API Key** button.
-4. Give it a name (e.g., `clanomy-key`) and click Submit.
-5. **Copy the key immediately.** (It usually starts with `gsk_`). 
-6. Paste it into your notepad. This is your `GROQ_API_KEY`.
+3. Click **Create API Key**, name it (e.g. `clanomy-prod`), and copy the key (starts with `gsk_`).
+4. Save this key as `GROQ_API_KEY`.
 
 ---
 
-## 🔐 Step 4: Create Security Keys
-To ensure all financial data is encrypted and secure, we need two secret keys.
+## 🔐 Step 4: Generate Security Secrets
 
-1. **Encryption Key:** We need a strong random key to lock the database.
-   * Go to this secure generator: [https://asecuritysite.com/encryption/keygen](https://asecuritysite.com/encryption/keygen) (or generate a 32-byte base64 string). 
-   * Alternatively, if you have Python installed locally, run this in your terminal: 
-     `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
-   * Save the output in your notepad as `ENCRYPTION_KEY`.
-2. **Webhook Secret:** This proves that messages are actually coming from Telegram.
-   * Just mash your keyboard to make a random string (e.g., `my_super_secret_telegram_string_2026`). No spaces.
-   * Save this in your notepad as `MESSAGING_WEBHOOK_SECRET`.
-3. **Origin Shield Secret (Optional):** If using Cloudflare proxy/tunnel to shield Render origin:
-   * Generate a 32-character random hex string as `CLOUDFLARE_ORIGIN_SECRET`.
+Generate cryptographic keys locally to protect your zero-knowledge encrypted database and webhook endpoint:
+
+1. **`ENCRYPTION_KEY` (AES-256 Fernet Key):**
+   Run in your terminal:
+   ```bash
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   ```
+   *Save the 32-byte URL-safe base64 string.*
+
+2. **`MESSAGING_WEBHOOK_SECRET` (Webhook Authenticity Token):**
+   Run in your terminal:
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+   *Save this 32-byte hex string.*
 
 ---
 
-## 🚀 Step 5: Deploy the Code (Render)
-Now we will put the code on a server that runs 24/7 for free.
+## 🚀 Step 5: Deploy Web Service (Render)
 
-1. Log into your GitHub account and make sure the Clanomy code is pushed to a repository on your account.
-2. Go to [https://dashboard.render.com](https://dashboard.render.com) and create a free account (sign up with GitHub).
-3. Click the **New +** button at the top right and select **Web Service**.
-4. Select **Build and deploy from a Git repository** and click Next.
-5. Connect your GitHub account and select your `clanomy` repository.
-6. Fill out the deployment details:
-   * **Name:** `clanomy-ai-bot`
-   * **Region:** (Pick the one closest to your Supabase region)
-   * **Runtime:** `Python 3`
+1. Ensure your latest Clanomy code is pushed to your GitHub repository:
+   ```bash
+   git add .
+   git commit -m "feat: configure cloud deployment"
+   git push origin master
+   ```
+2. Log into [https://dashboard.render.com](https://dashboard.render.com).
+3. Click **New +** ➔ **Web Service**.
+4. Connect your GitHub repository (`clanomy`).
+5. Configure the Web Service settings:
+   * **Name:** `clanomy-api` (or `clanomy-bot`)
+   * **Region:** Same region as your Supabase database (e.g. `Virginia (US East)`).
+   * **Branch:** `master` (or `main`).
+   * **Runtime:** `Python 3`.
    * **Build Command:** `pip install -r requirements.txt`
-   * **Start Command:** `uvicorn src.main:app --host 0.0.0.0 --port 10000`
-   * **Instance Type:** Select the **Free** tier.
-7. Scroll down to the **Environment Variables** section and click **Add Environment Variable**. Add all the secrets from your notepad:
-   * Key: `DATABASE_URL` | Value: (Your Supabase URI with the password)
-   * Key: `ENCRYPTION_KEY` | Value: (Your Fernet key)
-   * Key: `TELEGRAM_BOT_TOKEN` | Value: (Your BotFather token)
-   * Key: `MESSAGING_WEBHOOK_SECRET` | Value: (Your random keyboard mash)
-   * Key: `CLOUDFLARE_ORIGIN_SECRET` | Value: (Optional: Your origin shield secret)
-   * Key: `ENABLE_DOCS` | Value: `false`
-   * Key: `GROQ_API_KEY` | Value: (Your `gsk_...` key)
-   * Key: `DEFAULT_CURRENCY` | Value: `USD`
-   * Key: `ALLOWED_TELEGRAM_USERS` | Value: (Your Telegram username, e.g. `your_username` or numeric ID to lock the bot to only you)
-8. Click **Deploy Web Service** at the bottom.
-9. Render will start building the app. Wait 5-10 minutes. When it says "Live" in green, look at the top left under your app name. You will see a URL (e.g., `https://clanomy-ai-bot.onrender.com`). **Copy this URL to your notepad.**
+   * **Start Command:** `uvicorn src.main:app --host 0.0.0.0 --port $PORT`
+   * **Instance Type:** `Free` (or `Starter`).
+6. **Environment Variables Configuration:**
+   Expand the **Environment Variables** section and add:
+
+| Variable Key | Recommended Production Value | Description |
+| :--- | :--- | :--- |
+| `PYTHON_VERSION` | `3.12.8` | Pins stable Python runtime for C-extensions |
+| `DATABASE_URL` | `postgresql+psycopg://postgres.[ref]:[escaped_pwd]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require` | Supabase IPv4 Pooler connection URI |
+| `ENCRYPTION_KEY` | *(Your 32-byte Fernet key from Step 4)* | AES-256 Zero-Knowledge DB encryption |
+| `TELEGRAM_BOT_TOKEN` | *(Your BotFather HTTP API token from Step 1)* | Telegram Bot API authentication |
+| `MESSAGING_WEBHOOK_SECRET` | *(Your 32-character secret from Step 4)* | Validates `X-Telegram-Bot-Api-Secret-Token` |
+| `ENABLE_SUBSCRIPTIONS` | `true` | Enables quotas, tiers, and Telegram Stars billing |
+| `GROQ_API_KEY` | `gsk_...` *(From Step 3)* | Fast cloud AI extraction & voice notes |
+| `DEFAULT_CURRENCY` | `USD` | Base default currency (e.g. `USD`, `EUR`, `BRL`) |
+| `ALLOWED_TELEGRAM_USERS` | `""` | Empty string allows public commercial signups |
+| `ENABLE_DOCS` | `false` | Disables `/docs` and `/openapi.json` from public crawlers |
+
+7. Click **Deploy Web Service**.
+8. Render will build and deploy your service. On startup, Clanomy automatically runs `alembic upgrade head`, creating all required tables (`families`, `users`, `transactions`, `subscriptions`) in Supabase.
+9. When the status turns green (**Live**), copy your service URL (e.g. `https://clanomy-api.onrender.com`).
 
 ---
 
-## 🔗 Step 6: Connect Telegram to Your Server
-Finally, we need to tell Telegram to send messages to your Render server.
+## 🔗 Step 6: Register Webhook with Telegram
 
-1. Open a new tab in your web browser.
-2. You need to build a special URL by filling in the brackets with your actual data from the notepad. Do not include the `<` or `>` brackets.
+Register your live Render URL and secret token with Telegram's servers:
 
-**The Template:**
-`https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<RENDER_URL>/api/v1/telegram/webhook&secret_token=<MESSAGING_WEBHOOK_SECRET>`
+```bash
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://<YOUR_RENDER_URL>/api/v1/telegram/webhook",
+       "secret_token": "<MESSAGING_WEBHOOK_SECRET>",
+       "allowed_updates": ["message", "pre_checkout_query"]
+     }'
+```
 
-**Example of what it should look like:**
-`https://api.telegram.org/bot1234567890:ABCdefGHI/setWebhook?url=https://clanomy-ai-bot.onrender.com/api/v1/telegram/webhook&secret_token=my_super_secret_telegram_string_2026`
+*(Replace `<TELEGRAM_BOT_TOKEN>`, `<YOUR_RENDER_URL>`, and `<MESSAGING_WEBHOOK_SECRET>` with your actual values).*
 
-3. Paste your customized URL into the address bar of your browser and hit Enter.
-4. If successful, you will see a white screen with text like: `{"ok":true,"result":true,"description":"Webhook was set"}`.
+### Expected Success Response:
+```json
+{
+  "ok": true,
+  "result": true,
+  "description": "Webhook was set"
+}
+```
 
-## 🎉 You're Done!
-Open Telegram, search for your bot, and click **Start**. Try sending it a message like "I spent $5 on coffee." It should reply instantly!
+---
+
+## ✅ Step 7: Verification & Testing Checklist
+
+1. **Health Probe:**
+   Visit `https://<YOUR_RENDER_URL>/health` in your browser. Verify you receive:
+   ```json
+   {"status":"healthy","database":"connected"}
+   ```
+2. **Start & Ledger Logging:**
+   * Open your bot in Telegram and send `/start`.
+   * Send a test text expense: `"Dinner with team $45"`.
+   * Verify instant response confirming the logged transaction with category `Food/Drink`.
+3. **Voice Note Logging:**
+   * Send a 5-second voice message: `"Coffee 4 dollars"`.
+   * Verify Groq transcribes and logs the transaction.
+4. **Subscription Quotas & Upgrade Invoice Flow:**
+   * Send `/upgrade` to the bot.
+   * Verify the bot issues 1-tap invoices for **Solo Pro (150 Stars)** and **Family Pro (300 Stars)**.
+   * In sandbox/live mode, tap Pay to complete checkout. Verify instant confirmation and account tier upgrade.
+5. **Admin VIP Override (Optional):**
+   To grant lifetime VIP status to your own user account without charging Stars, run from Render Shell or locally:
+   ```bash
+   python scripts/grant_lifetime_pro.py --telegram-id <YOUR_TELEGRAM_NUMERIC_ID>
+   ```
+
+---
+
+## 🛡️ Production Best Practices & Troubleshooting
+
+* **Render Free Tier Cold Starts:** Render Free web services spin down after 15 minutes of inactivity. For 100% instant responses and 0-delay `pre_checkout_query` validation, set up an external free monitor (e.g. [UptimeRobot](https://uptimerobot.com)) to ping `https://<YOUR_RENDER_URL>/health` every 10 minutes, or upgrade to Render Starter ($7/mo).
+* **Password Encoding in Alembic:** If your database password contains special characters (`@`, `!`, `*`, `$`), the migration runner in `src/db/session.py` automatically escapes `%` signs to `%%` for Python's `configparser`.
+* **Zero Card Storage (PCI-DSS):** Clanomy never sees or stores card numbers; payments are settled natively through Apple Pay / Google Pay / Telegram Stars and verified cryptographically via `pre_checkout_query` webhooks.

@@ -84,3 +84,18 @@ def test_run_migrations_helper_isolated(monkeypatch, tmp_path):
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
         assert version_result[0] == "0002_subscription_schema_expansion"
 
+def test_run_migrations_with_percent_encoded_url(monkeypatch, tmp_path):
+    """Verify run_migrations() handles database URLs with % encoding (e.g. passwords)."""
+    test_db_path = tmp_path / "test_percent%40test.db"
+    test_db_url = f"sqlite:///{test_db_path}"
+    
+    monkeypatch.setattr(settings, "DATABASE_URL", test_db_url)
+    
+    # Run helper function - should not raise configparser interpolation error
+    run_migrations()
+    
+    test_engine = create_engine(test_db_url)
+    with Session(test_engine) as session:
+        version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
+        assert version_result[0] == "0002_subscription_schema_expansion"
+

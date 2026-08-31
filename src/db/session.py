@@ -24,13 +24,17 @@ def run_migrations():
             raise FileNotFoundError(f"alembic.ini not found at {alembic_ini_path}")
             
         alembic_cfg = Config(alembic_ini_path)
-        alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        # Escape % as %% because Alembic uses Python configparser which interprets % as interpolation
+        escaped_url = settings.DATABASE_URL.replace("%", "%%")
+        alembic_cfg.set_main_option("sqlalchemy.url", escaped_url)
         logger.info("Running Alembic database migrations (upgrade head)...")
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic database migrations completed successfully.")
     except Exception as e:
-        logger.critical(f"Alembic database migration failed: {e}", exc_info=True)
-        raise
+        from src.core.security import sanitize_exception_message
+        sanitized_msg = sanitize_exception_message(e, settings.DATABASE_URL)
+        logger.critical(f"Alembic database migration failed: {sanitized_msg}")
+        raise RuntimeError(f"Database migration failed: {sanitized_msg}") from None
 
 def init_db():
     # Create all tables defined in models.py (fallback / test suites)

@@ -77,3 +77,35 @@ def test_origin_shield_middleware():
     finally:
         settings.CLOUDFLARE_ORIGIN_SECRET = original_origin
 
+def test_mask_database_url():
+    from src.core.security import mask_database_url
+    
+    # 1. Standard URL
+    raw_url = "postgresql+psycopg://postgres:supersecretpassword@db.supabase.co:5432/postgres"
+    masked = mask_database_url(raw_url)
+    assert "supersecretpassword" not in masked
+    assert "postgres:***@" in masked
+    assert "db.supabase.co:5432/postgres" in masked
+    
+    # 2. URL with percent-encoded special characters
+    raw_encoded = "postgresql+psycopg://postgres.ref:9%40ka%21FfAA%2A%24@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
+    masked_encoded = mask_database_url(raw_encoded)
+    assert "9%40ka" not in masked_encoded
+    assert ":***@" in masked_encoded
+    assert "aws-0-us-east-1.pooler.supabase.com" in masked_encoded
+
+    # 3. None or empty
+    assert mask_database_url(None) == ""
+    assert mask_database_url("") == ""
+
+def test_sanitize_exception_message():
+    from src.core.security import sanitize_exception_message
+    
+    raw_url = "postgresql+psycopg://postgres:secret123@db.supabase.co:5432/postgres"
+    error_msg = f"Connection failed to '{raw_url}' with error timeout"
+    
+    sanitized = sanitize_exception_message(error_msg, raw_url=raw_url)
+    assert "secret123" not in sanitized
+    assert "postgres:***@db.supabase.co:5432/postgres" in sanitized
+
+

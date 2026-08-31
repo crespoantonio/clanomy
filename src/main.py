@@ -17,8 +17,10 @@ async def lifespan(app: FastAPI):
     try:
         run_migrations()
     except Exception as e:
-        logger.critical(f"Database initialization/migration failed: {e}", exc_info=True)
-        raise RuntimeError(f"Startup aborted: database migration failed: {e}") from e
+        from src.core.security import sanitize_exception_message
+        sanitized_msg = sanitize_exception_message(e, settings.DATABASE_URL)
+        logger.critical(f"Database initialization/migration failed: {sanitized_msg}")
+        raise RuntimeError(f"Startup aborted: database migration failed: {sanitized_msg}") from None
         
     # Initialize HTTP client pool
     HTTPClientManager().init()

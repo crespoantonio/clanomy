@@ -24,3 +24,31 @@ def verify_origin_secret(received_secret: Optional[str]) -> bool:
         return False
     return secrets.compare_digest(received_secret, settings.CLOUDFLARE_ORIGIN_SECRET.strip())
 
+def mask_database_url(url: Optional[str]) -> str:
+    """
+    Masks the password in a database URL string to protect credentials from appearing in logs or error traces.
+    e.g. postgresql+psycopg://user:password@host:5432/db -> postgresql+psycopg://user:***@host:5432/db
+    """
+    if not url:
+        return ""
+    try:
+        from sqlalchemy.engine import make_url
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:
+        import re
+        return re.sub(r":([^@/:\s]+)@", r":***@", url)
+
+def sanitize_exception_message(error_or_text: object, raw_url: Optional[str] = None) -> str:
+    """
+    Replaces raw database credentials and connection strings in error messages with masked equivalents.
+    """
+    import re
+    text = str(error_or_text)
+    target_url = raw_url or (settings.DATABASE_URL if hasattr(settings, "DATABASE_URL") else None)
+    if target_url:
+        masked = mask_database_url(target_url)
+        text = text.replace(target_url, masked)
+        text = text.replace(target_url.replace("%", "%%"), masked)
+    text = re.sub(r":([^@/:\s]{2,})@", r":***@", text)
+    return text
+

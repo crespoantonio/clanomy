@@ -19,9 +19,10 @@ class MessagingService:
             raise ValueError("User ID is required")
 
         username = user_data.get("username")
-        first_name = user_data.get("first_name", "")
-        last_name = user_data.get("last_name", "")
-        full_name = f"{first_name} {last_name}".strip() or None
+        first_name = (user_data.get("first_name") or "").strip()
+        last_name = (user_data.get("last_name") or "").strip()
+        name_parts = [part for part in (first_name, last_name) if part]
+        full_name = " ".join(name_parts) if name_parts else None
 
         # Check for existing user
         statement = select(User).where(User.telegram_id == platform_id)

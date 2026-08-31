@@ -66,3 +66,46 @@ def test_get_or_create_user_existing_user(session: Session):
     assert returned_family.id == family.id
     # Should update info if changed
     assert returned_user.username == "existing_updated"
+
+def test_get_or_create_user_no_last_name(session: Session):
+    """Verify that user without last_name does not result in 'First None'."""
+    service = MessagingService(session)
+    user_data = {
+        "id": 99999,
+        "username": "tony_c",
+        "first_name": "Tony",
+        "last_name": None
+    }
+    
+    user, family = service.get_or_create_user_and_family(user_data)
+    assert user.full_name == "Tony"
+    assert family.name == "Tony's Family"
+
+def test_get_or_create_user_no_first_name(session: Session):
+    """Verify that user with only last_name sets full_name to last_name."""
+    service = MessagingService(session)
+    user_data = {
+        "id": 88888,
+        "username": "crespo_user",
+        "first_name": None,
+        "last_name": "Crespo"
+    }
+    
+    user, family = service.get_or_create_user_and_family(user_data)
+    assert user.full_name == "Crespo"
+    assert family.name == "Crespo's Family"
+
+def test_get_or_create_user_only_username(session: Session):
+    """Verify that user with neither first nor last name falls back cleanly."""
+    service = MessagingService(session)
+    user_data = {
+        "id": 77777,
+        "username": "mystery_user",
+        "first_name": None,
+        "last_name": None
+    }
+    
+    user, family = service.get_or_create_user_and_family(user_data)
+    assert user.full_name is None
+    assert family.name == "mystery_user's Family"
+

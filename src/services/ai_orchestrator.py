@@ -44,16 +44,23 @@ def create_logged_task(coro, *, name: Optional[str] = None) -> asyncio.Task:
     return task
 
 def _format_currency(amount: float, currency: str = "USD", show_sign: bool = False) -> str:
+    curr_upper = (currency or settings.DEFAULT_CURRENCY or "USD").upper()
     symbols = {
         "USD": "$",
         "EUR": "€",
-        "GBP": "£"
+        "GBP": "£",
+        "ARS": "$",
+        "MXN": "$",
+        "CLP": "$",
+        "COP": "$",
+        "UYU": "$",
+        "BRL": "R$",
+        "PEN": "S/"
     }
-    curr_upper = (currency or "USD").upper()
-    sym = symbols.get(curr_upper, f"{curr_upper} ")
+    sym = symbols.get(curr_upper, "")
     sign = "-" if (amount or 0.0) < 0 else ("+" if show_sign and (amount or 0.0) > 0 else "")
     abs_amt = abs(amount or 0.0)
-    return f"{sign}{sym}{abs_amt:,.2f}"
+    return f"{sign}{sym}{abs_amt:,.2f} {curr_upper}".strip()
 
 class AIOrchestrator:
     def __init__(self):

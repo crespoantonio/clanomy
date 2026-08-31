@@ -307,4 +307,27 @@ async def test_extract_via_cloud_ai_success(monkeypatch):
         assert result.concept == "Dinner"
         assert result.type == "expense"
 
+@pytest.mark.anyio
+async def test_extract_currency_ambiguous_pesos_and_explicit_latam(service, mock_ollama_client, monkeypatch):
+    # Explicit Mexican Pesos
+    mock_resp = MagicMock()
+    mock_resp.message.content = '{"type": "expense", "amount": 500.0, "category": "Food/Drink", "concept": "Helado", "currency": "pesos mexicanos"}'
+    mock_ollama_client.chat.return_value = mock_resp
+    res_mxn = await service.extract("Gasté 500 pesos mexicanos en helado")
+    assert res_mxn.currency == "MXN"
+
+    # Explicit Argentine Pesos
+    mock_resp.message.content = '{"type": "expense", "amount": 1500.0, "category": "Food/Drink", "concept": "Cena", "currency": "pesos argentinos"}'
+    mock_ollama_client.chat.return_value = mock_resp
+    res_ars = await service.extract("Cena 1500 pesos argentinos")
+    assert res_ars.currency == "ARS"
+
+    # Ambiguous pesos defaults to DEFAULT_CURRENCY (e.g. ARS or USD)
+    monkeypatch.setattr(settings, "DEFAULT_CURRENCY", "ARS")
+    mock_resp.message.content = '{"type": "expense", "amount": 300.0, "category": "Food/Drink", "concept": "Café", "currency": "pesos"}'
+    mock_ollama_client.chat.return_value = mock_resp
+    res_default = await service.extract("300 pesos café")
+    assert res_default.currency == "ARS"
+
+
 

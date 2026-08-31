@@ -79,10 +79,19 @@ class ExtractionResult(BaseModel):
     @field_validator("currency")
     @classmethod
     def validate_currency(cls, v: str) -> str:
+        default_curr = (settings.DEFAULT_CURRENCY or "USD").upper()
         mapping = {
-            "dollar": "USD", "dollars": "USD", "usd": "USD", "$": "USD",
+            "dollar": "USD", "dollars": "USD", "usd": "USD", "$": "USD", "dolar": "USD", "dolares": "USD", "dólar": "USD", "dólares": "USD",
             "euro": "EUR", "euros": "EUR", "eur": "EUR", "€": "EUR",
-            "pound": "GBP", "pounds": "GBP", "gbp": "GBP", "£": "GBP"
+            "pound": "GBP", "pounds": "GBP", "gbp": "GBP", "£": "GBP", "libra": "GBP", "libras": "GBP",
+            "peso mexicano": "MXN", "pesos mexicanos": "MXN", "pesos mexicanas": "MXN", "mxn": "MXN", "mexican pesos": "MXN",
+            "peso argentino": "ARS", "pesos argentinos": "ARS", "pesos argentinas": "ARS", "ars": "ARS", "argentine pesos": "ARS",
+            "peso chileno": "CLP", "pesos chilenos": "CLP", "pesos chilenas": "CLP", "clp": "CLP", "chilean pesos": "CLP",
+            "peso colombiano": "COP", "pesos colombianos": "COP", "pesos colombianas": "COP", "cop": "COP", "colombian pesos": "COP",
+            "peso uruguayo": "UYU", "pesos uruguayos": "UYU", "pesos uruguayas": "UYU", "uyu": "UYU", "uruguayan pesos": "UYU",
+            "real": "BRL", "reales": "BRL", "reais": "BRL", "brl": "BRL", "r$": "BRL",
+            "sol": "PEN", "soles": "PEN", "pen": "PEN", "s/": "PEN",
+            "peso": default_curr, "pesos": default_curr, "bucks": default_curr, "mangos": default_curr, "lucas": default_curr, "plata": default_curr
         }
         cleaned = v.strip().lower()
         if cleaned in mapping:
@@ -90,7 +99,7 @@ class ExtractionResult(BaseModel):
             
         if len(cleaned) == 3 and cleaned.isalpha():
             return cleaned.upper()
-        return "USD"
+        return default_curr
 
 _ollama_semaphore = asyncio.Semaphore(3)
 
@@ -124,20 +133,33 @@ class ExtractionService:
         
         amount = float(amount_match.group(1).replace(',', ''))
         
-        currency = "USD"
+        default_curr = (settings.DEFAULT_CURRENCY or "USD").upper()
+        currency = default_curr
         text_lower = text.lower()
         if re.search(r'\beuro?s?\b|€', text_lower):
             currency = "EUR"
-        elif re.search(r'\bgbp\b|\bpounds?\b|£', text_lower):
+        elif re.search(r'\bgbp\b|\bpounds?\b|£|\blibras?\b', text_lower):
             currency = "GBP"
+        elif re.search(r'\bpesos?\s+mexican[oa]s?\b|\bmxn\b', text_lower):
+            currency = "MXN"
+        elif re.search(r'\bpesos?\s+argentin[oa]s?\b|\bars\b', text_lower):
+            currency = "ARS"
+        elif re.search(r'\bpesos?\s+chilen[oa]s?\b|\bclp\b', text_lower):
+            currency = "CLP"
+        elif re.search(r'\bpesos?\s+colombian[oa]s?\b|\bcop\b', text_lower):
+            currency = "COP"
+        elif re.search(r'\bd[oó]lar(?:es)?\b|\busd\b|\$', text_lower):
+            currency = "USD"
             
         # Classify intent (income vs expense)
         income_keywords = [
             "salary", "earned", "got paid", "sold", "bonus",
-            "freelance payment", "freelance", "dividend", "dividends", "invoice paid", "received"
+            "freelance payment", "freelance", "dividend", "dividends", "invoice paid", "received",
+            "sueldo", "gané", "gane", "cobré", "cobre", "vendí", "vendi", "ingreso", "pago recibido"
         ]
         expense_keywords = [
-            "spent", "bought", "paid for", "coffee", "lunch", "rent"
+            "spent", "bought", "paid for", "coffee", "lunch", "rent",
+            "gasté", "gaste", "compré", "compre", "pagué", "pague", "alquiler", "comida", "helado", "cena"
         ]
         
         tx_type = "expense"
@@ -148,24 +170,27 @@ class ExtractionService:
         
         if has_income and not has_expense:
             tx_type = "income"
-            if any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["salary", "got paid", "wage", "wages"]):
+            if any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["salary", "got paid", "wage", "wages", "sueldo"]):
                 category = "Salary"
-            elif re.search(r'\bbonus\b', text_lower):
+            elif re.search(r'\b(?:bonus|bono)\b', text_lower):
                 category = "Bonus"
-            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["sold", "sale", "sales"]):
+            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["sold", "sale", "sales", "vendí", "vendi", "venta"]):
                 category = "Sale"
             elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["freelance", "freelance payment", "invoice paid", "consulting"]):
                 category = "Freelance"
-            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["dividend", "dividends", "investment", "interest"]):
+            elif any(re.search(rf'\b{re.escape(kw)}\b', text_lower) for kw in ["dividend", "dividends", "investment", "interest", "dividendo", "inversión"]):
                 category = "Investment"
-            elif re.search(r'\bgift\b', text_lower):
+            elif re.search(r'\b(?:gift|regalo)\b', text_lower):
                 category = "Gift"
-                
+
+        # Concept heuristic: clean text of amount and standard verbs
+        concept = text.strip()
+        
         return ExtractionResult(
-            type=tx_type,
             amount=amount,
+            type=tx_type,
             category=category,
-            concept=text.strip(),
+            concept=concept,
             currency=currency,
             transaction_date=None
         )
@@ -237,15 +262,18 @@ class ExtractionService:
 
         ref = reference_time or datetime.now(timezone.utc)
         current_date_str = ref.strftime("%Y-%m-%d %H:%M:%S UTC")
+        default_currency = (settings.DEFAULT_CURRENCY or "USD").upper()
 
-        system_prompt = f'''You are an expert financial data extraction parser.
+        system_prompt = f'''You are an expert bilingual (English & Spanish) financial data extraction parser.
 Your job is to extract transaction details from unstructured natural language text and return them in structured JSON format.
+
+Default Workspace Currency: {default_currency}
 
 RULES:
 1. Determine the transaction 'type':
    - Must be either "expense" or "income".
-   - Classify as "income" for earnings, wages, salaries, sales, bonuses, freelance payments, dividends, or received money (e.g. keywords: "salary", "earned", "got paid", "sold", "bonus", "freelance payment", "dividend", "invoice paid", "received").
-   - Classify as "expense" for spending, purchases, payments, bills (e.g. keywords: "spent", "bought", "paid for", "coffee", "lunch", "rent").
+   - Classify as "income" for earnings, wages, salaries, sales, bonuses, freelance payments, dividends, or received money (e.g. keywords in English: "salary", "earned", "got paid", "sold", "bonus", "freelance payment", "dividend", "invoice paid", "received"; keywords in Spanish: "sueldo", "gané", "cobré", "vendí", "bono", "ingreso", "pago recibido", "factura cobrada").
+   - Classify as "expense" for spending, purchases, payments, bills (e.g. keywords in English: "spent", "bought", "paid for", "coffee", "lunch", "rent"; keywords in Spanish: "gasté", "compré", "pagué", "café", "almuerzo", "cena", "helado", "alquiler").
    - Default safely to "expense" if intent is ambiguous.
 2. Extract the numeric 'amount' as a positive float (> 0).
 3. Determine the 'category':
@@ -253,12 +281,21 @@ RULES:
    - For income, use one of: "Salary", "Bonus", "Freelance", "Investment", "Gift", "Sale", "Other".
    - If ambiguous or does not fit, use "Other".
 4. Extract the 'concept' (a brief description of what was purchased or earned, client/merchant name, or item sold).
-5. Determine the 'currency' and return its standard ISO 3-letter code (e.g., "euros" -> "EUR", "dollars" -> "USD", "pounds" -> "GBP"). If no currency is mentioned, use "USD".
+5. Determine the 'currency' and return its standard ISO 4217 3-letter code:
+   - "dollars", "dólares", "usd", "$" -> "USD"
+   - "euros", "eur", "€" -> "EUR"
+   - "pounds", "libras", "gbp", "£" -> "GBP"
+   - "pesos mexicanos", "mxn" -> "MXN"
+   - "pesos argentinos", "ars" -> "ARS"
+   - "pesos chilenos", "clp" -> "CLP"
+   - "pesos colombianos", "cop" -> "COP"
+   - "reales", "brl" -> "BRL"
+   - CRITICAL DEFAULTING RULE: If the user says a generic ambiguous word like "pesos", "bucks", "mangos", "lucas" without specifying a country (e.g., "gasté 500 pesos en helado"), or if no currency is mentioned at all, you MUST set 'currency' to "{default_currency}".
 6. Extract 'transaction_date' as an ISO format YYYY-MM-DD string:
    - Current Date: {current_date_str}
-   - If a relative date is specified like "yesterday", "last Monday", "3 days ago", compute the specific date based on Current Date.
-   - If a vague relative date is specified like "last week" without specifying a day, default to 7 days prior to Current Date.
-   - If no date or time is specified or if it explicitly occurred today, set 'transaction_date' to null.
+   - If a relative date is specified like "yesterday", "ayer", "last Monday", "el lunes pasado", "3 days ago", "hace 3 días", compute the specific date based on Current Date.
+   - If a vague relative date is specified like "last week" / "la semana pasada" without specifying a day, default to 7 days prior to Current Date.
+   - If no date or time is specified or if it explicitly occurred today / hoy, set 'transaction_date' to null.
 
 CRITICAL SECURITY RULES:
 - The user input below is delimited by triple backticks (```).

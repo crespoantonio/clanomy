@@ -812,11 +812,11 @@ async def test_orchestrator_income_text_success(orchestrator, monkeypatch):
     # Verify message format
     mock_send_message.assert_called_once()
     msg_text = mock_send_message.call_args[1]["text"]
-    assert "💰 Income Logged: +$3,500.00 (Salary - Acme Corp)" in msg_text
+    assert "💰 Income Logged: +$3,500.00 USD (Salary - Acme Corp)" in msg_text
     assert "📊 August Snapshot:" in msg_text
-    assert "• Total In: $3,500.00" in msg_text
-    assert "• Total Out: $1,200.00" in msg_text
-    assert "• Net Savings: +$2,300.00 (66%)" in msg_text or "(65%)" in msg_text
+    assert "• Total In: $3,500.00 USD" in msg_text
+    assert "• Total Out: $1,200.00 USD" in msg_text
+    assert "• Net Savings: +$2,300.00 USD (66%)" in msg_text or "(65%)" in msg_text
 
 @pytest.mark.anyio
 async def test_orchestrator_income_audio_success(orchestrator, monkeypatch):
@@ -871,7 +871,7 @@ async def test_orchestrator_income_audio_success(orchestrator, monkeypatch):
     mock_transcribe.assert_called_once()
     mock_extract.assert_called_once_with(text="earned 500 freelance consulting")
     mock_send_message.assert_called_once()
-    assert "💰 Income Logged: +$500.00" in mock_send_message.call_args[1]["text"]
+    assert "💰 Income Logged: +$500.00 USD" in mock_send_message.call_args[1]["text"]
 
 @pytest.mark.anyio
 async def test_orchestrator_income_retroactive(orchestrator, monkeypatch):
@@ -917,7 +917,7 @@ async def test_orchestrator_income_retroactive(orchestrator, monkeypatch):
 
     mock_send_message.assert_called_once()
     msg = mock_send_message.call_args[1]["text"]
-    assert "💰 Income Logged: +$2,000.00 (Salary - Acme Corp) (logged for Aug 10, 2026)" in msg
+    assert "💰 Income Logged: +$2,000.00 USD (Salary - Acme Corp) (logged for Aug 10, 2026)" in msg
     assert "📊 August Snapshot:" in msg
 
 @pytest.mark.anyio
@@ -965,7 +965,7 @@ async def test_orchestrator_income_concept_equals_category(orchestrator, monkeyp
 
     mock_send_message.assert_called_once()
     msg = mock_send_message.call_args[1]["text"]
-    assert "💰 Income Logged: +$4,000.00 (Salary)\n" in msg
+    assert "💰 Income Logged: +$4,000.00 USD (Salary)\n" in msg
 
 @pytest.mark.anyio
 async def test_orchestrator_income_negative_net_savings(orchestrator, monkeypatch):
@@ -1017,9 +1017,9 @@ async def test_orchestrator_income_negative_net_savings(orchestrator, monkeypatc
 
     mock_send_message.assert_called_once()
     msg = mock_send_message.call_args[1]["text"]
-    assert "• Total In: $1,000.00" in msg
-    assert "• Total Out: $1,500.00" in msg
-    assert "• Net Savings: -$500.00 (-50%)" in msg
+    assert "• Total In: $1,000.00 USD" in msg
+    assert "• Total Out: $1,500.00 USD" in msg
+    assert "• Net Savings: -$500.00 USD (-50%)" in msg
 
 @pytest.mark.anyio
 async def test_orchestrator_income_eur_currency(orchestrator, monkeypatch):
@@ -1072,9 +1072,9 @@ async def test_orchestrator_income_eur_currency(orchestrator, monkeypatch):
 
     mock_send_message.assert_called_once()
     msg = mock_send_message.call_args[1]["text"]
-    assert "💰 Income Logged: +€2,500.00 (Salary - Acme Europe)" in msg
-    assert "• Total In: €2,500.00" in msg
-    assert "• Total Out: €500.00" in msg
-    assert "• Net Savings: +€2,000.00 (80%)" in msg
+    assert "💰 Income Logged: +€2,500.00 EUR (Salary - Acme Europe)" in msg
+    assert "• Total In: €2,500.00 EUR" in msg
+    assert "• Total Out: €500.00 EUR" in msg
+    assert "• Net Savings: +€2,000.00 EUR (80%)" in msg
 
 

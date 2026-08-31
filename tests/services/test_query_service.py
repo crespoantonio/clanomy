@@ -650,3 +650,47 @@ def test_generate_fallback_summary_net_cash_flow_query():
     assert "1200.00" in res or "1,200.00" in res
     assert "2300.00" in res or "2,300.00" in res
 
+def test_resolve_date_range_dynamic_days_and_spanish(query_service):
+    ref_time = datetime(2026, 8, 31, 12, 0, tzinfo=timezone.utc)
+    
+    # 15 days
+    start, end = query_service._resolve_date_range("last_15_days", None, None, ref_time)
+    assert start == datetime(2026, 8, 16, 0, 0, tzinfo=timezone.utc)
+    assert end == datetime(2026, 8, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    # Spanish ultimos_15_dias
+    start_es, end_es = query_service._resolve_date_range("ultimos_15_dias", None, None, ref_time)
+    assert start_es == datetime(2026, 8, 16, 0, 0, tzinfo=timezone.utc)
+    assert end_es == datetime(2026, 8, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+    # Spanish este_mes
+    start_m, end_m = query_service._resolve_date_range("este_mes", None, None, ref_time)
+    assert start_m == datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc)
+    assert end_m == datetime(2026, 8, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+
+def test_multi_currency_summary_segregation():
+    from src.services.query_service import generate_fallback_summary, _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation
+    intent = ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
+    agg = TimeAggregation(
+        timeframe="this_month",
+        total_amount=0.0,
+        primary_currency="USD",
+        currency_totals={"USD": 4000.0, "MXN": 15.0},
+        income_currency_totals={"USD": 4000.0},
+        expense_currency_totals={"MXN": 15.0},
+        transaction_count=2,
+        income_count=1,
+        expense_count=1
+    )
+    qr = QueryResult(intent=intent, total_count=2, aggregation=agg)
+    res = generate_fallback_summary(qr, user_name="Tony")
+    
+    assert "4,000.00 USD" in res
+    assert "15.00 MXN" in res
+    
+    ctx = _build_summary_prompt_context(qr, user_name="Tony")
+    assert "MULTI-CURRENCY LEDGER" in ctx
+    assert "4,000.00 USD" in ctx
+    assert "15.00 MXN" in ctx
+
+

@@ -330,15 +330,17 @@ class FamilyService:
                     self._log_3s_audit("remove_member", start_time)
                     return False, "⚠️ You cannot remove yourself as admin. Use /leavefamily to leave or transfer the workspace.", None, None
 
-                # Create new personal workspace for the removed member
+                current_family = session.get(Family, family_id)
                 new_family_name = f"{target_user.full_name or target_user.username or 'User'}'s Family"
                 plan_type = "free" if target_user.has_used_trial else "trial"
                 trial_ends_at = None if target_user.has_used_trial else datetime.now(timezone.utc) + timedelta(days=60)
+                default_curr = (current_family.default_currency if current_family else None) or "USD"
                 
                 new_family = Family(
                     name=new_family_name,
                     plan_type=plan_type,
-                    trial_ends_at=trial_ends_at
+                    trial_ends_at=trial_ends_at,
+                    default_currency=default_curr
                 )
                 session.add(new_family)
                 session.flush()
@@ -388,29 +390,21 @@ class FamilyService:
                     self._log_3s_audit("leave_family", start_time)
                     return False, "You are already in your own personal workspace.", current_family
 
-                # Check for existing personal workspace
-                active_family_ids = session.exec(select(User.family_id).distinct()).all()
-                new_family = session.exec(select(Family).where(Family.id.notin_(active_family_ids))).first()
-
+                # Create a fresh isolated personal workspace
                 had_trial = user.has_used_trial
                 user.has_used_trial = True
 
-                if not new_family:
-                    new_family_name = f"{user.full_name or user.username or 'User'}'s Family"
-                    plan_type = "free" if had_trial else "trial"
-                    trial_ends_at = None if had_trial else datetime.now(timezone.utc) + timedelta(days=60)
-                    new_family = Family(
-                        name=new_family_name,
-                        plan_type=plan_type,
-                        trial_ends_at=trial_ends_at
-                    )
-                    session.add(new_family)
-                    session.flush()
-                else:
-                    new_family.plan_type = "free" if had_trial else "trial"
-                    new_family.trial_ends_at = None if had_trial else datetime.now(timezone.utc) + timedelta(days=60)
-                    session.add(new_family)
-                    session.flush()
+                new_family_name = f"{user.full_name or user.username or 'User'}'s Family"
+                plan_type = "free" if had_trial else "trial"
+                trial_ends_at = None if had_trial else datetime.now(timezone.utc) + timedelta(days=60)
+                new_family = Family(
+                    name=new_family_name,
+                    plan_type=plan_type,
+                    trial_ends_at=trial_ends_at,
+                    default_currency=current_family.default_currency or "USD"
+                )
+                session.add(new_family)
+                session.flush()
 
                 user.family_id = new_family.id
                 user.is_admin = True

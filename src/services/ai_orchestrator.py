@@ -3,6 +3,8 @@ import logging
 import datetime
 import asyncio
 import re
+import html
+from collections import defaultdict
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
@@ -63,6 +65,8 @@ def _format_currency(amount: float, currency: str = "USD", show_sign: bool = Fal
     return f"{sign}{sym}{abs_amt:,.2f} {curr_upper}".strip()
 
 class AIOrchestrator:
+    _user_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
     def __init__(self):
         self.encryption_service = EncryptionService()
 
@@ -202,6 +206,7 @@ class AIOrchestrator:
                 .where(Transaction.user_id == user_uuid)
                 .order_by(Transaction.timestamp.desc())
                 .limit(1)
+                .with_for_update()
             )
             tx = session.exec(statement).first()
             if not tx:
@@ -237,9 +242,12 @@ class AIOrchestrator:
         formatted_net = _format_currency(snapshot["net_savings"], curr, show_sign=True)
         pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
 
+        safe_concept = html.escape(dec_concept)
+        safe_category = html.escape(category)
+
         return (
             f"🗑️ <b>Removed latest transaction:</b>\n"
-            f"• {icon} {sign}{formatted_amt} ({category} - {dec_concept})\n\n"
+            f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n\n"
             f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
             f"• Total In: {formatted_in}\n"
             f"• Total Out: {formatted_out}\n"
@@ -254,6 +262,7 @@ class AIOrchestrator:
                 .where(Transaction.user_id == user_uuid)
                 .order_by(Transaction.timestamp.desc())
                 .limit(1)
+                .with_for_update()
             )
             tx = session.exec(statement).first()
             if not tx:
@@ -321,9 +330,12 @@ class AIOrchestrator:
         formatted_net = _format_currency(snapshot["net_savings"], new_curr, show_sign=True)
         pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
 
+        safe_concept = html.escape(new_concept)
+        safe_cat = html.escape(new_cat)
+
         return (
             f"✏️ <b>Updated latest transaction:</b>\n"
-            f"• {icon} {sign}{formatted_amt} ({new_cat} - {new_concept}){type_note}\n\n"
+            f"• {icon} {sign}{formatted_amt} ({safe_cat} - {safe_concept}){type_note}\n\n"
             f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
             f"• Total In: {formatted_in}\n"
             f"• Total Out: {formatted_out}\n"
@@ -490,7 +502,8 @@ class AIOrchestrator:
             family_service = FamilyService()
             name = parsed_query.family_name or "My Family"
             await asyncio.to_thread(family_service.create_family, user_uuid, name)
-            return f"✅ Family group '{name}' has been created! To invite others, just ask me to 'generate an invite link'."
+            safe_name = html.escape(name)
+            return f"✅ Family group '{safe_name}' has been created! To invite others, just ask me to 'generate an invite link'."
 
         elif parsed_query.intent == "generate_invite":
             family_service = FamilyService()
@@ -692,6 +705,10 @@ class AIOrchestrator:
         return "I couldn't process your request."
 
     async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
+        async with self._user_locks[str(user_id)]:
+            await self._orchestrate_impl(user_id=user_id, text=text, audio_file_id=audio_file_id, chat_id=chat_id, message_id=message_id)
+
+    async def _orchestrate_impl(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
         start_time = time.time()
         status = "success"
         response_text = ""
@@ -912,10 +929,12 @@ class AIOrchestrator:
                                             primary_currency=tx_currency
                                         )
 
+                                        safe_concept = html.escape(tx_concept)
+                                        safe_cat = html.escape(tx_category)
                                         if tx_concept.strip().lower() == tx_category.strip().lower():
-                                            concept_detail = f"({tx_category})"
+                                            concept_detail = f"({safe_cat})"
                                         else:
-                                            concept_detail = f"({tx_category} - {tx_concept})"
+                                            concept_detail = f"({safe_cat} - {safe_concept})"
 
                                         formatted_amt = _format_currency(tx_amount, tx_currency, show_sign=True)
                                         formatted_in = _format_currency(snapshot["total_in"], tx_currency, show_sign=False)
@@ -931,7 +950,9 @@ class AIOrchestrator:
                                             f"• Net Savings: {formatted_net}{pct_str}"
                                         )
                                     else:
-                                        response_text = f"Saved {tx_amount} {tx_currency} for '{tx_concept}' under category '{tx_category}'{date_str}."
+                                        safe_concept = html.escape(tx_concept)
+                                        safe_cat = html.escape(tx_category)
+                                        response_text = f"Saved {tx_amount} {tx_currency} for '{safe_concept}' under category '{safe_cat}'{date_str}."
 
                                     # Trigger background notion mirroring safely without affecting transaction response
                                     try:

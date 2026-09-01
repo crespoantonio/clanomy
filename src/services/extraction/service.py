@@ -10,13 +10,12 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.core.config import settings
+from src.core.ai_client import get_global_ollama_semaphore, sanitize_prompt_input
 from src.services.extraction.models import ExtractionResult, UnifiedResult, ExtractionError
 from src.services.extraction.prompts import build_extraction_prompt, build_unified_prompt
 from src.services.extraction.fallback import fallback_regex_extract, fallback_regex_classify
 
 logger = logging.getLogger(__name__)
-
-_ollama_semaphore = asyncio.Semaphore(3)
 
 class ExtractionService:
     _instance: Optional['ExtractionService'] = None
@@ -56,11 +55,12 @@ class ExtractionService:
             "Authorization": f"Bearer {settings.AI_API_KEY}",
             "Content-Type": "application/json"
         }
+        sanitized_text = sanitize_prompt_input(text)
         payload = {
             "model": settings.AI_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Classify intent and extract details from this text:\n```\n{text}\n```"}
+                {"role": "user", "content": f"Classify intent and extract details from this text:\n<user_input>\n{sanitized_text}\n</user_input>"}
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0.0
@@ -86,13 +86,14 @@ class ExtractionService:
     )
     async def _call_ollama_unified(self, system_prompt: str, text: str) -> str:
         logger.info(f"Calling Ollama model {self.model} for unified classification & extraction...")
-        async with _ollama_semaphore:
+        sanitized_text = sanitize_prompt_input(text)
+        async with get_global_ollama_semaphore():
             response = await asyncio.wait_for(
                 self.client.chat(
                     model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Classify intent and extract details from this text:\n```\n{text}\n```"}
+                        {"role": "user", "content": f"Classify intent and extract details from this text:\n<user_input>\n{sanitized_text}\n</user_input>"}
                     ],
                     format=UnifiedResult.model_json_schema(),
                 ),
@@ -161,11 +162,12 @@ class ExtractionService:
             "Authorization": f"Bearer {settings.AI_API_KEY}",
             "Content-Type": "application/json"
         }
+        sanitized_text = sanitize_prompt_input(text)
         payload = {
             "model": settings.AI_MODEL,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Extract transaction details from this text:\n```\n{text}\n```"}
+                {"role": "user", "content": f"Extract transaction details from this text:\n<user_input>\n{sanitized_text}\n</user_input>"}
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0.0
@@ -191,13 +193,14 @@ class ExtractionService:
     )
     async def _call_ollama(self, system_prompt: str, text: str) -> str:
         logger.info(f"Calling Ollama model {self.model} for extraction...")
-        async with _ollama_semaphore:
+        sanitized_text = sanitize_prompt_input(text)
+        async with get_global_ollama_semaphore():
             response = await asyncio.wait_for(
                 self.client.chat(
                     model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Extract transaction details from this text:\n```\n{text}\n```"}
+                        {"role": "user", "content": f"Extract transaction details from this text:\n<user_input>\n{sanitized_text}\n</user_input>"}
                     ],
                     format=ExtractionResult.model_json_schema(),
                 ),

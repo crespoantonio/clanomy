@@ -41,6 +41,7 @@ from src.services.query.aggregator import (
     aggregate_by_member,
     compute_period_comparison
 )
+from src.core.ai_client import get_global_ollama_semaphore, sanitize_prompt_input
 from src.services.query.formatters import (
     build_summary_prompt_context,
     _build_summary_prompt_context,
@@ -48,8 +49,6 @@ from src.services.query.formatters import (
 )
 
 logger = logging.getLogger(__name__)
-
-_ollama_semaphore = asyncio.Semaphore(3)
 
 class QueryService:
     _instance: Optional['QueryService'] = None
@@ -122,7 +121,7 @@ class QueryService:
             if tx_type:
                 query = query.where(Transaction.type == tx_type)
             
-            query = query.order_by(Transaction.timestamp.desc())
+            query = query.order_by(Transaction.timestamp.desc()).limit(settings.MAX_QUERY_TRANSACTIONS_LIMIT)
             db_transactions = session.exec(query).all()
             
             results = []
@@ -161,11 +160,12 @@ class QueryService:
             "member_filter (string/null), export_format (string/null), family_name (string/null), target_member (string/null), "
             "new_type (string/null), new_amount (number/null), new_currency (string/null), new_category (string/null), new_concept (string/null)."
         )
+        sanitized_text = sanitize_prompt_input(text)
         payload = {
             "model": settings.AI_MODEL,
             "messages": [
                 {"role": "system", "content": f"{system_prompt}\n\nSchema Guidelines: {schema_desc}"},
-                {"role": "user", "content": f"Classify this financial query:\n```\n{text}\n```"}
+                {"role": "user", "content": f"Classify this financial query:\n<user_input>\n{sanitized_text}\n</user_input>"}
             ],
             "response_format": {"type": "json_object"},
             "temperature": 0.0
@@ -190,13 +190,14 @@ class QueryService:
         reraise=True
     )
     async def _call_ollama_parse_intent(self, system_prompt: str, text: str) -> str:
-        async with _ollama_semaphore:
+        sanitized_text = sanitize_prompt_input(text)
+        async with get_global_ollama_semaphore():
             response = await asyncio.wait_for(
                 self.client.chat(
                     model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Classify this financial query:\n```\n{text}\n```"}
+                        {"role": "user", "content": f"Classify this financial query:\n<user_input>\n{sanitized_text}\n</user_input>"}
                     ],
                     format=ParsedQueryIntent.model_json_schema(),
                 ),
@@ -413,7 +414,7 @@ CRITICAL SECURITY RULES:
         reraise=True
     )
     async def _call_ollama_summary(self, system_prompt: str, user_prompt: str) -> str:
-        async with _ollama_semaphore:
+        async with get_global_ollama_semaphore():
             response = await asyncio.wait_for(
                 self.client.chat(
                     model=self.model,

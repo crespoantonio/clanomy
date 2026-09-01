@@ -3,6 +3,8 @@ import logging
 from src.core.config import settings
 from src.core.http_client import get_http_client
 
+from typing import Optional
+
 logger = logging.getLogger(__name__)
 
 class TelegramService:
@@ -10,15 +12,24 @@ class TelegramService:
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.api_url = f"https://api.telegram.org/bot{self.bot_token}"
 
-    async def send_message(self, chat_id: int, text: str) -> None:
-        """Sends a message back to the user via Telegram Bot API."""
+    async def send_message(self, chat_id: int, text: str, parse_mode: Optional[str] = "HTML") -> None:
+        """Sends a message back to the user via Telegram Bot API with fallback on parse errors."""
         try:
             client = get_http_client()
+            payload = {"chat_id": chat_id, "text": text}
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
             response = await client.post(
                 f"{self.api_url}/sendMessage",
-                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+                json=payload
             )
             response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if parse_mode and e.response.status_code == 400 and "can't parse entities" in e.response.text:
+                logger.warning(f"Telegram HTML parse error for chat {chat_id}. Retrying as plain text.")
+                await self.send_message(chat_id=chat_id, text=text, parse_mode=None)
+            else:
+                logger.error(f"Failed to send telegram message to {chat_id}: {e}")
         except Exception as e:
             logger.error(f"Failed to send telegram message to {chat_id}: {e}")
 

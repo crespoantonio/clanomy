@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # Local Ollama Fallback (Used when AI_API_KEY is empty / self-hosting)
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
+    OLLAMA_MAX_CONCURRENT: int = 2
+    MAX_QUERY_TRANSACTIONS_LIMIT: int = 500
 
     # HTTP Client Pool Settings
     HTTP_POOL_MAX_CONNECTIONS: int = 50

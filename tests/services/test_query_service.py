@@ -694,3 +694,45 @@ def test_multi_currency_summary_segregation():
     assert "15.00 MXN" in ctx
 
 
+def test_aggregate_transactions_empty_custom_default_currency():
+    agg = aggregate_transactions([], "this_month", primary_currency="ARS")
+    assert agg.total_amount == 0.0
+    assert agg.transaction_count == 0
+    assert agg.primary_currency == "ARS"
+    assert agg.currency_totals == {}
+
+
+def test_summary_empty_state_custom_default_currency():
+    from src.services.query import QueryResult, generate_fallback_summary, _build_summary_prompt_context
+    intent = ParsedQueryIntent(intent="spending_summary", timeframe="last_week")
+    agg = aggregate_transactions([], "last_week", primary_currency="ARS")
+    qr = QueryResult(intent=intent, total_count=0, aggregation=agg)
+    
+    fallback = generate_fallback_summary(qr, user_name="Tony")
+    assert "0.00 ARS" in fallback
+    
+    ctx = _build_summary_prompt_context(qr, user_name="Tony")
+    assert "0.00 ARS" in ctx
+
+
+@pytest.mark.anyio
+async def test_get_spending_summary_with_custom_default_currency(query_service):
+    family_id = uuid4()
+    with patch.object(query_service, '_fetch_and_decrypt_transactions', return_value=[]):
+        with patch.object(query_service, '_resolve_family_currency', return_value="ARS"):
+            # Test fallback path when LLM fails or is disabled
+            with patch.object(query_service, '_call_ollama_summary', side_effect=Exception("Ollama unavailable")):
+                res = await query_service.get_spending_summary(family_id, timeframe="last_week", user_name="Tony")
+                assert "0.00 ARS" in res
+            
+            # Test that LLM receives context with 0.00 ARS
+            async def mock_summary(sys_prompt, user_prompt):
+                assert "0.00 ARS" in user_prompt
+                return "Resumen: Tu balance es 0.00 ARS"
+                
+            with patch.object(query_service, '_call_ollama_summary', side_effect=mock_summary):
+                res = await query_service.get_spending_summary(family_id, timeframe="last_week", user_name="Tony")
+                assert "0.00 ARS" in res
+
+
+

@@ -444,6 +444,7 @@ class AIOrchestrator:
             family_service = FamilyService()
             family_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
             family_id = family_info["id"]
+            family_currency = await asyncio.to_thread(family_service.get_family_default_currency, family_id) if hasattr(family_service, "get_family_default_currency") else "USD"
             
             family_name = family_info["name"] if parsed_query.scope == "family" else None
             member_names = [m.get("full_name") or m.get("username") or "User" for m in family_info["members"]] if parsed_query.scope == "family" else None
@@ -460,7 +461,8 @@ class AIOrchestrator:
                     user_name=user_name,
                     reference_time=reference_time,
                     family_name=family_name,
-                    member_names=member_names
+                    member_names=member_names,
+                    primary_currency=family_currency
                 )
             elif parsed_query.intent in ["net_cash_flow", "net_balance", "cash_flow_summary"]:
                 return await query_service.get_net_cash_flow_summary(
@@ -469,7 +471,8 @@ class AIOrchestrator:
                     user_name=user_name,
                     reference_time=reference_time,
                     family_name=family_name,
-                    member_names=member_names
+                    member_names=member_names,
+                    primary_currency=family_currency
                 )
             else:
                 return await query_service.get_spending_summary(
@@ -479,7 +482,8 @@ class AIOrchestrator:
                     user_name=user_name,
                     reference_time=reference_time,
                     family_name=family_name,
-                    member_names=member_names
+                    member_names=member_names,
+                    primary_currency=family_currency
                 )
 
         elif parsed_query.intent == "create_family":

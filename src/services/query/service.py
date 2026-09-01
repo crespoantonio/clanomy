@@ -269,6 +269,18 @@ CRITICAL SECURITY RULES:
             logger.error(f"Error processing query with {engine_name}: {e}")
             raise QueryProcessingError(f"Failed to process query with {engine_name}: {e}")
 
+    async def _resolve_family_currency(self, family_id: Optional[UUID]) -> str:
+        if not family_id:
+            return (settings.DEFAULT_CURRENCY or "USD").upper()
+        try:
+            from src.services.family_service import FamilyService
+            family_service = FamilyService()
+            if hasattr(family_service, "get_family_default_currency"):
+                return await asyncio.to_thread(family_service.get_family_default_currency, family_id)
+            return (settings.DEFAULT_CURRENCY or "USD").upper()
+        except Exception:
+            return (settings.DEFAULT_CURRENCY or "USD").upper()
+
     async def process_query(
         self, 
         text: str, 
@@ -277,12 +289,14 @@ CRITICAL SECURITY RULES:
         generate_summary: bool = True, 
         reference_time: Optional[datetime] = None,
         family_name: Optional[str] = None,
-        member_names: Optional[List[str]] = None
+        member_names: Optional[List[str]] = None,
+        primary_currency: Optional[str] = None
     ) -> QueryResult:
         ref_time = reference_time or datetime.now(timezone.utc)
         start_exec_time = time.time()
         
         intent = await self.parse_intent(text, reference_time)
+        effective_currency = primary_currency or await self._resolve_family_currency(family_id)
 
         start_time, end_time = self._resolve_date_range(intent.timeframe, intent.start_date, intent.end_date, ref_time)
         
@@ -300,7 +314,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             calculate_daily=True
         )
 
@@ -328,7 +342,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             overall_total=overall_total
         )
 
@@ -337,7 +351,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             overall_total=overall_total
         )
 
@@ -482,7 +496,8 @@ CRITICAL SECURITY RULES:
         user_name: Optional[str] = None, 
         reference_time: Optional[datetime] = None,
         family_name: Optional[str] = None,
-        member_names: Optional[List[str]] = None
+        member_names: Optional[List[str]] = None,
+        primary_currency: Optional[str] = None
     ) -> str:
         intent = ParsedQueryIntent(
             intent="spending_summary",
@@ -491,6 +506,7 @@ CRITICAL SECURITY RULES:
             scope="family" if family_name else "personal"
         )
         
+        effective_currency = primary_currency or await self._resolve_family_currency(family_id)
         ref_time = reference_time or datetime.now(timezone.utc)
         start_time, end_time = self._resolve_date_range(intent.timeframe, intent.start_date, intent.end_date, ref_time)
         
@@ -504,7 +520,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             calculate_daily=True
         )
 
@@ -527,7 +543,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             overall_total=aggregation.total_amount
         )
         
@@ -557,7 +573,8 @@ CRITICAL SECURITY RULES:
         user_name: Optional[str] = None, 
         reference_time: Optional[datetime] = None,
         family_name: Optional[str] = None,
-        member_names: Optional[List[str]] = None
+        member_names: Optional[List[str]] = None,
+        primary_currency: Optional[str] = None
     ) -> str:
         intent = ParsedQueryIntent(
             intent="income_summary",
@@ -566,6 +583,7 @@ CRITICAL SECURITY RULES:
             scope="family" if family_name else "personal"
         )
         
+        effective_currency = primary_currency or await self._resolve_family_currency(family_id)
         ref_time = reference_time or datetime.now(timezone.utc)
         start_time, end_time = self._resolve_date_range(intent.timeframe, intent.start_date, intent.end_date, ref_time)
         
@@ -579,7 +597,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             calculate_daily=True
         )
 
@@ -588,7 +606,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             overall_total=aggregation.total_income
         )
         
@@ -617,7 +635,8 @@ CRITICAL SECURITY RULES:
         user_name: Optional[str] = None, 
         reference_time: Optional[datetime] = None,
         family_name: Optional[str] = None,
-        member_names: Optional[List[str]] = None
+        member_names: Optional[List[str]] = None,
+        primary_currency: Optional[str] = None
     ) -> str:
         intent = ParsedQueryIntent(
             intent="net_cash_flow",
@@ -625,6 +644,7 @@ CRITICAL SECURITY RULES:
             scope="family" if family_name else "personal"
         )
         
+        effective_currency = primary_currency or await self._resolve_family_currency(family_id)
         ref_time = reference_time or datetime.now(timezone.utc)
         start_time, end_time = self._resolve_date_range(intent.timeframe, intent.start_date, intent.end_date, ref_time)
         
@@ -638,7 +658,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             calculate_daily=True
         )
 
@@ -647,7 +667,7 @@ CRITICAL SECURITY RULES:
             timeframe=intent.timeframe,
             start_time=start_time,
             end_time=end_time,
-            primary_currency=settings.DEFAULT_CURRENCY,
+            primary_currency=effective_currency,
             overall_total=None
         )
         
@@ -675,7 +695,7 @@ CRITICAL SECURITY RULES:
         reference_time: Optional[datetime] = None
     ) -> TimeAggregation:
         ref_time = reference_time or datetime.now(timezone.utc)
-        curr = primary_currency or settings.DEFAULT_CURRENCY
+        curr = primary_currency or await self._resolve_family_currency(family_id)
         start_time, end_time = self._resolve_date_range(timeframe, None, None, ref_time)
         
         transactions = await asyncio.to_thread(
@@ -728,7 +748,7 @@ CRITICAL SECURITY RULES:
     ) -> CategoryBreakdown:
         start_exec_time = time.time()
         ref_time = reference_time or datetime.now(timezone.utc)
-        curr = primary_currency or settings.DEFAULT_CURRENCY
+        curr = primary_currency or await self._resolve_family_currency(family_id)
         start_time, end_time = self._resolve_date_range(timeframe, None, None, ref_time)
         resolved_category = resolve_category_alias(category) if category else None
         

@@ -1077,4 +1077,88 @@ async def test_orchestrator_income_eur_currency(orchestrator, monkeypatch):
     assert "• Total Out: €500.00 EUR" in msg
     assert "• Net Savings: +€2,000.00 EUR (80%)" in msg
 
+@pytest.mark.anyio
+async def test_orchestrator_unified_edit_last_spanish(orchestrator, monkeypatch):
+    from src.services.extraction import UnifiedResult
+    user_id = "00000000-0000-0000-0000-000000000000"
+
+    mock_classify = AsyncMock()
+    mock_classify.return_value = UnifiedResult(
+        action="edit_last",
+        new_amount=250.0
+    )
+
+    class MockExtractionService:
+        classify_and_extract = mock_classify
+
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_correction = MagicMock(return_value="✏️ Updated latest transaction:\n• 💸 -$250.00 ARS")
+    monkeypatch.setattr(orchestrator, "_handle_transaction_correction", mock_correction)
+
+    mock_send = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    # Mock family currency fetch
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", MagicMock(return_value=UUID(user_id)))
+    class MockFamilyService:
+        def get_family_default_currency(self, fid): return "ARS"
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+
+    await orchestrator.orchestrate(
+        user_id=user_id,
+        text="El último importe necesito actualizarlo a 250",
+        audio_file_id=None,
+        chat_id=12345
+    )
+
+    mock_classify.assert_called_once()
+    mock_correction.assert_called_once()
+    assert mock_correction.call_args[0][1].new_amount == 250.0
+    mock_send.assert_called_once()
+    assert "Updated latest transaction" in mock_send.call_args[1]["text"]
+
+@pytest.mark.anyio
+async def test_orchestrator_unified_undo_last_spanish(orchestrator, monkeypatch):
+    from src.services.extraction import UnifiedResult
+    user_id = "00000000-0000-0000-0000-000000000000"
+
+    mock_classify = AsyncMock()
+    mock_classify.return_value = UnifiedResult(
+        action="undo_last"
+    )
+
+    class MockExtractionService:
+        classify_and_extract = mock_classify
+
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtractionService)
+
+    mock_undo = MagicMock(return_value="🗑️ Removed latest transaction")
+    monkeypatch.setattr(orchestrator, "_handle_transaction_undo", mock_undo)
+
+    mock_send = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", MagicMock(return_value=UUID(user_id)))
+    class MockFamilyService:
+        def get_family_default_currency(self, fid): return "ARS"
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+
+    await orchestrator.orchestrate(
+        user_id=user_id,
+        text="Elimina esos ultimos 250",
+        audio_file_id=None,
+        chat_id=12345
+    )
+
+    mock_classify.assert_called_once()
+    mock_undo.assert_called_once()
+    mock_send.assert_called_once()
+    assert "Removed latest transaction" in mock_send.call_args[1]["text"]
+
+
 

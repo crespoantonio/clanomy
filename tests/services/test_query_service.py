@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 from pydantic import ValidationError
 from sqlmodel import Session
-from src.services.query_service import (
+from src.services.query import (
     ParsedQueryIntent, 
     QueryProcessingError, 
     QueryService, 
@@ -36,8 +36,8 @@ def test_parse_amount_string():
 
 @pytest.fixture
 def query_service():
-    with patch("src.services.query_service.ollama.AsyncClient"), \
-         patch("src.services.query_service.EncryptionService") as mock_enc:
+    with patch("src.services.query.service.ollama.AsyncClient"), \
+         patch("src.services.query.service.EncryptionService") as mock_enc:
         service = QueryService()
         # Mock the encryption service to return what we pass for simplicity in testing
         mock_enc.return_value.decrypt.side_effect = lambda x: x
@@ -67,7 +67,7 @@ def test_process_query_empty_text(query_service):
     import asyncio
     asyncio.run(_test())
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_process_query_success(mock_session, query_service):
     async def _test():
         mock_chat = AsyncMock()
@@ -109,7 +109,7 @@ def test_process_query_ollama_failure(query_service):
     import asyncio
     asyncio.run(_test())
 
-from src.services.query_service import (
+from src.services.query import (
     aggregate_transactions,
     _resolve_comparison_timeframe,
     compute_period_comparison,
@@ -166,7 +166,7 @@ def test_compute_period_comparison():
     assert comp.difference_amount == 50.0
     assert comp.percentage_change == 50.0
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_get_time_aggregation(mock_session, query_service):
     async def _test():
         mock_session_inst = MagicMock()
@@ -233,7 +233,7 @@ def test_aggregate_by_category_empty():
     assert breakdown.top_category is None
     assert breakdown.categories == {}
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_get_category_aggregation(mock_session, query_service):
     async def _test():
         mock_session_inst = MagicMock()
@@ -260,7 +260,7 @@ def test_get_category_aggregation(mock_session, query_service):
 
 
 def test_multi_member_aggregation():
-    from src.services.query_service import aggregate_transactions, DecryptedTransaction
+    from src.services.query import aggregate_transactions, DecryptedTransaction
     family_id = uuid4()
     user_a = uuid4()
     user_b = uuid4()
@@ -276,7 +276,7 @@ def test_cross_tenant_isolation_in_db_query(query_service):
     # This just ensures our _fetch_and_decrypt_transactions only filters by family_id
     from unittest.mock import patch, MagicMock
     from src.db.models import Transaction
-    with patch("src.services.query_service.Session") as mock_session:
+    with patch("src.services.query.service.Session") as mock_session:
         mock_session_inst = MagicMock()
         mock_session.return_value.__enter__.return_value = mock_session_inst
         mock_session_inst.exec.return_value.all.return_value = []
@@ -289,7 +289,7 @@ def test_cross_tenant_isolation_in_db_query(query_service):
         assert mock_session_inst.exec.called
 
 def test_family_aware_summary_context():
-    from src.services.query_service import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation
+    from src.services.query import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", scope="family")
     agg = TimeAggregation(timeframe="this_week", total_amount=100.0, primary_currency="USD", currency_totals={"USD": 100.0}, transaction_count=5, average_per_transaction=20.0, daily_breakdown={})
     qr = QueryResult(intent=intent, total_count=5, aggregation=agg)
@@ -299,7 +299,7 @@ def test_family_aware_summary_context():
     assert "Family Members: Alice, Bob" in ctx
 
 def test_family_aware_fallback_summary():
-    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    from src.services.query import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", scope="family")
     agg = TimeAggregation(timeframe="this_week", total_amount=100.0, primary_currency="USD", currency_totals={"USD": 100.0}, transaction_count=5, average_per_transaction=20.0, daily_breakdown={})
     qr = QueryResult(intent=intent, total_count=5, aggregation=agg)
@@ -308,7 +308,7 @@ def test_family_aware_fallback_summary():
     assert "Your family (The Smiths) has spent 100.00 USD" in res
 
 def test_build_summary_prompt_context():
-    from src.services.query_service import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown
+    from src.services.query import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
     agg = TimeAggregation(timeframe="this_week", total_amount=45.0, primary_currency="USD", currency_totals={"USD": 45.0}, transaction_count=2, average_per_transaction=22.5, daily_breakdown={})
     cb = CategoryBreakdown(timeframe="this_week", total_spending=45.0, primary_currency="USD", categories={}, top_category="Food/Drink", top_category_amount=45.0)
@@ -321,7 +321,7 @@ def test_build_summary_prompt_context():
     assert "Food/Drink" in ctx
 
 def test_generate_fallback_summary():
-    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown, PeriodComparison
+    from src.services.query import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown, PeriodComparison
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
     
     # Standard summary with comparison diff > 0
@@ -349,10 +349,10 @@ def test_generate_fallback_summary():
     res_zero_val = generate_fallback_summary(qr_zero_val, user_name="Tony")
     assert "0.00 USD across 1 transactions" in res_zero_val
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_generate_summary_success(mock_session, query_service):
     async def _test():
-        from src.services.query_service import QueryResult, ParsedQueryIntent
+        from src.services.query import QueryResult, ParsedQueryIntent
         intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
         qr = QueryResult(intent=intent)
         
@@ -365,10 +365,10 @@ def test_generate_summary_success(mock_session, query_service):
     import asyncio
     asyncio.run(_test())
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_generate_summary_fallback(mock_session, query_service):
     async def _test():
-        from src.services.query_service import QueryResult, ParsedQueryIntent
+        from src.services.query import QueryResult, ParsedQueryIntent
         intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
         qr = QueryResult(intent=intent)
         
@@ -380,7 +380,7 @@ def test_generate_summary_fallback(mock_session, query_service):
     import asyncio
     asyncio.run(_test())
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_get_spending_summary(mock_session, query_service):
     async def _test():
         mock_session_inst = MagicMock()
@@ -396,7 +396,7 @@ def test_get_spending_summary(mock_session, query_service):
     import asyncio
     asyncio.run(_test())
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_process_query_with_summary(mock_session, query_service):
     async def _test():
         mock_session_inst = MagicMock()
@@ -426,7 +426,7 @@ def test_decrypted_transaction_with_user_info():
     assert tx.user_handle == "@ironman"
 
 def test_aggregate_by_member():
-    from src.services.query_service import aggregate_by_member
+    from src.services.query import aggregate_by_member
     user_a = uuid4()
     user_b = uuid4()
     transactions = [
@@ -444,18 +444,18 @@ def test_aggregate_by_member():
     assert breakdown.members["Bob"].currency_totals == {"EUR": 10.0}
 
 def test_aggregate_by_member_empty():
-    from src.services.query_service import aggregate_by_member
+    from src.services.query import aggregate_by_member
     breakdown = aggregate_by_member([], "this_month", None, None, "USD", 0.0)
     assert breakdown.total_spending == 0.0
     assert breakdown.top_spender is None
     assert breakdown.members == {}
 
 def test_parse_intent_with_member_filter():
-    from src.services.query_service import ParsedQueryIntent
+    from src.services.query import ParsedQueryIntent
     intent = ParsedQueryIntent(intent="query", member_filter="Tony")
     assert intent.member_filter == "Tony"
 
-@patch("src.services.query_service.Session")
+@patch("src.services.query.service.Session")
 def test_fetch_and_decrypt_with_member_filter(mock_session, query_service):
     async def _test():
         from src.db.models import User, Transaction
@@ -492,7 +492,7 @@ def test_fetch_and_decrypt_with_member_filter(mock_session, query_service):
     asyncio.run(_test())
 
 def test_build_summary_prompt_context_with_members():
-    from src.services.query_service import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown, MemberBreakdown, MemberSpending, DecryptedTransaction
+    from src.services.query import _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation, CategoryBreakdown, MemberBreakdown, MemberSpending, DecryptedTransaction
     
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
     agg = TimeAggregation(timeframe="this_week", total_amount=205.5, primary_currency="USD", currency_totals={"USD": 205.5}, transaction_count=5, average_per_transaction=41.1, daily_breakdown={})
@@ -512,7 +512,7 @@ def test_build_summary_prompt_context_with_members():
     assert "Shoes (40.00 USD by Tony)" in ctx
 
 def test_generate_fallback_summary_with_members():
-    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation, MemberBreakdown, MemberSpending
+    from src.services.query import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation, MemberBreakdown, MemberSpending
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
     agg = TimeAggregation(timeframe="this_week", total_amount=205.5, primary_currency="USD", currency_totals={"USD": 205.5}, transaction_count=5, average_per_transaction=41.1, daily_breakdown={})
     ms_tony = MemberSpending(user_id=uuid4(), user_name="Tony", total_amount=120.0, primary_currency="USD", currency_totals={"USD": 120.0}, transaction_count=3, percentage_of_total=58.4, average_per_transaction=40.0, top_category="Shopping")
@@ -524,7 +524,7 @@ def test_generate_fallback_summary_with_members():
     assert "(Tony: 120.00; Maria: 85.50)" in res
 
 def test_generate_fallback_summary_member_filter():
-    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    from src.services.query import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
     intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None, member_filter="Maria")
     agg = TimeAggregation(timeframe="this_week", total_amount=85.5, primary_currency="USD", currency_totals={"USD": 85.5}, transaction_count=2, average_per_transaction=42.75, daily_breakdown={})
     qr = QueryResult(intent=intent, total_count=2, aggregation=agg)
@@ -622,7 +622,7 @@ def test_aggregate_transactions_multi_currency_cash_flow():
     assert agg.expense_currency_totals == {"USD": 1000.0, "EUR": 400.0}
 
 def test_generate_fallback_summary_income_query():
-    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    from src.services.query import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
     intent = ParsedQueryIntent(intent="income_summary", timeframe="this_month")
     agg = TimeAggregation(
         timeframe="this_month", total_amount=0.0, primary_currency="USD",
@@ -636,7 +636,7 @@ def test_generate_fallback_summary_income_query():
     assert "earned 4,500.00 USD" in res or "earned $4,500.00" in res or "4500.00 USD" in res
 
 def test_generate_fallback_summary_net_cash_flow_query():
-    from src.services.query_service import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
+    from src.services.query import generate_fallback_summary, QueryResult, ParsedQueryIntent, TimeAggregation
     intent = ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
     agg = TimeAggregation(
         timeframe="this_month", total_amount=1200.0, primary_currency="USD",
@@ -669,7 +669,7 @@ def test_resolve_date_range_dynamic_days_and_spanish(query_service):
     assert end_m == datetime(2026, 8, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
 
 def test_multi_currency_summary_segregation():
-    from src.services.query_service import generate_fallback_summary, _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation
+    from src.services.query import generate_fallback_summary, _build_summary_prompt_context, QueryResult, ParsedQueryIntent, TimeAggregation
     intent = ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
     agg = TimeAggregation(
         timeframe="this_month",

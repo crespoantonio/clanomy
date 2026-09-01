@@ -20,7 +20,7 @@ jobs:
           # Compare PR branch with the target base branch
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          
+
           echo "Comparing changes between $BASE_SHA and $HEAD_SHA..."
           CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           echo "Changed files:"

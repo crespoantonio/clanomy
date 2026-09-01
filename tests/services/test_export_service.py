@@ -9,7 +9,7 @@ from sqlmodel import create_engine, Session, SQLModel
 from src.db.models import Family, User, Transaction
 from src.core.encryption import EncryptionService
 from src.services.export_service import ExportService
-from src.services.query_service import DecryptedTransaction
+from src.services.query import DecryptedTransaction
 
 from sqlalchemy.pool import StaticPool
 

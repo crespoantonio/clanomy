@@ -20,8 +20,8 @@ src.db.session.engine = test_engine
 
 # Now we can safely import app
 from src.main import app
-from src.services.query_service import QueryService
-from src.services.extraction_service import ExtractionService
+from src.services.query import QueryService, ParsedQueryIntent
+from src.services.extraction import ExtractionService
 
 def get_test_session():
     with Session(test_engine) as session:
@@ -73,7 +73,7 @@ def mock_llm_responses(monkeypatch):
         })
 
     async def mock_parse_intent(self, text: str, reference_time=None):
-        from src.services.query_service import ParsedQueryIntent
+        from src.services.query import ParsedQueryIntent
         lower_query = text.lower()
         if "export" in lower_query:
             return ParsedQueryIntent(intent="export_data", export_format="csv")
@@ -105,8 +105,8 @@ def mock_llm_responses(monkeypatch):
                 return ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
             return ParsedQueryIntent(intent="spending_summary", timeframe="this_month")
 
-    monkeypatch.setattr("src.services.extraction_service.ExtractionService._call_ollama", mock_extraction_call)
-    monkeypatch.setattr("src.services.query_service.QueryService.parse_intent", mock_parse_intent)
+    monkeypatch.setattr("src.services.extraction.ExtractionService._call_ollama", mock_extraction_call)
+    monkeypatch.setattr("src.services.query.QueryService.parse_intent", mock_parse_intent)
 
 @pytest.fixture(autouse=True)
 def reset_singletons():

@@ -14,7 +14,7 @@ from threading import Lock
 from src.db.models import Transaction
 from src.core.encryption import EncryptionService
 from src.services.telegram_service import TelegramService
-from src.services.query_service import DecryptedTransaction
+from src.services.query import DecryptedTransaction
 
 logger = logging.getLogger(__name__)
 

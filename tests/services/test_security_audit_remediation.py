@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
 from sqlmodel import Session, select
 from src.services.telegram_service import TelegramService
-from src.services.extraction_service import ExtractionService
-from src.services.query_service import QueryService, _sanitize_concept_for_prompt, ParsedQueryIntent
+from src.services.extraction import ExtractionService
+from src.services.query import QueryService, _sanitize_concept_for_prompt, ParsedQueryIntent
 from src.services.family_service import FamilyService
 from src.services.account_service import AccountService
 from src.services.export_service import ExportService

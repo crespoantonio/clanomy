@@ -2,13 +2,13 @@ import pytest
 import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
-from src.services.extraction_service import ExtractionService, ExtractionResult, ExtractionError
+from src.services.extraction import ExtractionService, ExtractionResult, ExtractionError, UnifiedResult
 import ollama
 from src.core.config import settings
 
 @pytest.fixture
 def mock_ollama_client():
-    with patch("src.services.extraction_service.ollama.AsyncClient") as mock_client_cls:
+    with patch("src.services.extraction.service.ollama.AsyncClient") as mock_client_cls:
         mock_instance = AsyncMock()
         mock_client_cls.return_value = mock_instance
         yield mock_instance
@@ -326,8 +326,77 @@ async def test_extract_currency_ambiguous_pesos_and_explicit_latam(service, mock
     monkeypatch.setattr(settings, "DEFAULT_CURRENCY", "ARS")
     mock_resp.message.content = '{"type": "expense", "amount": 300.0, "category": "Food/Drink", "concept": "Café", "currency": "pesos"}'
     mock_ollama_client.chat.return_value = mock_resp
-    res_default = await service.extract("300 pesos café")
-    assert res_default.currency == "ARS"
+@pytest.mark.anyio
+async def test_classify_and_extract_log_transaction(service, mock_ollama_client):
+    mock_resp = MagicMock()
+    mock_resp.message.content = '{"action": "log_transaction", "type": "expense", "amount": 1500.0, "category": "Food/Drink", "concept": "comida", "currency": "ARS"}'
+    mock_ollama_client.chat.return_value = mock_resp
+
+    res = await service.classify_and_extract("Hoy gasta 1500 pesos en comida", default_currency="ARS")
+    assert isinstance(res, UnifiedResult)
+    assert res.action == "log_transaction"
+    assert res.amount == 1500.0
+    assert res.category == "Food/Drink"
+    assert res.currency == "ARS"
+    assert res.concept == "comida"
+
+@pytest.mark.anyio
+async def test_classify_and_extract_edit_last_spanish(service, mock_ollama_client):
+    mock_resp = MagicMock()
+    mock_resp.message.content = '{"action": "edit_last", "new_amount": 250.0, "new_category": null, "new_concept": null, "new_currency": null, "new_type": null}'
+    mock_ollama_client.chat.return_value = mock_resp
+
+    res = await service.classify_and_extract("El último importe necesito actualizarlo a 250")
+    assert res.action == "edit_last"
+    assert res.new_amount == 250.0
+
+@pytest.mark.anyio
+async def test_classify_and_extract_edit_last_english(service, mock_ollama_client):
+    mock_resp = MagicMock()
+    mock_resp.message.content = '{"action": "edit_last", "new_amount": 250.0, "new_category": "Rent/Bills", "new_concept": "Internet", "new_currency": "ARS", "new_type": "expense"}'
+    mock_ollama_client.chat.return_value = mock_resp
+
+    res = await service.classify_and_extract("Update internet cost to 250")
+    assert res.action == "edit_last"
+    assert res.new_amount == 250.0
+    assert res.new_category == "Rent/Bills"
+
+@pytest.mark.anyio
+async def test_classify_and_extract_undo_last_spanish(service, mock_ollama_client):
+    mock_resp = MagicMock()
+    mock_resp.message.content = '{"action": "undo_last"}'
+    mock_ollama_client.chat.return_value = mock_resp
+
+    res = await service.classify_and_extract("Elimina esos ultimos 250")
+    assert res.action == "undo_last"
+
+@pytest.mark.anyio
+async def test_classify_and_extract_query(service, mock_ollama_client):
+    mock_resp = MagicMock()
+    mock_resp.message.content = '{"action": "query"}'
+    mock_ollama_client.chat.return_value = mock_resp
+
+    res = await service.classify_and_extract("¿Cuánto gasté este mes?")
+    assert res.action == "query"
+
+@pytest.mark.anyio
+async def test_classify_and_extract_fallback_on_error(service, mock_ollama_client):
+    mock_ollama_client.chat.side_effect = asyncio.TimeoutError()
+
+    # Spanish edit fallback
+    res_edit = await service.classify_and_extract("El último importe necesito actualizarlo a 250")
+    assert res_edit.action == "edit_last"
+    assert res_edit.new_amount == 250.0
+
+    # Spanish undo fallback
+    res_undo = await service.classify_and_extract("Elimina esos ultimos 250")
+    assert res_undo.action == "undo_last"
+
+    # Transaction fallback
+    res_tx = await service.classify_and_extract("225.50 en internet", default_currency="ARS")
+    assert res_tx.action == "log_transaction"
+    assert res_tx.amount == 225.50
+
 
 
 

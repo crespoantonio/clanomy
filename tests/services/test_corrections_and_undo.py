@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from src.db.models import Family, User, Transaction
 from src.core.encryption import EncryptionService
 from src.services.ai_orchestrator import AIOrchestrator
-from src.services.query_service import ParsedQueryIntent
+from src.services.query import ParsedQueryIntent
 from src.services.notion_service import NotionService
 
 @pytest.fixture

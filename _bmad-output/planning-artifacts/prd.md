@@ -27,30 +27,35 @@ workflowType: prd
 # Product Requirements Document - Clanomy
 
 **Author:** Tony
-**Date:** 2026-08-25
+**Date:** 2026-08-25 (Updated: 2026-09-01)
 
 ## 1. Executive Summary
-Clanomy is an "invisible" financial companion designed to solve the chronic problem of financial tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper), Clanomy enables zero-friction, privacy-centric logging of both expenses and income via natural language audio and text. Users manage their full cash flow through conversational interaction, receiving instant text confirmations, tracking net savings, and querying their complete spending and earnings history without ever leaving their primary messaging app.
+Clanomy is an "invisible" financial companion designed to solve the chronic problem of financial tracking friction for solo entrepreneurs and families. By living directly within Telegram and WhatsApp (via native API webhooks) and leveraging local AI (Ollama and Whisper) paired with resilient cloud inference (Groq Cloud AI) and deterministic offline fallback engines, Clanomy enables zero-friction, privacy-centric logging of both expenses, earnings/income, and scheduled obligations via natural language audio and text. Users manage their full cash flow through conversational interaction, receiving instant text confirmations, tracking net savings, configuring household default currencies (ISO 4217), settling upcoming bills conversationally, and querying their complete spending and earnings history without ever leaving their primary messaging app.
 
 ### Core Differentiator
-The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, Clanomy allows users to record expenses and income in seconds via voice notes processed locally, ensuring sensitive financial data never leaves the user's controlled infrastructure.
+The elimination of "App Fatigue" through a zero-friction entry model. While traditional finance tools require manual data entry into specialized interfaces, Clanomy allows users to record expenses, income, and bills in seconds via voice notes and messages processed locally and securely, ensuring sensitive financial data is encrypted at rest (AES-256) and never leaks across multi-tenant family workspaces.
 
 ## 2. Success Criteria
 
 ### 2.1 User Success
 *   **The 3-Second Rule:** Users must complete an expense or income entry (from Telegram open to confirmation) in under 3 seconds.
 *   **Conversational Clarity:** Users can query spending status, income totals, and net cash flow in natural language with a margin of error < 7%.
-*   **Emotional Relief & Empowerment:** Users feel financial awareness and control without the anxiety of opening a traditional banking app, receiving positive feedback when earnings are recorded.
+*   **Emotional Relief & Empowerment:** Users feel financial awareness and control without the anxiety of opening a traditional banking app, receiving positive feedback when earnings are recorded and proactive reminders before bills fall overdue.
+*   **Zero-Friction Settlement:** Users can settle obligations with zero amount inputs (e.g. *"Pagué la visa"*) with automatic user-scoped matching in < 2 seconds.
+*   **Frictionless Localization:** Users anywhere in the world can converse in English or Spanish and log unadorned numeric amounts that immediately resolve to their family's configured currency.
 
 ### 2.2 Business Success
 *   **Initial Traction:** Achieve 50 active users logging ≥3 transactions (expenses or income) per week for 30 consecutive days.
-*   **Monetization Validation:** Validate willingness to pay for Premium Tiers (Family Groups, Notion Mirroring, Advanced Cash-Flow Analytics).
-*   **Brand Authority:** Establish a reputation in the "Privacy-First" niche leveraging Estonian e-Residency trust.
+*   **Monetization Validation:** Validate willingness to pay for Premium Tiers (Family Groups, Notion Mirroring, Advanced Cash-Flow Analytics, Telegram Stars subscriptions).
+*   **Global Localization Adoption:** Validate multi-currency adoption across international households (e.g. ARS, EUR, MXN, BRL, USD).
+*   **Brand Authority:** Establish a reputation in the "Privacy-First" niche leveraging Estonian e-Residency trust, open-source transparency, and community funding (Ko-fi).
 
 ### 2.3 Technical Success
 *   **Extraction Accuracy:** 90% success rate extracting Type (`income` vs `expense`), Amount, Category, and Concept from natural language.
-*   **Zero-Leakage Privacy:** 100% of PII and transaction data remains within the private local infrastructure.
+*   **Zero-Leakage Privacy:** 100% of PII and transaction data remains within encrypted boundaries with strict multi-tenant row-level isolation and zero workspace credential inheritance.
 *   **System Latency:** End-to-end processing (STT -> LLM -> DB -> Response) consistently < 3 seconds.
+*   **Continuous Reliability & Coverage:** Maintain ≥85% automated test coverage across all core services, verified by automated CI/CD quality gates.
+*   **Deterministic Resilience:** 100% fallback reliability via rule-based regex extraction when LLM engines are unavailable.
 
 ## 3. User Journeys
 
@@ -72,9 +77,15 @@ In a noisy environment, the AI fails to extract an amount. The bot conversationa
 ### 3.6 The Income & Cash Flow Milestone (Elena)
 Elena receives her monthly paycheck and sends a quick voice note: "Just received my salary of $3,500 from Acme Corp." Clanomy extracts the intent as an income transaction, encrypts the details, and returns an upbeat confirmation with an updated monthly cash flow summary: Total Earned, Total Spent, and Net Savings (+62%).
 
+### 3.7 The Global Multi-Currency Household (Mateo & Lucía)
+Mateo and Lucía live in Buenos Aires. Upon running `/start`, the onboarding flow recommends setting their currency: Mateo types `/currency ARS`. From that moment on, whenever Mateo says *"gasté 12500 en el súper"* or Lucía texts *"5000 farmacia"*, Clanomy automatically logs the transactions in ARS without asking them to specify the currency every time. When querying monthly summaries, all totals, averages, and comparisons cleanly reflect ARS.
+
+### 3.8 The Proactive Bill Management & Settlement (Sofía)
+Sofía tracks household obligations with Clanomy. At the beginning of the month, she logs: *"El 10 vence la tarjeta Visa 85000 y el 15 internet 18000"*. Clanomy schedules both bills. Mid-month, when Sofía asks *"¿Cómo venimos este mes?"*, Clanomy delivers her spending summary and proactively appends an alert: *"⚠️ Tienes facturas pendientes: Tarjeta Visa ($85,000 ARS) — Vence en 2 días. Si ya la pagaste, solo dime 'Pagué la visa'"*. Sofía replies *"Pagué la visa"*. Clanomy instantly settles the bill, records the expense, and updates her cash flow.
+
 ## 4. Phased Development Roadmap
 
-### Phase 1: MVP (V1)
+### Phase 1: MVP (V1) - [COMPLETED]
 *   **Messaging Gateway:** Telegram voice and text note handling routed via native FastAPI webhook endpoint.
 *   **Secure Core API (FastAPI):** Application-level encryption and multi-tenant ledger management.
 *   **Local AI Pipeline:** Faster-Whisper (STT) + Ollama (JSON Extraction) integrated with FastAPI.
@@ -82,17 +93,22 @@ Elena receives her monthly paycheck and sends a quick voice note: "Just received
 *   **Privacy Core:** Local Postgres storage with field-level encryption.
 *   **Infrastructure:** Hosted on personal hardware via Podman Compose (Beta limit: first 10 users).
 
-### Phase 2: Growth (V2)
+### Phase 2: Growth & Production Hardening (V2) - [COMPLETED]
 *   **Notion Mirror:** Premium integration to push logs (both expenses and income) to user Notion databases using the official Python SDK.
 *   **Family Groups:** Multi-user sync and shared ledgers (Flat permission model).
 *   **Income & Net Cash Flow Tracking:** Dual-intent transaction logging, earnings summaries, and net balance calculation (Income − Expenses).
-*   **Proactive Insights:** Behavioral nudges and spending/saving trend alerts.
-*   **Infrastructure Scaling:** Migration to a secure, containerized HA-VPS.
+*   **Monetization & Telegram Stars:** In-app auto-renewing subscriptions (`/upgrade`), 60-day trial lifecycle scheduler, and quota gating.
+*   **Multi-Currency & Bilingual Localization:** Household default currency (`/currency`), dynamic currency resolution, and full Spanish/English support.
+*   **Scheduled Obligations & Zero-Amount Settlement:** `ScheduledBill` tracking, due dates, conversational settlement shortcuts, and proactive status alerts.
+*   **Enterprise Security Hardening:** Remediation of SEC-01 through SEC-06 (clean workspace isolation on leave, HTML entity escaping, prompt injection defenses, per-user concurrency locking, bounded queries, Cloudflare Origin Shielding).
+*   **Modular Architecture Decomposition:** Decoupled `extraction/`, `query/`, and `handlers/` domain packages with backwards-compatible shims.
+*   **Hybrid AI & Deterministic Fallbacks:** Groq Cloud AI integration alongside local Ollama/Whisper, backed by rule-based regex fallback extraction.
+*   **CI/CD Quality Gates & Migration Automation:** GitHub Actions automated test suites, PR guardrails, 85%+ coverage enforcement, and startup Alembic migrations.
 
-### Phase 3: Vision (V3)
+### Phase 3: Vision (V3) - [UPCOMING]
 *   **AI Financial Coach:** Deep behavioral learning for budget optimization advice and cash-flow forecasting.
-*   **Web Dashboard:** Dedicated dashboard for advanced analytics.
-*   **Automation:** Optional bank synchronization and tax categorization.
+*   **Web Dashboard:** Dedicated optional self-hosted dashboard for advanced analytics and chart visualizations.
+*   **Automation:** Optional read-only bank synchronization and automated tax categorization.
 
 ## 5. Functional Requirements
 
@@ -127,18 +143,46 @@ Elena receives her monthly paycheck and sends a quick voice note: "Just received
 *   **FR20:** In family groups, income can be attributed to specific members while aggregating into the family's collective cash flow.
 *   **FR21:** Income records are synchronized with Notion mirrors with type discrimination and included in data exports (CSV/JSON).
 
+### 5.6 Multi-Currency & Bilingual Localization
+*   **FR22:** Users can configure a household default currency via `/currency <ISO>` command or natural language (e.g., *"Set default currency to ARS"* / *"Cambiar moneda a EUR"*).
+*   **FR23:** System dynamically resolves the household default currency for any transaction logged without an explicit currency symbol or code.
+*   **FR24:** System processes inputs and generates conversational feedback and summaries bilingually in English and Spanish.
+
+### 5.7 Scheduled Obligations & Proactive Settlement
+*   **FR25:** Users can schedule upcoming bills and recurring financial obligations with amounts, concepts, categories, and due dates.
+*   **FR26:** Users can settle scheduled bills conversationally with zero amounts (e.g. *"Pagué la visa"*), resolving bills via user-scoped precedence with family fallback.
+*   **FR27:** Monthly balance and spending status queries proactively alert users to pending bills whose due dates are approaching or overdue.
+
+### 5.8 Enterprise Security & Infrastructure Isolation
+*   **FR28:** When a user leaves a family workspace (`/leavefamily`), the system provisions a fresh workspace with guaranteed zero credential or data inheritance.
+*   **FR29:** Outbound messaging handles entity formatting exceptions by automatically retrying in safe plain-text mode.
+*   **FR30:** AI prompt ingestion sanitizes user text and encapsulates inputs within strict `<user_input>` XML tags to defend against prompt injection.
+*   **FR31:** Concurrent operations per user are serialized via per-user locks to ensure transactional determinism.
+*   **FR32:** Financial query decryption enforces an in-memory record bounding limit to prevent resource exhaustion attacks.
+*   **FR33:** Incoming webhooks are protected by Cloudflare Origin Shield verification, secret tokens, and security headers.
+
+### 5.9 Hybrid AI & Resilient Fallback
+*   **FR34:** System supports hybrid AI inference, allowing seamless routing between local Ollama/Faster-Whisper and Groq Cloud AI.
+*   **FR35:** System provides a deterministic, rule-based regex extraction and classification engine to guarantee zero-downtime operation when AI inference fails.
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance
 *   **Latency:** 95% of logs confirmed within 3 seconds of input reception.
-*   **Efficiency:** STT/LLM pipeline must run on consumer-grade local hardware.
+*   **Efficiency:** STT/LLM pipeline must run on consumer-grade local hardware or lightweight cloud inference.
 
 ### 6.2 Security & Privacy
-*   **Encryption:** 100% of transaction descriptions and amounts encrypted at rest.
-*   **Local-Only Processing:** Zero transmission of raw audio or transaction data to third-party AI APIs.
-*   **Secrets:** All integration tokens (Notion/Bot) stored in encrypted environment variables.
+*   **Encryption:** 100% of transaction descriptions, amounts, and scheduled obligations encrypted at rest using AES-256 (Fernet).
+*   **Local-First / Private Processing:** Zero persistent storage of raw audio or unencrypted financial data on third-party infrastructure.
+*   **Secrets:** All integration tokens (Notion/Bot/Groq) stored in encrypted environment variables.
+*   **NFR9 (Multi-Currency Segregation):** Summaries and aggregations must cleanly segregate distinct currencies to prevent corrupt exchange-rate mixing.
+*   **NFR10 (Prompt Boundary Defense):** Untrusted user inputs must be stripped of markdown delimiters and fenced inside boundary tags.
+*   **NFR11 (Transactional Concurrency):** Rapid sequential mutations (`/undo`, corrections, rapid logs) must execute with deterministic ordering.
+*   **NFR12 (Origin Verification):** All webhook requests must prove origin authenticity before any payload processing occurs.
 
-### 6.3 Reliability
+### 6.3 Reliability & Quality
 *   **Persistence:** Transactional DB writes to ensure zero data loss on system failure.
 *   **Backup:** Daily automated encrypted backups to external storage.
 *   **Consistency:** Retry mechanisms for Notion mirroring (eventual consistency).
+*   **NFR13 (Zero-Downtime Fallback):** Offline regex extraction must achieve 100% fallback reliability for standard financial formats during AI outages.
+*   **Quality Gate:** Codebase must maintain ≥85% automated test coverage verified via CI.

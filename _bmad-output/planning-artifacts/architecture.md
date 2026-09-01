@@ -507,4 +507,147 @@ $$\text{Savings Rate} = \left( \frac{\text{Net Balance}}{\sum \text{Income}} \ri
 - **GDPR Export (CSV/JSON):** Updates export headers to include `Type`:
   `["Date", "Type", "Amount", "Currency", "Concept", "Category"]`
 
+---
 
+## Production Architectural Evolution (Epics 9 through 13)
+
+The following architectural specifications document the production hardening, domain-driven decomposition, security audit remediation, and multi-currency/scheduled commitments infrastructure.
+
+### 1. Modular Architecture & Domain Decomposition (Epic 12)
+
+To eliminate code bloating and circular dependencies, the monolithic services (`extraction_service.py`, `query_service.py`, and `ai_orchestrator.py`) were decomposed into clean, focused sub-packages:
+
+```text
+src/services/
+├── extraction/
+│   ├── __init__.py          # Public facade re-exporting ExtractionService, schemas
+│   ├── models.py            # ExtractionResult, UnifiedResult, ExtractionError
+│   ├── normalizers.py       # Category dictionaries, ISO currency normalization
+│   ├── prompts.py           # Security-hardened prompt templates & XML fences
+│   ├── fallback.py          # Deterministic regex extraction & classification engine
+│   └── service.py           # ExtractionService implementation, Ollama & Cloud AI callers
+├── query/
+│   ├── __init__.py          # Public facade re-exporting QueryService, models
+│   ├── models.py            # ParsedQueryIntent, QueryResult, TimeAggregation, NetCashFlow
+│   ├── date_resolver.py     # Relative & calendar date resolution (bilingual ES/EN)
+│   ├── aggregator.py        # Mathematical aggregation algorithms (time, category, member)
+│   ├── formatters.py        # Fallback summary formatters & prompt context builders
+│   └── service.py           # QueryService implementation & encrypted DB fetcher
+├── handlers/
+│   ├── __init__.py          # Facade re-exporting all specialized command handlers
+│   ├── account_handler.py   # Account deletion & GDPR workflows
+│   ├── currency_handler.py  # Household currency configuration (/currency)
+│   ├── family_handler.py    # Household invites, removals, and /family listings
+│   └── notion_handler.py    # Notion connection, sync status, and manual trigger
+├── ai_orchestrator.py       # Lean orchestrator routing intents & managing concurrency
+├── messaging_service.py     # Atomic user/family provisioning
+├── notification_scheduler.py# Automated trial lifecycle scheduler
+├── notion_service.py        # Notion client with exponential retry
+├── subscription_service.py  # Telegram Stars & quota management
+├── telegram_service.py      # Resilient Telegram API client with HTML fallback
+└── whisper_service.py       # Faster-Whisper local STT & Cloud Whisper integration
+```
+
+**Backwards-Compatibility Guarantee:**
+`src/services/extraction_service.py` and `src/services/query_service.py` act as zero-downtime re-export shims, allowing existing imports (`from src.services.extraction_service import ExtractionService`) to function without modifications.
+
+### 2. Database Migration Engine (Alembic)
+
+Clanomy employs Alembic for automated, version-controlled relational database schema migrations:
+- **Location:** `alembic/` and `alembic.ini`.
+- **Automated Startup Runner:** Integrated in `src/main.py` lifespan context manager. On startup, Alembic applies all pending migrations automatically before accepting traffic:
+  ```python
+  @asynccontextmanager
+  async def lifespan(app: FastAPI):
+      run_migrations()  # Executes alembic upgrade head
+      yield
+  ```
+- **Migration Sequence:**
+  1. `0001_initial_baseline.py`: Tables `family`, `user`, `transaction`, `familyinvite`.
+  2. `0002_subscription_schema_expansion.py`: Adds subscription fields to `family` (`plan_type`, `subscription_status`, `monthly_tx_count`, `trial_ends_at`, etc.).
+  3. `0003_add_user_is_admin.py`: Adds `is_admin` column to `user`.
+  4. `0004_enable_rls_security.py`: Configures PostgreSQL row-level security (RLS).
+  5. `0005_add_family_default_currency.py`: Adds `default_currency` (ISO-4217, default "USD") to `family`.
+  6. `0006_add_scheduled_bill.py`: Creates `scheduled_bill` table with encrypted fields and foreign keys.
+
+### 3. Enterprise Security Hardening (SEC-01 through SEC-06 - Epic 11)
+
+Following an exhaustive forensic security and architectural audit, six core security patterns were engineered:
+
+```mermaid
+graph TD
+    A[Incoming Webhook] -->|Cloudflare Shield & Headers| B[Security Middleware]
+    B -->|Secret Token Verification| C[Webhook Router]
+    C -->|Per-User asyncio.Lock| D[AI Orchestrator]
+    D -->|XML Boundary Tagging| E[Prompt Sanitization]
+    E -->|GLOBAL_OLLAMA_SEMAPHORE| F[AI Engine Local/Cloud]
+    D -->|Bounded In-Memory Query Limit: 500| G[Encrypted DB Fetcher]
+    D -->|HTML Entity Sanitization| H[Telegram Outbound Service]
+    H -->|400 Parsing Error Catch| I[Plain-Text Fallback Delivery]
+```
+
+1. **SEC-01: Multi-Tenant Zero-Recycling Isolation (`leave_family`):**
+   When a user leaves a family group (`/leavefamily`), Clanomy strictly instantiates a fresh, isolated `Family` record with clean credentials. Old Notion keys, database IDs, and transaction associations are never inherited.
+2. **SEC-02: HTML Entity Sanitization & Telegram Delivery Fallback:**
+   All user-supplied transaction concepts and categories are escaped via `html.escape()` before being embedded in Telegram HTML cards. Furthermore, `TelegramService.send_message()` catches HTTP 400 parsing errors and automatically retries with `parse_mode=None` (safe plain text).
+3. **SEC-03: Prompt Injection Defense via XML Boundary Fencing:**
+   User text is stripped of markdown code fences (```` ``` ````) and strictly enclosed inside `<user_input>` XML tags in both Cloud AI and Ollama prompts (`src/core/ai_client.py` and `prompts.py`).
+4. **SEC-04: Per-User Concurrency Serialization:**
+   `AIOrchestrator` maintains an in-memory dictionary of `asyncio.Lock` instances keyed by `user_id`. Rapid sequential inputs, `/undo` requests, and corrections are serialized, preventing race conditions.
+5. **SEC-05: Global AI Concurrency Semaphore:**
+   `GLOBAL_OLLAMA_SEMAPHORE` in `src/core/ai_client.py` sets a global threshold (`OLLAMA_MAX_CONCURRENT`) across all inference services, preventing CPU and memory exhaustion on self-hosted servers.
+6. **SEC-06: Bounded Query In-Memory Decryption Limit:**
+   To prevent denial-of-service via massive result sets, database queries for open-ended summaries are capped at `MAX_QUERY_TRANSACTIONS_LIMIT: 500` records before Fernet in-memory decryption.
+
+### 4. Multi-Currency & Bilingual Localization Architecture (Epic 9)
+
+To serve international users without requiring environment variable reconfiguration:
+- **Database Model:** `Family.default_currency` stores the 3-letter ISO-4217 currency code (e.g., `"ARS"`, `"USD"`, `"EUR"`, `"MXN"`).
+- **Dynamic Resolution:** When `ExtractionService` parses numeric entries without currency indicators (*"500 en pizza"*), it dynamically injects the family's configured currency into the prompt.
+- **Segregated Cash Flow:** `QueryService.aggregate_transactions()` groups amounts by currency code, outputting multi-currency breakdowns instead of conflating amounts.
+- **Empty-State Localization:** Summary formatters render zero-transaction states in the family's default currency (e.g. `$0.00 ARS` instead of `$0.00 USD`).
+
+### 5. Scheduled Obligations & Conversational Settlement Architecture (Epic 10)
+
+```python
+class ScheduledBill(SQLModel, table=True):
+    __tablename__ = "scheduled_bill"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
+    user_id: UUID = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+
+    # Sensitive fields encrypted at rest (AES-256)
+    amount: str
+    concept: str
+
+    category: str = Field(index=True)
+    due_date: datetime = Field(index=True)
+    status: str = Field(default="pending", index=True, max_length=15) # pending, paid, cancelled
+
+    paid_transaction_id: Optional[UUID] = Field(default=None, foreign_key="transaction.id", nullable=True, ondelete="SET NULL")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+```
+
+- **Batch Due-Date NLP Extraction:** Recognizes temporal obligations (*"El 10 vence la luz 45000 y el 15 internet 18000"*) and extracts both amount, concept, category, and due date.
+- **Zero-Amount Conversational Settlement:** When a user messages *"Pagué la visa"* without an amount:
+  1. Primary Lookup: Searches pending bills belonging to the sender (`user_id == current_user.id`).
+  2. Family Fallback: Searches pending bills belonging to other family members.
+  3. Action: Decrypts bill amount, writes a new `Transaction` under category `"Rent/Bills"`, marks bill `status="paid"`, links `paid_transaction_id`, and dispatches Notion mirroring.
+- **Proactive Status Alerts:** Monthly status inquiries (*"¿cómo venimos este mes?"*) evaluate pending obligations where `due_date <= now()` and append overdue reminders to the financial summary.
+
+### 6. Hybrid AI & Deterministic Offline Fallback Architecture (Epics 12 & 13)
+
+- **Cloud / Local Hybrid Routing:**
+  - Local mode: Faster-Whisper + Ollama (`llama3:latest`).
+  - Cloud mode: Groq Cloud Whisper (`whisper-large-v3`) + Groq Cloud LLM (`llama-3.3-70b-versatile`).
+- **Deterministic Regex Fallback Engine (`src/services/extraction/fallback.py`):**
+  - High-precision regular expressions extract transaction type, amount, currency, category, and concept.
+  - Acts as an automatic circuit breaker: if local or cloud AI fails or times out, the fallback engine processes the message without user-facing errors.
+
+### 7. CI/CD Quality Gates & Automated Testing Pyramid (Epic 13)
+
+- **Test Suite Scale:** 347 automated tests covering API, database models, encryption, services, and security invariants.
+- **Automated Workflows:**
+  - `.github/workflows/test.yml`: Runs on push and PR to `master`, isolates SQLite/Postgres test environments, and enforces an **85% minimum code coverage threshold**.
+  - `.github/workflows/pr-guardrail.yml`: Protects sensitive files (`subscription_service.py`, `subscription_config.py`, `monetization-and-subscription-strategy.md`, `README.md`, `.github/workflows/`) against unauthorized alterations.

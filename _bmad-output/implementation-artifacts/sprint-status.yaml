@@ -1,5 +1,5 @@
-﻿# generated: 2026-05-09
-# last_updated: 2026-08-26 17:10:27
+# generated: 2026-05-09
+# last_updated: 2026-09-01 13:20:00
 # project: Clanomy
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-08-26 17:10:27
+last_updated: 2026-09-01 13:20:00
 project: Clanomy
 tracking_system: file-system
 story_location: { implementation_artifacts }
@@ -80,13 +80,13 @@ development_status:
   6-3-retry-mechanism-for-mirroring-failures: done
   epic-6-retrospective: done
 
-  epic-7: in-progress
+  epic-7: done
   7-1-database-schema-expansion-for-subscriptions: done
   7-2-quota-gating-and-upgrade-prompt: done
   7-3-telegram-stars-invoice-generation: done
   7-4-payment-verification-webhook-handler: done
   7-5-trial-lifecycle-notifications-and-scheduler: done
-  epic-7-retrospective: optional
+  epic-7-retrospective: done
 
   epic-8: done
   8-1-database-schema-extension-for-transaction-types: done
@@ -96,3 +96,39 @@ development_status:
   8-5-notion-mirroring-and-export-updates: done
   8-6-conversational-transaction-correction-and-undo: done
   epic-8-retrospective: done
+
+  epic-9: done
+  9-1-database-schema-and-migration-for-family-default-currency: done
+  9-2-family-currency-configuration-and-chat-command: done
+  9-3-bilingual-nlp-and-dynamic-currency-extraction: done
+  9-4-multi-currency-query-segregation-and-formatting: done
+  epic-9-retrospective: done
+
+  epic-10: done
+  10-1-scheduled-bill-database-model-and-migration: done
+  10-2-due-date-and-batch-bill-nlp-extraction: done
+  10-3-conversational-zero-amount-bill-settlement: done
+  10-4-proactive-due-and-overdue-bill-alerts: done
+  epic-10-retrospective: done
+
+  epic-11: done
+  11-1-multi-tenant-workspace-isolation-and-rls: done
+  11-2-telegram-message-escaping-and-delivery-resilience: done
+  11-3-prompt-injection-defense-and-input-sanitization: done
+  11-4-concurrency-control-and-resource-bounding: done
+  11-5-origin-shielding-security-headers-and-rate-limiting: done
+  epic-11-retrospective: done
+
+  epic-12: done
+  12-1-domain-driven-decomposition-of-core-services: done
+  12-2-hybrid-cloud-and-local-ai-inference-pipeline: done
+  12-3-deterministic-fallback-extraction-and-classification: done
+  12-4-atomic-user-and-family-provisioning-service: done
+  epic-12-retrospective: done
+
+  epic-13: done
+  13-1-github-actions-ci-and-coverage-enforcement: done
+  13-2-pr-guardrail-workflow-for-protected-assets: done
+  13-3-automated-alembic-startup-migration-lifecycle: done
+  13-4-community-funding-and-containerized-self-hosting-framework: done
+  epic-13-retrospective: done

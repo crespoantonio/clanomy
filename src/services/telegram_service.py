@@ -1,5 +1,6 @@
 import httpx
 import logging
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from src.core.config import settings
 from src.core.http_client import get_http_client
 
@@ -12,18 +13,26 @@ class TelegramService:
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.api_url = f"https://api.telegram.org/bot{self.bot_token}"
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.5, max=4.0),
+        retry=retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError, ConnectionError, OSError)),
+        reraise=True
+    )
+    async def _post_with_retry(self, endpoint: str, **kwargs) -> httpx.Response:
+        """Low-level POST with automatic retry on transient network errors."""
+        client = get_http_client()
+        response = await client.post(f"{self.api_url}/{endpoint}", **kwargs)
+        response.raise_for_status()
+        return response
+
     async def send_message(self, chat_id: int, text: str, parse_mode: Optional[str] = "HTML") -> None:
-        """Sends a message back to the user via Telegram Bot API with fallback on parse errors."""
+        """Sends a message back to the user via Telegram Bot API with retry on transient errors and fallback on parse errors."""
         try:
-            client = get_http_client()
             payload = {"chat_id": chat_id, "text": text}
             if parse_mode:
                 payload["parse_mode"] = parse_mode
-            response = await client.post(
-                f"{self.api_url}/sendMessage",
-                json=payload
-            )
-            response.raise_for_status()
+            await self._post_with_retry("sendMessage", json=payload)
         except httpx.HTTPStatusError as e:
             if parse_mode and e.response.status_code == 400 and "can't parse entities" in e.response.text:
                 logger.warning(f"Telegram HTML parse error for chat {chat_id}. Retrying as plain text.")

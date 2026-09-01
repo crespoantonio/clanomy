@@ -4,7 +4,7 @@ import datetime
 import asyncio
 import re
 import html
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from typing import Optional
 from uuid import UUID
 from sqlmodel import Session, select
@@ -64,8 +64,29 @@ def _format_currency(amount: float, currency: str = "USD", show_sign: bool = Fal
     abs_amt = abs(amount or 0.0)
     return f"{sign}{sym}{abs_amt:,.2f} {curr_upper}".strip()
 
+class _BoundedLockStore:
+    """LRU-bounded dictionary of asyncio.Lock instances.
+
+    Evicts the least-recently-used lock when ``max_entries`` is exceeded,
+    preventing unbounded memory growth over months of production usage.
+    Mirrors the BoundedCooldownStore pattern in the webhook route.
+    """
+    def __init__(self, max_entries: int = 10_000):
+        self._locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
+        self._max = max_entries
+
+    def __getitem__(self, key: str) -> asyncio.Lock:
+        if key in self._locks:
+            self._locks.move_to_end(key)
+            return self._locks[key]
+        lock = asyncio.Lock()
+        self._locks[key] = lock
+        if len(self._locks) > self._max:
+            self._locks.popitem(last=False)
+        return lock
+
 class AIOrchestrator:
-    _user_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+    _user_locks = _BoundedLockStore()
 
     def __init__(self):
         self.encryption_service = EncryptionService()
@@ -488,8 +509,6 @@ class AIOrchestrator:
                 lines.append('\n👉 <i>If you already paid any, simply tell me "Paid [name]" (e.g. "Paid the visa") to record it.</i>')
 
             return "\n".join(lines)
-
-            return None
 
     def _get_monthly_cash_flow_snapshot(self, family_id: UUID, target_date: datetime.datetime, primary_currency: str = "USD") -> dict:
         """

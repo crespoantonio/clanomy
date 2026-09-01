@@ -99,14 +99,14 @@ async def root():
 
 @app.get("/health")
 async def health_check(response: Response, session: Session = Depends(get_session)):
+    health = {
+        "status": "healthy",
+        "database": "connected",
+        "project": settings.PROJECT_NAME
+    }
     try:
         # Check database connectivity
         session.exec(text("SELECT 1")).one()
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "project": settings.PROJECT_NAME
-        }
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
@@ -115,6 +115,18 @@ async def health_check(response: Response, session: Session = Depends(get_sessio
             "database": "disconnected",
             "error": "Database connection failed"
         }
+
+    # Lightweight probe for self-hosted Ollama backend
+    if not settings.AI_API_KEY:
+        try:
+            from src.core.http_client import get_http_client
+            client = get_http_client()
+            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+            health["ollama"] = "connected" if r.status_code == 200 else "degraded"
+        except Exception:
+            health["ollama"] = "unreachable"
+
+    return health
 
 if __name__ == "__main__":
     import uvicorn

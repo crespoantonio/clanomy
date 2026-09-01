@@ -178,6 +178,16 @@ class UnifiedResult(BaseModel):
         description="The specific concept or keyword of the transaction to update or delete, if specified by the user."
     )
 
+    # Currency exchange (FX) flags
+    is_exchange: bool = Field(
+        default=False,
+        description="True if this operation represents a dual-leg currency exchange."
+    )
+    exchange_rate: Optional[float] = Field(
+        default=None,
+        description="The implied or explicit exchange rate between the two currencies."
+    )
+
     def to_datetime(self, reference_time: Optional[datetime] = None) -> datetime:
         """Parses the transaction date to a UTC datetime. Falls back to reference_time or now if none."""
         ref = reference_time or datetime.now(timezone.utc)

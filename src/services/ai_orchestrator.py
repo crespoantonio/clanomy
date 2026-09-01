@@ -461,6 +461,40 @@ class AIOrchestrator:
             family_id = tx.family_id
             tx_time = tx.timestamp
 
+            counterpart = None
+            if category == "Exchange":
+                recent_exchange_txs = session.exec(
+                    select(Transaction)
+                    .where(
+                        Transaction.user_id == user_uuid,
+                        Transaction.category == "Exchange",
+                        Transaction.id != tx.id
+                    )
+                    .order_by(Transaction.timestamp.desc())
+                    .limit(5)
+                ).all()
+                for cand in recent_exchange_txs:
+                    if abs((cand.timestamp - tx_time).total_seconds()) <= 15:
+                        counterpart = cand
+                        break
+
+            counterpart_info = None
+            if counterpart:
+                c_dec_amount = self.encryption_service.decrypt(counterpart.amount) or "0.00 USD"
+                c_dec_concept = self.encryption_service.decrypt(counterpart.concept) or "Transaction"
+                c_parts = c_dec_amount.strip().split()
+                c_amt = float(c_parts[0]) if c_parts else 0.0
+                c_curr = c_parts[1].upper() if len(c_parts) > 1 else "USD"
+                c_type = getattr(counterpart, "tx_type", getattr(counterpart, "type", "income")) or "income"
+                counterpart_info = {
+                    "amount": c_amt,
+                    "currency": c_curr,
+                    "type": c_type,
+                    "concept": c_dec_concept,
+                    "notion_page_id": counterpart.notion_page_id
+                }
+                session.delete(counterpart)
+
             session.delete(tx)
             session.commit()
 
@@ -469,6 +503,12 @@ class AIOrchestrator:
                 create_logged_task(self._safe_archive_notion_page(family_id, notion_page_id), name="archive_notion_page")
             except Exception as e:
                 logger.warning(f"Could not dispatch Notion archive task: {e}")
+
+        if counterpart_info and counterpart_info.get("notion_page_id"):
+            try:
+                create_logged_task(self._safe_archive_notion_page(family_id, counterpart_info["notion_page_id"]), name="archive_counterpart_notion_page")
+            except Exception as e:
+                logger.warning(f"Could not dispatch counterpart Notion archive task: {e}")
 
         snapshot = self._get_monthly_cash_flow_snapshot(family_id, tx_time, curr)
 
@@ -483,6 +523,21 @@ class AIOrchestrator:
         safe_concept = html.escape(dec_concept)
         safe_category = html.escape(category)
         has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
+
+        if counterpart_info:
+            c_icon = "💰" if counterpart_info["type"] == "income" else "💸"
+            c_sign = "+" if counterpart_info["type"] == "income" else "-"
+            c_formatted = _format_currency(counterpart_info["amount"], counterpart_info["currency"], show_sign=False)
+            return (
+                f"🗑️ <b>Removed currency exchange:</b>\n"
+                f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n"
+                f"• {c_icon} {c_sign}{c_formatted} ({safe_category} - {html.escape(counterpart_info['concept'])})\n\n"
+                f"📊 <b>Updated {snapshot['month_name']} Balance ({curr}):</b>\n"
+                f"• Total In: {formatted_in}\n"
+                f"• Total Out: {formatted_out}\n"
+                f"• Net Savings: {formatted_net}{pct_str}"
+            )
+
         title = "🗑️ <b>Removed transaction:</b>\n" if has_target else "🗑️ <b>Removed latest transaction:</b>\n"
 
         return (
@@ -1157,46 +1212,83 @@ class AIOrchestrator:
                                         ref_time=datetime.datetime.now(datetime.timezone.utc)
                                     )
 
-                                    is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas"])
+                                    is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares"])
                                     bills = [r for r in batch_results if r["kind"] == "bill"]
                                     txs = [r for r in batch_results if r["kind"] == "transaction"]
-                                    parts = []
-                                    if bills:
-                                        header = f"📋 <b>{len(bills)} Factura(s) Programada(s):</b>\n\n" if is_spanish else f"📋 <b>{len(bills)} Scheduled Bill(s):</b>\n\n"
-                                        parts.append(header)
-                                        for b in bills:
-                                            fmt_amt = _format_currency(b["amount"], b["currency"])
-                                            due_str = b["due_date"].strftime("%d/%m")
-                                            if is_spanish:
-                                                day_name = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b["due_date"].weekday()]
-                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n")
-                                            else:
-                                                day_name = b["due_date"].strftime("%a")
-                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n")
 
-                                        totals = {}
-                                        for b in bills:
-                                            totals[b["currency"]] = totals.get(b["currency"], 0.0) + b["amount"]
-                                        tot_str = " + ".join([_format_currency(amt, curr) for curr, amt in totals.items()])
+                                    is_exchange = getattr(unified, "is_exchange", False) or (
+                                        len(txs) == 2 and
+                                        len(bills) == 0 and
+                                        any(t["tx_type"] == "expense" for t in txs) and
+                                        any(t["tx_type"] == "income" for t in txs) and
+                                        all(t["category"] == "Exchange" for t in txs)
+                                    )
+
+                                    if is_exchange:
+                                        sold = next(t for t in txs if t["tx_type"] == "expense")
+                                        recv = next(t for t in txs if t["tx_type"] == "income")
+                                        fmt_sold = _format_currency(sold["amount"], sold["currency"], show_sign=False)
+                                        fmt_recv = _format_currency(recv["amount"], recv["currency"], show_sign=False)
+                                        rate_val = getattr(unified, "exchange_rate", None)
+                                        if not rate_val and sold["amount"] > 0:
+                                            rate_val = round(recv["amount"] / sold["amount"], 4)
+
                                         if is_spanish:
-                                            parts.append(f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}")
+                                            rate_line = f"\n• 📊 Cotización: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
+                                            response_text = (
+                                                f"💱 <b>Cambio de Moneda Registrado:</b>\n"
+                                                f"• 💸 Entregaste: -{fmt_sold}\n"
+                                                f"• 💰 Recibiste: +{fmt_recv}"
+                                                f"{rate_line}\n\n"
+                                                f"🏷️ <i>Categorizado bajo <b>Exchange</b> para no distorsionar ingresos o gastos operativos del mes.</i>"
+                                            )
                                         else:
-                                            parts.append(f"\n📌 <b>Total pending to pay:</b> {tot_str}")
+                                            rate_line = f"\n• 📊 Rate: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
+                                            response_text = (
+                                                f"💱 <b>Currency Exchange Logged:</b>\n"
+                                                f"• 💸 Sold: -{fmt_sold}\n"
+                                                f"• 💰 Received: +{fmt_recv}"
+                                                f"{rate_line}\n\n"
+                                                f"🏷️ <i>Categorized under <b>Exchange</b> to keep operational income & expenses clean.</i>"
+                                            )
+                                    else:
+                                        parts = []
+                                        if bills:
+                                            header = f"📋 <b>{len(bills)} Factura(s) Programada(s):</b>\n\n" if is_spanish else f"📋 <b>{len(bills)} Scheduled Bill(s):</b>\n\n"
+                                            parts.append(header)
+                                            for b in bills:
+                                                fmt_amt = _format_currency(b["amount"], b["currency"])
+                                                due_str = b["due_date"].strftime("%d/%m")
+                                                if is_spanish:
+                                                    day_name = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b["due_date"].weekday()]
+                                                    parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n")
+                                                else:
+                                                    day_name = b["due_date"].strftime("%a")
+                                                    parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n")
 
-                                    if txs:
-                                        if parts:
-                                            parts.append("\n\n")
-                                        header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
-                                        parts.append(header)
-                                        for t in txs:
-                                            fmt_amt = _format_currency(t["amount"], t["currency"])
-                                            parts.append(f"• 💸 <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
+                                            totals = {}
+                                            for b in bills:
+                                                totals[b["currency"]] = totals.get(b["currency"], 0.0) + b["amount"]
+                                            tot_str = " + ".join([_format_currency(amt, curr) for curr, amt in totals.items()])
+                                            if is_spanish:
+                                                parts.append(f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}")
+                                            else:
+                                                parts.append(f"\n📌 <b>Total pending to pay:</b> {tot_str}")
 
-                                    if bills:
-                                        tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'
-                                        parts.append(tip)
+                                        if txs:
+                                            if parts:
+                                                parts.append("\n\n")
+                                            header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
+                                            parts.append(header)
+                                            for t in txs:
+                                                fmt_amt = _format_currency(t["amount"], t["currency"])
+                                                parts.append(f"• 💸 <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
 
-                                    response_text = "".join(parts)
+                                        if bills:
+                                            tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'
+                                            parts.append(tip)
+
+                                        response_text = "".join(parts)
 
                                     for t in txs:
                                         try:

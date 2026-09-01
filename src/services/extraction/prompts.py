@@ -56,6 +56,13 @@ ACTIONS ('action'):
        - 'is_scheduled_bill': true ONLY if the item specifies an explicit future due date ("con vencimiento", "due on", "vence"). If no explicit future due date is given, set false (immediate expense).
      * Top-level scalar fields ('amount', 'category', 'concept', 'currency', 'type', 'transaction_date', 'due_date', 'is_scheduled_bill') populated from the first item.
 
+     * CURRENCY EXCHANGE / SWAP RULE:
+       - If the user exchanged, swapped, sold, or bought currency (e.g. "Cambie 200 dolares por 300000 pesos", "I change 200 USD for 300000 ARS", "Cambié 200 dolares a 1500", "Vendí 200 dólares a 1500", "Compré 100 dólares con 150000 pesos"):
+       - Emit EXACTLY 2 items under 'items' with action="log_transaction" and set top-level 'is_exchange': true:
+         * Item 1 (Sold/Spent): type="expense", amount=sold_amount, currency=sold_currency, category="Exchange", concept="Currency Exchange"
+         * Item 2 (Received/Income): type="income", amount=received_amount (or sold_amount * rate), currency=received_currency, category="Exchange", concept="Currency Exchange"
+         * Set top-level 'exchange_rate' to received_amount / sold_amount.
+
 2. "edit_last": The user wants to correct, update, change, or specify currency for a recent transaction.
    - English: "Update internet cost to 250", "Change the last amount to 250", "The last one was 50 for food", "Change to income", "Fix the category to Transport", "Actually it was 300", "the salary of 1606932 is ARS", "it was in EUR, not USD", "change currency to ARS", "modify the dollar incomes, we only had 1 in dollars".
    - Spanish: "El último importe necesito actualizarlo a 250", "Actualizar el último a 250", "Cambiar el último a 300", "El último fue 50 en comida", "Corregir monto a 250", "Cambiá el último a ingreso", "En realidad fueron 250", "el salario de 1606932 es ARS", "era en pesos", "era en ARS", "corregir moneda a ARS", "el último fue en pesos no en dólares", "modifica los ingresos en dolares".
@@ -93,6 +100,7 @@ CATEGORY RULES (for 'category' or 'new_category'):
 - "Investment": investment, dividends, stocks, inversión, dividendos.
 - "Gift": gift, allowance, regalo.
 - "Sale": sale, sold items, venta, ventas, vendí.
+- "Exchange": currency exchanges, swaps, buying/selling currency, cambio de moneda, cambio de divisas, transferencias entre monedas.
 - "Other": miscellaneous or uncategorized.
 
 CURRENCY DEFAULTING RULE:

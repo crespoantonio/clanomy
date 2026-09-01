@@ -82,6 +82,30 @@ def fallback_regex_extract(text: str, default_currency: Optional[str] = None) ->
         transaction_date=None
     )
 
+def _parse_curr_token(token: Optional[str], default_curr: str) -> str:
+    if not token:
+        return default_curr
+    t = token.lower().strip()
+    if "dolar" in t or "usd" in t or t == "u$s" or t == "us$":
+        return "USD"
+    if "eur" in t or "euro" in t or "€" in t:
+        return "EUR"
+    if "gbp" in t or "pound" in t or "libra" in t or "£" in t:
+        return "GBP"
+    if "peso" in t or "ars" in t:
+        return "ARS"
+    if "mxn" in t:
+        return "MXN"
+    if "clp" in t:
+        return "CLP"
+    if "cop" in t:
+        return "COP"
+    if t == "$":
+        return default_curr
+    if len(t) == 3 and t.isalpha():
+        return t.upper()
+    return default_curr
+
 def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -> UnifiedResult:
     """Attempt to classify intent and extract details via regex/keywords when AI engine is unavailable."""
     text_lower = text.lower().strip()
@@ -124,7 +148,83 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
             new_currency=new_curr
         )
 
-    # 4. General Edit / Update heuristics
+    # 4. Currency Exchange (FX) heuristics: e.g. "Cambie 200 dolares por 300000 pesos", "I change 200 USD for 300000 ARS", "Cambie 200 dolares a 1500"
+    fx_amount_match = re.search(
+        r'\b(cambi[eé]|swapped|exchanged|compr[eé]|vend[ií]|change|swap|exchange|bought|sold)\s+[$€£]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z$€£]*)\s*(?:por|for|to|con|en)\s*[$€£]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z$€£]*)',
+        text_lower
+    )
+    fx_rate_match = re.search(
+        r'\b(cambi[eé]|vend[ií]|change|swap|sold)\s+[$€£]?\s*(\d+(?:[.,]\d+)?)\s*(d[oó]lar(?:es)?|usd|\$)\s*(?:a|at|cotizado\s+a|al\s+cambio\s+de)\s*[$€£]?\s*(\d+(?:[.,]\d+)?)',
+        text_lower
+    )
+
+    if fx_amount_match:
+        verb = fx_amount_match.group(1).lower()
+        amt1 = float(fx_amount_match.group(2).replace(',', ''))
+        curr1 = _parse_curr_token(fx_amount_match.group(3), "USD" if "dolar" in fx_amount_match.group(3).lower() else effective_default_currency)
+        amt2 = float(fx_amount_match.group(4).replace(',', ''))
+        curr2 = _parse_curr_token(fx_amount_match.group(5), effective_default_currency if curr1 == "USD" else "USD")
+
+        is_buy = any(b in verb for b in ["compr", "bought", "buy"])
+        if is_buy:
+            sold_amt, sold_curr = amt2, curr2
+            recv_amt, recv_curr = amt1, curr1
+        else:
+            sold_amt, sold_curr = amt1, curr1
+            recv_amt, recv_curr = amt2, curr2
+
+        rate = round(recv_amt / sold_amt, 4) if sold_amt > 0 else None
+
+        item_sold = ParsedItem(
+            type="expense",
+            amount=sold_amt,
+            category="Exchange",
+            concept=f"Currency Exchange ({sold_amt:g} {sold_curr} -> {recv_amt:g} {recv_curr})",
+            currency=sold_curr
+        )
+        item_recv = ParsedItem(
+            type="income",
+            amount=recv_amt,
+            category="Exchange",
+            concept=f"Currency Exchange ({sold_amt:g} {sold_curr} -> {recv_amt:g} {recv_curr})",
+            currency=recv_curr
+        )
+        return UnifiedResult(
+            action="log_transaction",
+            items=[item_sold, item_recv],
+            is_exchange=True,
+            exchange_rate=rate
+        )
+
+    elif fx_rate_match:
+        amt1 = float(fx_rate_match.group(2).replace(',', ''))
+        curr1 = "USD"
+        rate = float(fx_rate_match.group(4).replace(',', ''))
+        amt2 = round(amt1 * rate, 2)
+        curr2 = effective_default_currency
+
+        item_sold = ParsedItem(
+            type="expense",
+            amount=amt1,
+            category="Exchange",
+            concept=f"Currency Exchange ({amt1:g} {curr1} -> {amt2:g} {curr2})",
+            currency=curr1
+        )
+        item_recv = ParsedItem(
+            type="income",
+            amount=amt2,
+            category="Exchange",
+            concept=f"Currency Exchange ({amt1:g} {curr1} -> {amt2:g} {curr2})",
+            currency=curr2
+        )
+        return UnifiedResult(
+            action="log_transaction",
+            items=[item_sold, item_recv],
+            is_exchange=True,
+            exchange_rate=rate
+        )
+
+    # 5. General Edit / Update heuristics
     is_edit = any(re.search(rf'\b{re.escape(w)}\b', text_lower) for w in ["actualizar", "actualiza", "actualizarlo", "actualízalo", "cambiar", "cambia", "cambialo", "cámbiarlo", "corregir", "corrige", "corregilo", "modificar", "modifica", "update", "correct", "fix"]) or \
               re.search(r'\b(?:el\s+último|el\s+ultimo|the\s+last|the\s+latest)\s+(?:importe|monto|cost|amount|costo)?\s*(?:necesito\s+actualizarlo|actualizar|cambiar|fue|es|was|to|a)\b', text_lower)
 

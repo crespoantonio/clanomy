@@ -42,10 +42,9 @@ def mock_llm_responses(monkeypatch):
     Deterministically mock LLM responses so tests run fast and don't fail due to 
     LLM output variance.
     """
-    async def mock_extraction_call(self, system_prompt: str, text: str) -> str:
-        import json, re
-        
-        # Try to find a number in the text
+    async def mock_extract(self, text: str, user_id=None, raw_timestamp=None, primary_currency="USD"):
+        from src.services.extraction.models import UnifiedResult
+        import re
         amount = 25.50
         amount_match = re.search(r'\b\d+(?:\.\d{1,2})?\b', text)
         if amount_match:
@@ -64,13 +63,13 @@ def mock_llm_responses(monkeypatch):
         elif "groceries" in text_lower:
             concept = "groceries at Walmart"
             
-        return json.dumps({
-            "type": tx_type,
-            "amount": amount,
-            "category": category,
-            "concept": concept,
-            "currency": "USD"
-        })
+        return UnifiedResult(
+            type=tx_type,
+            amount=amount,
+            category=category,
+            concept=concept,
+            currency=primary_currency or "USD"
+        )
 
     async def mock_parse_intent(self, text: str, reference_time=None):
         from src.services.query import ParsedQueryIntent
@@ -105,7 +104,7 @@ def mock_llm_responses(monkeypatch):
                 return ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month")
             return ParsedQueryIntent(intent="spending_summary", timeframe="this_month")
 
-    monkeypatch.setattr("src.services.extraction.ExtractionService._call_ollama", mock_extraction_call)
+    monkeypatch.setattr("src.services.extraction.ExtractionService.extract", mock_extract)
     monkeypatch.setattr("src.services.query.QueryService.parse_intent", mock_parse_intent)
 
 @pytest.fixture(autouse=True)

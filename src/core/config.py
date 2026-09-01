@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     WHISPER_MAX_CONCURRENT: int = 1
     
     # AI Engine Configuration (Unified Provider / OpenAI-Compatible Standard)
+    AI_PROVIDER: Optional[str] = None
     AI_API_KEY: Optional[str] = None
     AI_BASE_URL: str = "https://api.groq.com/openai/v1"
     AI_MODEL: str = "llama-3.3-70b-versatile"

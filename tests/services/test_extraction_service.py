@@ -8,7 +8,7 @@ from src.core.config import settings
 
 @pytest.fixture
 def mock_ollama_client():
-    with patch("src.services.extraction.service.ollama.AsyncClient") as mock_client_cls:
+    with patch("src.core.llm.providers.ollama_provider.ollama.AsyncClient") as mock_client_cls:
         mock_instance = AsyncMock()
         mock_client_cls.return_value = mock_instance
         yield mock_instance

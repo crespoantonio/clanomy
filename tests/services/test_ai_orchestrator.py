@@ -150,9 +150,11 @@ async def test_orchestrator_audio_success(orchestrator, monkeypatch):
     # Mock TelegramService
     mock_send_message = AsyncMock()
     mock_get_file = AsyncMock(return_value="https://api.telegram.org/file/bot123/voice.ogg")
+    mock_download = AsyncMock(return_value=b"fake_audio_bytes")
     class MockTelegramService:
         send_message = mock_send_message
         get_file_url = mock_get_file
+        download_file_bytes = mock_download
     monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
 
     # Mock Session and EncryptionService
@@ -167,8 +169,8 @@ async def test_orchestrator_audio_success(orchestrator, monkeypatch):
 
     await orchestrator.orchestrate(user_id=user_id, text=None, audio_file_id="file_123", chat_id=1)
     
-    mock_get_file.assert_called_once_with("file_123")
-    mock_transcribe.assert_called_once_with(audio_url="https://api.telegram.org/file/bot123/voice.ogg")
+    mock_download.assert_called_once_with("file_123")
+    mock_transcribe.assert_called_once_with(audio_bytes=b"fake_audio_bytes")
     mock_extract.assert_called_once_with(text="20 for taxi", default_currency="USD")
     mock_send_message.assert_called_once()
     assert "Saved 20.0" in mock_send_message.call_args[1]["text"]
@@ -387,7 +389,7 @@ async def test_orchestrator_confirm_delete(orchestrator, monkeypatch):
     mock_delete = AsyncMock(return_value=True)
     class MockAccountService:
         delete_account = mock_delete
-    monkeypatch.setattr("src.services.ai_orchestrator.AccountService", MockAccountService)
+    monkeypatch.setattr("src.services.handlers.account_handler.AccountService", MockAccountService)
     
     mock_send_message = AsyncMock()
     class MockTelegramService:
@@ -416,7 +418,7 @@ async def test_orchestrator_create_family(orchestrator, monkeypatch):
     class MockFamilyService:
         def create_family(self, uid, name):
             pass
-    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+    monkeypatch.setattr("src.services.handlers.family_handler.FamilyService", MockFamilyService)
     
     await orchestrator.orchestrate(user_id=user_id, text="create family New Fam", audio_file_id=None, chat_id=12345)
     
@@ -436,11 +438,12 @@ async def test_orchestrator_generate_invite(orchestrator, monkeypatch):
         async def get_bot_username(self):
             return "bot"
     monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+    monkeypatch.setattr("src.services.handlers.family_handler.TelegramService", MockTelegramService)
     
     class MockFamilyService:
         def create_invite(self, fid, uid, bot_username=None):
             return type("Invite", (), {}), f"https://t.me/{bot_username or 'bot'}?start=join_xyz"
-    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+    monkeypatch.setattr("src.services.handlers.family_handler.FamilyService", MockFamilyService)
     
     monkeypatch.setattr(orchestrator, "_get_user_family_id", lambda x: UUID("11111111-1111-1111-1111-111111111111"))
     
@@ -468,7 +471,7 @@ async def test_orchestrator_family_info(orchestrator, monkeypatch):
                 "transactions_count": 5,
                 "active_invites_count": 1
             }
-    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyService)
+    monkeypatch.setattr("src.services.handlers.family_handler.FamilyService", MockFamilyService)
     
     await orchestrator.orchestrate(user_id=user_id, text="family info", audio_file_id=None, chat_id=12345)
     
@@ -528,6 +531,8 @@ async def test_orchestrator_notion_commands(mock_notion_cls, orchestrator, monke
     mock_session_class = MagicMock()
     mock_session_class.return_value.__enter__.return_value = mock_session
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    monkeypatch.setattr("src.services.handlers.notion_handler.Session", mock_session_class)
+    monkeypatch.setattr("src.services.handlers.notion_handler.NotionService", mock_notion_cls)
     
     mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
     mock_session.get.return_value = mock_family
@@ -688,6 +693,8 @@ async def test_orchestrator_notion_test_sync_commands(mock_notion_cls, orchestra
     mock_session_class = MagicMock()
     mock_session_class.return_value.__enter__.return_value = mock_session
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    monkeypatch.setattr("src.services.handlers.notion_handler.Session", mock_session_class)
+    monkeypatch.setattr("src.services.handlers.notion_handler.NotionService", mock_notion_cls)
     
     mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
     mock_session.get.return_value = mock_family
@@ -847,9 +854,11 @@ async def test_orchestrator_income_audio_success(orchestrator, monkeypatch):
 
     mock_send_message = AsyncMock()
     mock_get_file = AsyncMock(return_value="https://api.telegram.org/file/bot123/voice.ogg")
+    mock_download = AsyncMock(return_value=b"fake_audio_bytes")
     class MockTelegramService:
         send_message = mock_send_message
         get_file_url = mock_get_file
+        download_file_bytes = mock_download
     monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
 
     mock_session = MagicMock()

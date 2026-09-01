@@ -42,14 +42,7 @@ def mock_notion_service(monkeypatch):
     mock_instance = MockNotionService()
     import src.services.notion_service
     monkeypatch.setattr("src.services.notion_service.NotionService", lambda *args, **kwargs: mock_instance)
-    try:
-        monkeypatch.setattr("src.api.routes.telegram.NotionService", lambda *args, **kwargs: mock_instance)
-    except AttributeError:
-        pass
-    try:
-        monkeypatch.setattr("src.services.ai_orchestrator.NotionService", lambda *args, **kwargs: mock_instance)
-    except AttributeError:
-        pass
+    monkeypatch.setattr("src.services.handlers.notion_handler.NotionService", lambda *args, **kwargs: mock_instance)
     return mock_instance
 
 def test_webhook_notion_connection_flow(app_client, mock_telegram, telegram_payload_factory, mock_notion_service):

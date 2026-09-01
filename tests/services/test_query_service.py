@@ -36,7 +36,8 @@ def test_parse_amount_string():
 
 @pytest.fixture
 def query_service():
-    with patch("src.services.query.service.ollama.AsyncClient"), \
+    QueryService._instance = None
+    with patch("src.core.llm.providers.ollama_provider.ollama.AsyncClient"), \
          patch("src.services.query.service.EncryptionService") as mock_enc:
         service = QueryService()
         # Mock the encryption service to return what we pass for simplicity in testing
@@ -70,9 +71,9 @@ def test_process_query_empty_text(query_service):
 @patch("src.services.query.service.Session")
 def test_process_query_success(mock_session, query_service):
     async def _test():
-        mock_chat = AsyncMock()
-        mock_chat.return_value.message.content = '{"intent": "query_spending", "timeframe": "today", "category": "Food/Drink"}'
-        query_service.client.chat = mock_chat
+        query_service.provider.complete_structured = AsyncMock(
+            return_value='{"intent": "query_spending", "timeframe": "today", "category": "Food/Drink"}'
+        )
 
         mock_session_inst = MagicMock()
         mock_session.return_value.__enter__.return_value = mock_session_inst
@@ -101,10 +102,9 @@ def test_process_query_success(mock_session, query_service):
 
 def test_process_query_ollama_failure(query_service):
     async def _test():
-        mock_chat = AsyncMock(side_effect=Exception("Ollama down"))
-        query_service.client.chat = mock_chat
+        query_service.provider.complete_structured = AsyncMock(side_effect=Exception("Ollama down"))
 
-        with pytest.raises(QueryProcessingError, match="Failed to process query with Ollama"):
+        with pytest.raises(QueryProcessingError, match="Failed to process query"):
             await query_service.process_query("test", uuid4())
     import asyncio
     asyncio.run(_test())
@@ -356,9 +356,7 @@ def test_generate_summary_success(mock_session, query_service):
         intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
         qr = QueryResult(intent=intent)
         
-        mock_chat = AsyncMock()
-        mock_chat.return_value.message.content = "This is a mocked summary response."
-        query_service.client.chat = mock_chat
+        query_service.provider.complete_text = AsyncMock(return_value="This is a mocked summary response.")
         
         summary = await query_service.generate_summary(qr, user_name="Tony", use_llm=True)
         assert summary == "This is a mocked summary response."
@@ -372,8 +370,7 @@ def test_generate_summary_fallback(mock_session, query_service):
         intent = ParsedQueryIntent(intent="query", timeframe="this_week", category=None)
         qr = QueryResult(intent=intent)
         
-        mock_chat = AsyncMock(side_effect=Exception("Ollama error"))
-        query_service.client.chat = mock_chat
+        query_service.provider.complete_text = AsyncMock(side_effect=Exception("Ollama error"))
         
         summary = await query_service.generate_summary(qr, user_name="Tony", use_llm=True)
         assert "Tony" in summary
@@ -387,9 +384,7 @@ def test_get_spending_summary(mock_session, query_service):
         mock_session.return_value.__enter__.return_value = mock_session_inst
         mock_session_inst.exec.return_value.all.return_value = []
         
-        mock_chat = AsyncMock()
-        mock_chat.return_value.message.content = "Mocked spending summary."
-        query_service.client.chat = mock_chat
+        query_service.provider.complete_text = AsyncMock(return_value="Mocked spending summary.")
         
         res = await query_service.get_spending_summary(uuid4(), timeframe="this_week", user_name="Tony")
         assert res == "Mocked spending summary."
@@ -403,13 +398,10 @@ def test_process_query_with_summary(mock_session, query_service):
         mock_session.return_value.__enter__.return_value = mock_session_inst
         mock_session_inst.exec.return_value.all.return_value = []
         
-        mock_chat = AsyncMock()
-        # First call is for intent parsing
-        mock_chat.return_value.message.content = '{"intent": "query_spending", "timeframe": "today", "category": "Food/Drink"}'
-        query_service.client.chat = mock_chat
+        query_service.provider.complete_structured = AsyncMock(
+            return_value='{"intent": "query_spending", "timeframe": "today", "category": "Food/Drink"}'
+        )
         
-        # We need to mock generate_summary because the intent parser and summary generator use the same ollama client mock.
-        # Alternatively, we can patch generate_summary.
         with patch.object(query_service, 'generate_summary', return_value="Summary from process_query"):
             res = await query_service.process_query("What did I spend today?", uuid4(), user_name="Tony", generate_summary=True)
             assert res.summary == "Summary from process_query"
@@ -721,16 +713,16 @@ async def test_get_spending_summary_with_custom_default_currency(query_service):
     with patch.object(query_service, '_fetch_and_decrypt_transactions', return_value=[]):
         with patch.object(query_service, '_resolve_family_currency', return_value="ARS"):
             # Test fallback path when LLM fails or is disabled
-            with patch.object(query_service, '_call_ollama_summary', side_effect=Exception("Ollama unavailable")):
+            with patch.object(query_service.provider, 'complete_text', side_effect=Exception("Ollama unavailable")):
                 res = await query_service.get_spending_summary(family_id, timeframe="last_week", user_name="Tony")
                 assert "0.00 ARS" in res
             
             # Test that LLM receives context with 0.00 ARS
-            async def mock_summary(sys_prompt, user_prompt):
+            async def mock_summary(sys_prompt, user_prompt, **kwargs):
                 assert "0.00 ARS" in user_prompt
                 return "Resumen: Tu balance es 0.00 ARS"
                 
-            with patch.object(query_service, '_call_ollama_summary', side_effect=mock_summary):
+            with patch.object(query_service.provider, 'complete_text', side_effect=mock_summary):
                 res = await query_service.get_spending_summary(family_id, timeframe="last_week", user_name="Tony")
                 assert "0.00 ARS" in res
 

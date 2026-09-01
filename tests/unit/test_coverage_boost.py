@@ -304,16 +304,13 @@ async def test_cloud_ai_extraction_and_query():
 
         with patch.object(settings, "AI_API_KEY", "test_cloud_ai_key"):
             ext_service = ExtractionService()
-            c1 = await ext_service._call_cloud_ai_unified("system", "spent 50 on dinner")
-            assert "expense" in c1
-            c2 = await ext_service._call_cloud_ai("system", "spent 50 on dinner")
-            assert "expense" in c2
+            ext_res = await ext_service.extract("spent 50 on dinner")
+            assert ext_res.amount == 50.0
+            assert ext_res.type == "expense"
 
             query_service = QueryService()
-            q1 = await query_service._call_cloud_ai_parse_intent("system", "how much did we spend?")
-            assert "spending_summary" in q1
-            q2 = await query_service._call_cloud_ai_summary("system", "user prompt")
-            assert q2 is not None
+            intent_res = await query_service.parse_intent("how much did we spend?")
+            assert intent_res.intent == "spending_summary"
 
             whisper_service = WhisperService()
             txt, lang = await whisper_service.transcribe(audio_bytes=b"dummy_audio_bytes")

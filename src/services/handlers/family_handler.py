@@ -35,6 +35,7 @@ async def handle_family_info(user_uuid: UUID) -> str:
         handle = f" (@{m['username']})" if m.get("username") else ""
         role = " 👑 (Admin)" if m.get("is_admin") else ""
         members_str.append(f"• {name}{handle}{role}")
+    members_formatted = "\n".join(members_str) if members_str else "• No members found"
     plan_type = info.get("plan_type", "free")
     plan_desc = plan_type.replace("_", " ").title()
     if plan_type == "free":

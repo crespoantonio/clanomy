@@ -1,32 +1,46 @@
+"""
+Telegram Webhook Route Handler for Clanomy.
+Provides HTTP ingress for Telegram Bot webhook updates, lifecycle callbacks, and payment webhooks.
+"""
+
 from fastapi import APIRouter, Header, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from typing import Optional
 import time
 import uuid
 import logging
+from collections import OrderedDict
 from sqlmodel import Session, select
 
 from src.core.config import settings
 from src.core.security import verify_messaging_secret
+from src.db.session import get_session
+from src.db.models import User, Family
 from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
+from src.services.billing.telegram_billing import TelegramBillingService
+from src.services.handlers.command_handler import CommandHandler
 from src.services.subscription_service import (
-    extract_plan_and_family_id,
-    handle_successful_payment,
-    handle_subscription_expiry,
+    can_log_transaction,
+    check_and_reset_monthly_quota,
+    handle_recurring_renewal,
+    handle_subscription_cancellation,
     handle_payment_failure
 )
-from src.services.handlers.command_handler import CommandHandler
-from src.db.session import get_session
-from src.db.models import User, Family, Transaction
-from collections import OrderedDict
+from src.templates.telegram_messages import (
+    UNAUTHORIZED_ACCESS_MESSAGE,
+    UNSUPPORTED_FORMAT_MESSAGE,
+    format_message_too_long,
+    format_voice_too_long,
+    format_welcome_message
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Webhook"])
+
 
 class BoundedCooldownStore:
     def __init__(self, max_entries: int = 10000):
@@ -45,7 +59,9 @@ class BoundedCooldownStore:
             self.store.popitem(last=False)
         return False
 
+
 _cooldown_store = BoundedCooldownStore()
+
 
 def _is_query_or_command(text: Optional[str]) -> bool:
     if not text:
@@ -65,6 +81,7 @@ def _is_query_or_command(text: Optional[str]) -> bool:
         return True
     return False
 
+
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
@@ -72,463 +89,171 @@ async def telegram_webhook(
     x_telegram_bot_api_secret_token: Optional[str] = Header(None),
     session: Session = Depends(get_session)
 ):
-    # Verify the secret token from Telegram
     if not verify_messaging_secret(x_telegram_bot_api_secret_token):
         logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
 
     payload = await request.json()
     telegram_service = TelegramService()
+    billing_service = TelegramBillingService(telegram_service)
 
-    # 1. Handle pre_checkout_query
+    # 1. Handle pre_checkout_query for Telegram Stars
     if "pre_checkout_query" in payload:
-        pre_checkout = payload["pre_checkout_query"]
-        query_id = pre_checkout.get("id")
-        if not query_id:
-            logger.error("Missing pre_checkout_query id")
-            raise HTTPException(status_code=400, detail="Missing query_id")
-        invoice_payload = pre_checkout.get("invoice_payload", "")
-
-        from src.services.subscription_service import validate_invoice_payload
-        try:
-            validate_invoice_payload(invoice_payload)
-            await telegram_service.answer_pre_checkout_query(
-                pre_checkout_query_id=query_id,
-                ok=True
-            )
-        except ValueError as e:
-            logger.warning(f"Rejecting pre_checkout_query {query_id} for payload '{invoice_payload}': {e}")
-            await telegram_service.answer_pre_checkout_query(
-                pre_checkout_query_id=query_id,
-                ok=False,
-                error_message="Invalid or unsupported subscription plan."
-            )
+        res = await billing_service.handle_pre_checkout_query(payload["pre_checkout_query"])
+        if res.get("status") == "error":
+            raise HTTPException(status_code=400, detail=res.get("message", "Pre-checkout error"))
         return {"status": "ok"}
-    
-    # Fast exit for non-message updates (e.g. edited_message, inline_query)
+
     if "message" not in payload:
         logger.info(f"Ignoring non-message Telegram update (keys: {list(payload.keys())})")
         return {"status": "ok"}
-        
+
     message = payload["message"]
     chat = message.get("chat", {})
     from_user = message.get("from", {})
-    
-    # We only care about private chats for now
+
     if chat.get("type") != "private":
         return {"status": "ok"}
-        
+
     user_id = from_user.get("id")
     chat_id = chat.get("id")
-    
     if not user_id or not chat_id:
         return {"status": "ok"}
 
     text = message.get("text")
     voice = message.get("voice")
     message_id = message.get("message_id")
-    logger.info(
-        f"Processing Telegram update: update_id={payload.get('update_id')}, "
-        f"user_id={user_id}, chat_id={chat_id}, username={from_user.get('username')}, "
-        f"type={'voice' if voice else ('text' if text else 'other')}"
-    )
 
-    # Per-user cooldown check to prevent spam / DoS
     if _cooldown_store.is_throttled(chat_id, settings.USER_COOLDOWN_SECONDS):
         logger.warning(f"Throttling rapid messages from chat_id {chat_id}")
         return {"status": "ok"}
 
-    # Access control: If ALLOWED_TELEGRAM_USERS is configured (e.g. self-hosted privacy hardening),
-    # restrict access only to listed usernames or user IDs.
     if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
         allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
         user_username = (from_user.get("username") or "").lower()
-        user_id_str = str(user_id)
-        
-        if user_username not in allowed_list and user_id_str not in allowed_list:
+        if user_username not in allowed_list and str(user_id) not in allowed_list:
             logger.warning(f"Unauthorized access attempt from user_id={user_id}, username={user_username}")
-            denial_msg = (
-                "🔒 <b>Private Instance</b>\n\n"
-                "This Clanomy bot instance is private and restricted to authorized users."
-            )
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=denial_msg)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=UNAUTHORIZED_ACCESS_MESSAGE)
             return {"status": "ok"}
 
     try:
-        # Resolve or create the user and family
         service = MessagingService(session)
         user_data = {
             "id": user_id,
+            "telegram_id": user_id,
             "username": from_user.get("username"),
             "first_name": from_user.get("first_name"),
-            "last_name": from_user.get("last_name")
+            "last_name": from_user.get("last_name"),
         }
-        
         user, family = service.get_or_create_user_and_family(user_data)
 
-        # 2. Handle successful_payment
-        successful_payment = message.get("successful_payment")
-        if successful_payment:
-            invoice_payload = successful_payment.get("invoice_payload", "")
-            charge_id = successful_payment.get("telegram_payment_charge_id")
-            expiration_timestamp = successful_payment.get("subscription_expiration_date")
+        # Handle successful / refunded payments
+        if "successful_payment" in message:
+            return billing_service.handle_successful_payment_event(session, background_tasks, message, family, chat_id)
 
-            try:
-                plan_type, payload_family_id = extract_plan_and_family_id(invoice_payload)
-            except ValueError as e:
-                logger.error(f"Invalid invoice payload in successful_payment: {e}")
-                raise HTTPException(status_code=400, detail="Invalid invoice payload")
+        if "refunded_payment" in message:
+            return billing_service.handle_refunded_payment_event(session, background_tasks, message, family, chat_id)
 
-            target_family = family
-            if payload_family_id:
-                try:
-                    fam_uuid = uuid.UUID(payload_family_id)
-                    db_fam = session.get(Family, fam_uuid)
-                    if db_fam:
-                        target_family = db_fam
-                except ValueError:
-                    pass
-
-            if not target_family:
-                logger.error("Target family not found for successful payment.")
-                raise HTTPException(status_code=400, detail="Target family not found")
-
-            # Query existing members before plan transition to notify multi-member households if switching to solo_pro
-            existing_members = session.exec(select(User).where(User.family_id == target_family.id)).all()
-            was_multi_member = len(existing_members) > 1
-
-            result = handle_successful_payment(
-                session=session,
-                family=target_family,
-                invoice_payload=invoice_payload,
-                charge_id=charge_id,
-                expiration_timestamp=expiration_timestamp
-            )
-
-            if target_family.plan_type == "lifetime_pro" or result.get("status") == "ignored_lifetime":
-                confirmation_text = (
-                    "⭐️ <b>Clanomy Lifetime Pro Active</b>\n\n"
-                    "Your workspace is enjoying permanent Lifetime Pro status. Thank you for your payment!"
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=confirmation_text)
-            elif target_family.plan_type == "solo_pro":
-                confirmation_text = (
-                    "🎉 <b>Welcome to Clanomy Solo Pro!</b>\n\n"
-                    "Your subscription is now active! You have unlocked unlimited voice and text transaction logging "
-                    "and AI queries for your personal workspace. Thank you for supporting Clanomy!"
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=confirmation_text)
-
-                if was_multi_member:
-                    fam_service = FamilyService()
-                    for member in existing_members:
-                        if member.telegram_id and not fam_service.is_family_admin(target_family.id, member.id):
-                            member_notice = (
-                                "ℹ️ <b>Workspace Plan Update</b>\n\n"
-                                "Your workspace admin has updated the workspace to the <b>Solo Pro</b> plan. "
-                                "Solo Pro is designed for an individual user.\n\n"
-                                "To start your own personal workspace and keep logging transactions, "
-                                "simply type /leavefamily."
-                            )
-                            background_tasks.add_task(
-                                telegram_service.send_message,
-                                chat_id=member.telegram_id,
-                                text=member_notice
-                            )
-            elif target_family.plan_type == "family_pro":
-                confirmation_text = (
-                    "🎉 <b>Welcome to Clanomy Family Pro!</b>\n\n"
-                    "Your subscription is now active! You have unlocked unlimited voice and text transaction logging, "
-                    "shared family ledger for up to 5 members, and real-time Notion mirroring. "
-                    "Thank you for supporting Clanomy!"
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=confirmation_text)
-
-            return {"status": "ok"}
-
-        # 3. Handle refunded_payment
-        refunded_payment = message.get("refunded_payment")
-        if refunded_payment:
-            invoice_payload = refunded_payment.get("invoice_payload", "")
-            
-            try:
-                _, payload_family_id = extract_plan_and_family_id(invoice_payload)
-            except ValueError:
-                payload_family_id = None
-                
-            target_family = family
-            if payload_family_id:
-                try:
-                    fam_uuid = uuid.UUID(payload_family_id)
-                    db_fam = session.get(Family, fam_uuid)
-                    if db_fam:
-                        target_family = db_fam
-                except ValueError:
-                    pass
-
-            if target_family and target_family.plan_type != "lifetime_pro":
-                handle_subscription_expiry(session, target_family)
-                refund_msg = (
-                    "ℹ️ <b>Subscription Update:</b> Your payment was refunded. "
-                    "Your workspace has transitioned to the Free tier (30 logs/month). "
-                    "All your historical data, past entries, and Notion sync remain 100% safe."
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=refund_msg)
-            return {"status": "ok"}
-
-        # Check for unsupported media types (photos, documents, generic audio, videos, stickers, contacts, locations)
+        # Validate unsupported media & lengths
         unsupported_media_keys = ("document", "audio", "video", "video_note", "photo", "sticker", "contact", "location")
         if any(k in message for k in unsupported_media_keys):
-            unsupported_msg = (
-                "⚠️ <b>Unsupported Format</b>\n\n"
-                "Clanomy only accepts native voice notes (hold the mic 🎙️ icon) or text messages (e.g. <i>'Spent $24 on lunch'</i>)."
-            )
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=unsupported_msg)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=UNSUPPORTED_FORMAT_MESSAGE)
             return {"status": "ok"}
 
-        # Guardrail: Enforce max text length
         if text and len(text) > settings.MAX_TEXT_LENGTH:
-            length_msg = (
-                f"📝 <b>Message Too Long</b>\n\n"
-                f"Please keep transactions and queries under {settings.MAX_TEXT_LENGTH} characters "
-                f"(received {len(text)} characters)."
+            background_tasks.add_task(
+                telegram_service.send_message,
+                chat_id=chat_id,
+                text=format_message_too_long(settings.MAX_TEXT_LENGTH, len(text))
             )
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=length_msg)
             return {"status": "ok"}
 
-        # Guardrail: Enforce max voice duration
-        if voice:
-            voice_duration = voice.get("duration", 0)
-            if voice_duration > settings.MAX_VOICE_DURATION_SECONDS:
-                duration_msg = (
-                    f"⏱️ <b>Voice Note Too Long</b>\n\n"
-                    f"Please keep voice logs under {settings.MAX_VOICE_DURATION_SECONDS} seconds "
-                    f"(recording was {voice_duration} seconds)."
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=duration_msg)
-                return {"status": "ok"}
-        
-        # Process /start command
+        if voice and voice.get("duration", 0) > settings.MAX_VOICE_DURATION_SECONDS:
+            background_tasks.add_task(
+                telegram_service.send_message,
+                chat_id=chat_id,
+                text=format_voice_too_long(settings.MAX_VOICE_DURATION_SECONDS, voice.get("duration", 0))
+            )
+            return {"status": "ok"}
+
+        # Handle /start command
         if text and text.startswith("/start"):
             parts = text.split(maxsplit=1)
             if len(parts) > 1:
-                payload_arg = parts[1].strip()
-                if payload_arg.startswith("join_"):
-                    token = payload_arg[5:]
-                else:
-                    token = payload_arg
-                
+                token = parts[1].strip()
+                if token.startswith("join_"):
+                    token = token[5:]
                 family_service = FamilyService()
-                success, msg, _ = family_service.join_family_via_invite(token, user.id)
+                _, msg, _ = family_service.join_family_via_invite(token, user.id)
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=msg)
                 return {"status": "ok"}
 
-            # Dynamic Plan Badge based on exact subscription tier and quota
-            plan_badge = ""
-            command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for instant (<40ms) summaries!"
-            if family:
-                if family.plan_type == "trial":
-                    days_left = 60
-                    if family.trial_ends_at:
-                        now_utc = datetime.now(timezone.utc)
-                        trial_end = family.trial_ends_at if family.trial_ends_at.tzinfo else family.trial_ends_at.replace(tzinfo=timezone.utc)
-                        days_left = max(0, (trial_end - now_utc).days)
-                    plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs & family features!\n\n"
-                    command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for instant (<40ms) responses!"
-                elif family.plan_type == "free":
-                    used = getattr(family, "monthly_tx_count", 0)
-                    plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/20 AI logs used this month).\n\n"
-                    command_bullet = "• ⚡ <b>Unlimited Free Commands:</b> Type /month, /me, /today, /bills, or /balance anytime — they are 100% free and don't count against your 20 monthly AI logs!"
-                elif family.plan_type == "solo_pro":
-                    plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text & voice logs, personal workspace).\n\n"
-                elif family.plan_type == "family_pro":
-                    plan_badge = "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — Unlimited text & voice logs, shared family ledger & Notion sync).\n\n"
-                elif family.plan_type == "lifetime_pro":
-                    plan_badge = "👑 <b>Plan:</b> Lifetime Pro (Permanent active status).\n\n"
-
-            user_display_name = user.full_name or from_user.get("first_name") or "User"
-            welcome_text = (
-                f"👋 <b>Welcome to {settings.PROJECT_NAME}, {user_display_name}!</b>\n\n"
-                f"{plan_badge}"
-                "<b>How Clanomy Works:</b>\n"
-                "• 🎙️ <b>AI Logging:</b> Send voice notes or text anytime (<i>\"Coffee 4\"</i>, <i>\"Earned 3,500 salary\"</i>, <i>\"Internet 50 due the 15th\"</i>).\n"
-                f"{command_bullet}\n\n"
-                "💡 <b>Quick Setup:</b>\n"
-                "Set your household default currency:\n"
-                "👉 <code>/currency USD</code> <i>(or ARS, EUR, MXN, GBP, etc.)</i>\n\n"
-                "<b>Try sending me something right now:</b>\n"
-                "• 🎙️ <i>Send a voice note:</i> \"Coffee 4\"\n"
-                "• 💬 <i>Type an expense:</i> \"Spent 45 on groceries\"\n"
-                "• 💰 <i>Type an income:</i> \"Got paid 3,000 salary\"\n"
-                "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
-                "Type /help anytime for Notion sync, family invites, and data export."
-            )
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
+            welcome_msg = format_welcome_message(user, family, from_user)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_msg)
             return {"status": "ok"}
 
-        # Fast-Path Deterministic Slash Commands (Zero AI Cost, Instant, Never increment AI quota)
+        # Fast-Path Deterministic Slash Commands
         if text and text.strip().startswith("/"):
             clean_cmd = text.strip().split()[0].lower()
             cmd_args = " ".join(text.strip().split()[1:]) if len(text.strip().split()) > 1 else ""
             cmd_handler = CommandHandler()
 
-            if clean_cmd in ["/month", "/resumen"]:
-                res_text = await cmd_handler.handle_month(user, family, cmd_args)
+            dispatch_map = {
+                "/month": cmd_handler.handle_month,
+                "/resumen": cmd_handler.handle_month,
+                "/me": cmd_handler.handle_me,
+                "/yo": cmd_handler.handle_me,
+                "/today": cmd_handler.handle_today,
+                "/hoy": cmd_handler.handle_today,
+                "/bills": cmd_handler.handle_bills,
+                "/vencimientos": cmd_handler.handle_bills,
+                "/balance": cmd_handler.handle_balance,
+                "/saldo": cmd_handler.handle_balance,
+                "/undo": lambda u, f, *a: cmd_handler.handle_undo(u, f),
+                "/deshacer": lambda u, f, *a: cmd_handler.handle_undo(u, f),
+                "/help": lambda u, f, *a: cmd_handler.handle_help(u, f),
+                "/ayuda": lambda u, f, *a: cmd_handler.handle_help(u, f),
+            }
+
+            if clean_cmd in dispatch_map:
+                res_text = await dispatch_map[clean_cmd](user, family, cmd_args)
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
                 return {"status": "ok"}
 
-            elif clean_cmd in ["/me", "/yo"]:
-                res_text = await cmd_handler.handle_me(user, family, cmd_args)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
-                return {"status": "ok"}
-
-            elif clean_cmd in ["/today", "/hoy"]:
-                res_text = await cmd_handler.handle_today(user, family, cmd_args)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
-                return {"status": "ok"}
-
-            elif clean_cmd in ["/bills", "/vencimientos"]:
-                res_text = await cmd_handler.handle_bills(user, family, cmd_args)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
-                return {"status": "ok"}
-
-            elif clean_cmd in ["/balance", "/saldo"]:
-                res_text = await cmd_handler.handle_balance(user, family, cmd_args)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
-                return {"status": "ok"}
-
-            elif clean_cmd in ["/undo", "/deshacer"]:
-                res_text = await cmd_handler.handle_undo(user, family)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
-                return {"status": "ok"}
-
-            elif clean_cmd in ["/help", "/ayuda"]:
-                res_text = await cmd_handler.handle_help(user, family)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
-                return {"status": "ok"}
-
-        # Process /upgrade command
+        # Handle /upgrade command
         if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
-            if not settings.ENABLE_SUBSCRIPTIONS:
-                self_hosted_msg = (
-                    "🏠 <b>Self-Hosted Clanomy</b>\n\n"
-                    "You are running a self-hosted instance of Clanomy. All features (unlimited voice and text logging, "
-                    "multi-member family sharing, Notion syncing, natural language insights, and data exports) are "
-                    "<b>fully unlocked</b> with no quotas or subscriptions required!"
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=self_hosted_msg)
-                return {"status": "ok"}
+            return billing_service.handle_upgrade_command(background_tasks, text, user, family, chat_id)
 
-            parts = text.split()
-            arg = "_".join(parts[1:]).lower() if len(parts) > 1 else None
-            
-            family_id_str = str(family.id) if family else (str(user.family_id) if user and user.family_id else "")
-
-            if arg in ["solo", "solo_pro", "single"]:
-                background_tasks.add_task(
-                    telegram_service.send_subscription_invoice,
-                    chat_id=chat_id,
-                    plan_type="solo_pro",
-                    family_id=family_id_str
-                )
-                return {"status": "ok"}
-            elif arg in ["family", "family_pro", "fam"]:
-                background_tasks.add_task(
-                    telegram_service.send_subscription_invoice,
-                    chat_id=chat_id,
-                    plan_type="family_pro",
-                    family_id=family_id_str
-                )
-                return {"status": "ok"}
-            elif arg in ["solo_annual", "solo_yearly", "annual_solo", "yearly_solo"]:
-                background_tasks.add_task(
-                    telegram_service.send_subscription_invoice,
-                    chat_id=chat_id,
-                    plan_type="solo_pro_annual",
-                    family_id=family_id_str
-                )
-                return {"status": "ok"}
-            elif arg in ["family_annual", "family_yearly", "annual_family", "yearly_family", "annual", "yearly"]:
-                background_tasks.add_task(
-                    telegram_service.send_subscription_invoice,
-                    chat_id=chat_id,
-                    plan_type="family_pro_annual",
-                    family_id=family_id_str
-                )
-                return {"status": "ok"}
-            else:
-                intro_msg = (
-                    "⭐️ <b>Upgrade to Clanomy Pro</b>\n\n"
-                    "Choose the plan that fits your needs with seamless, auto-renewing Telegram Stars billing (Apple Pay / Google Pay / Card):\n\n"
-                    "1️⃣ <b>Solo Pro (200 Stars / month)</b>\n"
-                    "• Unlimited text & voice expense & income logging\n"
-                    "• Real-time Notion database mirroring\n"
-                    "• AI Natural language queries & cash flow insights\n"
-                    "• CSV & JSON financial exports\n"
-                    "• 1 User\n\n"
-                    "2️⃣ <b>Family Pro (450 Stars / month)</b>\n"
-                    "• Everything in Solo Pro\n"
-                    "• Up to 5 Family Members with shared ledger\n"
-                    "• Per-member spending attribution & budget visibility\n\n"
-                    "🎁 <i>Annual Savings: Type <code>/upgrade annual</code> to get 2 Months Free on annual subscriptions (2,000 & 4,500 Stars)!</i>\n\n"
-                    "<i>Invoices are attached below. Tap <b>Pay</b> on your chosen tier to activate immediately!</i>"
-                )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=intro_msg)
-                background_tasks.add_task(
-                    telegram_service.send_subscription_invoice,
-                    chat_id=chat_id,
-                    plan_type="solo_pro",
-                    family_id=family_id_str
-                )
-                background_tasks.add_task(
-                    telegram_service.send_subscription_invoice,
-                    chat_id=chat_id,
-                    plan_type="family_pro",
-                    family_id=family_id_str
-                )
-                return {"status": "ok"}
-
-        # Determine if there is text or audio to process
-        audio_file_id = None
-        if voice:
-            audio_file_id = voice.get("file_id")
-            
+        # Determine audio or text
+        audio_file_id = voice.get("file_id") if voice else None
         if not text and not audio_file_id:
             return {"status": "ok"}
 
-        orchestrator = AIOrchestrator()
-
-        # Early fast-fail quota check (< 5ms) before downloading audio or invoking AI services
-        from src.services.subscription_service import can_log_transaction, check_and_reset_monthly_quota
-
-        # Lazy monthly reset: commit reset if month changed
+        # Quota check
         if family and check_and_reset_monthly_quota(family):
             session.add(family)
             session.commit()
 
         is_voice = bool(audio_file_id)
-        is_transaction_text = bool(text and not _is_query_or_command(text))
+        is_tx_text = bool(text and not _is_query_or_command(text))
+        if family and (is_voice or is_tx_text) and not can_log_transaction(family):
+            is_admin = FamilyService().is_family_admin(family.id, user.id)
+            if is_admin:
+                quota_msg = (
+                    "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
+                    "Your family has reached the limit of 20 free transaction logs for this month. "
+                    "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
+                )
+            else:
+                quota_msg = (
+                    "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
+                    "Your family has reached the limit of 20 free transaction logs for this month. "
+                    "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
+                )
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
+            return {"status": "ok"}
 
-        if family and (is_voice or is_transaction_text):
-            if not can_log_transaction(family):
-                family_service = FamilyService()
-                is_admin = family_service.is_family_admin(family.id, user.id)
-                if is_admin:
-                    quota_msg = (
-                        "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
-                        "Your family has reached the limit of 20 free transaction logs for this month. "
-                        "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
-                    )
-                else:
-                    quota_msg = (
-                        "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
-                        "Your family has reached the limit of 20 free transaction logs for this month. "
-                        "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
-                    )
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
-                return {"status": "ok"}
-
-        # Process expense log in background
+        orchestrator = AIOrchestrator()
         background_tasks.add_task(
             orchestrator.orchestrate,
             user_id=str(user.id),
@@ -537,25 +262,23 @@ async def telegram_webhook(
             chat_id=chat_id,
             message_id=message_id
         )
-
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error handling Telegram webhook message for user_id={user_id}, chat_id={chat_id}: {e}", exc_info=True)
         return {"status": "error", "detail": "Internal processing error"}
+
 
 class LifecyclePayload(BaseModel):
     family_id: str
     charge_id: Optional[str] = None
     expiration_timestamp: Optional[int] = None
 
+
 @router.post("/webhook/renewal")
 async def handle_renewal(payload: LifecyclePayload, session: Session = Depends(get_session), x_telegram_bot_api_secret_token: Optional[str] = Header(None)):
     if not verify_messaging_secret(x_telegram_bot_api_secret_token):
         logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
-    from src.services.subscription_service import handle_recurring_renewal
-    from src.db.models import Family
-    import uuid
     try:
         family = session.get(Family, uuid.UUID(payload.family_id))
     except Exception:
@@ -571,14 +294,12 @@ async def handle_renewal(payload: LifecyclePayload, session: Session = Depends(g
     )
     return {"status": "ok"}
 
+
 @router.post("/webhook/cancellation")
 async def handle_cancellation(payload: LifecyclePayload, session: Session = Depends(get_session), x_telegram_bot_api_secret_token: Optional[str] = Header(None)):
     if not verify_messaging_secret(x_telegram_bot_api_secret_token):
         logger.warning("Invalid Telegram webhook secret token attempt.")
         raise HTTPException(status_code=403, detail="Invalid secret token")
-    from src.services.subscription_service import handle_subscription_cancellation
-    from src.db.models import Family
-    import uuid
     try:
         family = session.get(Family, uuid.UUID(payload.family_id))
     except Exception:
@@ -588,6 +309,7 @@ async def handle_cancellation(payload: LifecyclePayload, session: Session = Depe
         
     handle_subscription_cancellation(session=session, family=family)
     return {"status": "ok"}
+
 
 @router.post("/webhook/failure")
 async def handle_failure(

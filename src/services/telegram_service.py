@@ -56,6 +56,29 @@ class TelegramService:
             logger.warning(f"Failed to delete message {message_id} in chat {chat_id}: {e}")
             return False
 
+    async def get_file_url(self, file_id: str) -> str:
+        """Resolves a Telegram file_id to a direct download URL."""
+        return await self.get_file_download_url(file_id)
+
+    async def get_file_download_url(self, file_id: str) -> str:
+        """Resolves a Telegram file_id to a direct download URL."""
+        client = get_http_client()
+        response = await client.get(f"{self.api_url}/getFile?file_id={file_id}")
+        response.raise_for_status()
+        data = response.json()
+        if not data.get("ok") or "result" not in data or "file_path" not in data["result"]:
+            raise ValueError(f"Could not resolve Telegram file_id {file_id}")
+        file_path = data["result"]["file_path"]
+        return f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
+
+    async def download_file_bytes(self, file_id: str) -> bytes:
+        """Downloads a Telegram file directly into bytes."""
+        download_url = await self.get_file_download_url(file_id)
+        client = get_http_client()
+        response = await client.get(download_url)
+        response.raise_for_status()
+        return response.content
+
     async def send_document(self, chat_id: int, file_path: str, caption: str | None = None) -> None:
         """Sends a document back to the user via Telegram Bot API."""
         try:

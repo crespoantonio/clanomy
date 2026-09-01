@@ -2,8 +2,10 @@ import asyncio
 import logging
 import threading
 import time
+import html
+import re
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from uuid import UUID
 
@@ -15,11 +17,12 @@ from src.core.config import settings
 from src.core.encryption import EncryptionService
 from src.core.http_client import get_http_client
 from src.db.session import engine
-from src.db.models import Transaction, User
+from src.db.models import Transaction, User, ScheduledBill
 from src.services.query.models import (
     ParsedQueryIntent,
     QueryResult,
     DecryptedTransaction,
+    DecryptedScheduledBill,
     TimeAggregation,
     CategorySpending,
     CategoryBreakdown,
@@ -142,6 +145,54 @@ class QueryService:
                 results.append(decrypted)
             return results
 
+    def _fetch_and_decrypt_scheduled_bills(
+        self,
+        family_id: UUID,
+        start_time: Optional[datetime] = None,
+        end_time: Optional[datetime] = None,
+        status: str = "pending"
+    ) -> List[DecryptedScheduledBill]:
+        with Session(engine) as session:
+            users = session.exec(select(User).where(User.family_id == family_id)).all()
+            user_map = {u.id: (u.full_name or u.username or "User", f"@{u.username}" if u.username else None) for u in users}
+
+            query = select(ScheduledBill).where(
+                ScheduledBill.family_id == family_id,
+                ScheduledBill.status == status
+            )
+            if start_time:
+                query = query.where(ScheduledBill.due_date >= start_time)
+            if end_time:
+                query = query.where(ScheduledBill.due_date <= end_time)
+
+            query = query.order_by(ScheduledBill.due_date.asc())
+            bills = session.exec(query).all()
+
+            results = []
+            for b in bills:
+                amount_str = self.encryption_service.decrypt(b.amount)
+                concept_str = self.encryption_service.decrypt(b.concept)
+                if not amount_str or not concept_str:
+                    continue
+                amount, currency = _parse_amount_string(amount_str)
+                u_name, u_handle = user_map.get(b.user_id, ("User", None))
+                results.append(DecryptedScheduledBill(
+                    id=b.id,
+                    family_id=b.family_id,
+                    user_id=b.user_id,
+                    user_name=u_name,
+                    user_handle=u_handle,
+                    amount=amount,
+                    currency=currency,
+                    concept=concept_str,
+                    category=b.category,
+                    due_date=b.due_date,
+                    status=b.status,
+                    paid_transaction_id=b.paid_transaction_id,
+                    created_at=b.created_at
+                ))
+            return results
+
     @retry(
         stop=stop_after_attempt(settings.AI_MAX_RETRIES),
         wait=wait_exponential(multiplier=settings.AI_RETRY_BACKOFF_MIN, max=settings.AI_RETRY_BACKOFF_MAX),
@@ -209,6 +260,29 @@ class QueryService:
         if not text or not text.strip():
             raise ValueError("Query string cannot be empty")
         
+        # Fast-path deterministic matching for upcoming_bills
+        clean_lower = text.lower().strip()
+        upcoming_bills_patterns = [
+            r'\b(?:upcoming|pending)\s+bills\b',
+            r'\bbills?\s+(?:to\s+pay|due)\b',
+            r'\b(?:what|which)\s+bills?\b',
+            r'\bdo\s+i\s+have\s+(?:any\s+)?bills?\b',
+            r'\b(?:what|how\s+much)\s+do\s+i\s+owe\b',
+            r'¿?(?:qué|que)\s+vence\b',
+            r'¿?(?:tengo\s+)?(?:algo|alguna\s+factura|algún\s+gasto|cuentas?)\s+(?:para|por)\s+pagar\b',
+            r'\b(?:facturas|cuentas|gastos\s+fijos)\s+(?:pendientes|por\s+pagar|por\s+vencer)\b',
+            r'\bvencimientos?\b'
+        ]
+        if any(re.search(pat, clean_lower) for pat in upcoming_bills_patterns):
+            tf = "this_month"
+            if "esta semana" in clean_lower or "this week" in clean_lower:
+                tf = "this_week"
+            elif "próxima semana" in clean_lower or "proxima semana" in clean_lower or "next week" in clean_lower:
+                tf = "next_week"
+            elif "este mes" in clean_lower or "this month" in clean_lower:
+                tf = "this_month"
+            return ParsedQueryIntent(intent="upcoming_bills", timeframe=tf, scope="family")
+
         ref_time = reference_time or datetime.now(timezone.utc)
         current_date_str = ref_time.strftime("%Y-%m-%d %H:%M:%S UTC")
         
@@ -216,6 +290,10 @@ class QueryService:
 Current Date: {current_date_str}
 
 Intents:
+- "upcoming_bills": Asking about upcoming, scheduled, or pending bills, fixed expenses due, or payment obligations.
+  * English examples: "do I have any bills to pay this week?", "what bills are due this month?", "show upcoming bills", "what do I owe this week?", "pending bills", "fixed expenses due".
+  * Spanish examples: "¿qué vence esta semana?", "¿tengo algo para pagar esta semana?", "¿qué facturas vencen este mes?", "¿cuáles son mis gastos fijos pendientes?", "vencimientos de este mes", "facturas pendientes", "cuentas por pagar".
+  * Set `timeframe` to "this_week", "this_month", "next_week", or "all". Set `scope` to "family".
 - "income_summary": Asking about earnings or income.
   * English examples: "how much did we earn this month?", "what was my salary?", "how much income did I make?", "show freelance earnings", "what did we make this week?".
   * Spanish examples: "¿cuánto gané este mes?", "¿cuánto dinero ingresó?", "¿cuáles fueron mis ingresos?", "¿cuánto cobré?", "mostrar ingresos de freelance", "¿cuánto ganamos esta semana?".
@@ -770,3 +848,105 @@ CRITICAL SECURITY RULES:
         logger.info(f"[3s Audit] Category query took {elapsed:.2f} seconds (category: {resolved_category}, timeframe: {timeframe}, family_id: {family_id})")
         
         return breakdown
+
+    async def get_upcoming_bills_summary(
+        self,
+        family_id: UUID,
+        timeframe: str = "this_month",
+        reference_time: Optional[datetime] = None,
+        language: str = "auto",
+        raw_text: str = ""
+    ) -> str:
+        ref_time = reference_time or datetime.now(timezone.utc)
+        
+        start_time = None
+        end_time = None
+        
+        tf_lower = (timeframe or "").lower()
+        if tf_lower in ["this_week", "esta_semana"]:
+            days_ahead = 6 - ref_time.weekday()
+            end_of_week = (ref_time + timedelta(days=days_ahead)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_time = ref_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_time = end_of_week
+            timeframe_label_es = "esta semana"
+            timeframe_label_en = "this week"
+        elif tf_lower in ["next_week", "proxima_semana", "próxima_semana"]:
+            days_to_next_mon = 7 - ref_time.weekday()
+            start_time = (ref_time + timedelta(days=days_to_next_mon)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_time = (start_time + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            timeframe_label_es = "la próxima semana"
+            timeframe_label_en = "next week"
+        elif tf_lower in ["this_month", "este_mes"]:
+            if ref_time.month == 12:
+                next_month = ref_time.replace(year=ref_time.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                next_month = ref_time.replace(month=ref_time.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            start_time = ref_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_time = next_month - timedelta(microseconds=1)
+            month_name_es = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"][ref_time.month - 1]
+            month_name_en = ref_time.strftime("%B")
+            timeframe_label_es = f"este mes ({month_name_es})"
+            timeframe_label_en = f"this month ({month_name_en})"
+        else:
+            timeframe_label_es = "pendientes"
+            timeframe_label_en = "pending"
+
+        bills = await asyncio.to_thread(
+            self._fetch_and_decrypt_scheduled_bills,
+            family_id, start_time, end_time, "pending"
+        )
+
+        is_spanish = True
+        if language == "en":
+            is_spanish = False
+        elif language == "es":
+            is_spanish = True
+        else:
+            combined = (raw_text + " " + tf_lower).lower()
+            if any(w in combined for w in ["bill", "due", "pay", "week", "month", "owe", "show"]):
+                is_spanish = False
+            if any(w in combined for w in ["vence", "pagar", "semana", "mes", "gasto", "factura", "cuentas", "fijos"]):
+                is_spanish = True
+
+        def _fmt_val(amt: float, curr: str) -> str:
+            val_str = f"{amt:,.0f}" if amt.is_integer() else f"{amt:,.2f}"
+            sym = {"EUR": "€", "GBP": "£"}.get(curr.upper(), "$")
+            return f"{sym}{val_str} {curr.upper()}"
+
+        if not bills:
+            if is_spanish:
+                return f"✅ <b>No tienes facturas pendientes por vencer para {timeframe_label_es}.</b>"
+            else:
+                return f"✅ <b>You have no upcoming bills due for {timeframe_label_en}.</b>"
+
+        totals_by_curr = {}
+        for b in bills:
+            totals_by_curr[b.currency] = totals_by_curr.get(b.currency, 0.0) + b.amount
+
+        lines = []
+        for b in bills:
+            formatted_amt = _fmt_val(b.amount, b.currency)
+            due_str = b.due_date.strftime("%d/%m")
+            day_name_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b.due_date.weekday()]
+            day_name_en = b.due_date.strftime("%a")
+            if is_spanish:
+                lines.append(f"• 💳 <b>{html.escape(b.concept)}:</b> {formatted_amt} <i>(Vence: {day_name_es} {due_str})</i>")
+            else:
+                lines.append(f"• 💳 <b>{html.escape(b.concept)}:</b> {formatted_amt} <i>(Due: {day_name_en} {due_str})</i>")
+
+        items_str = "\n".join(lines)
+        total_parts = [_fmt_val(amt, curr) for curr, amt in totals_by_curr.items()]
+        total_str = " + ".join(total_parts)
+
+        if is_spanish:
+            return (
+                f"🗓️ <b>Facturas por pagar ({timeframe_label_es}):</b>\n\n"
+                f"{items_str}\n\n"
+                f"📌 <b>Total pendiente:</b> {total_str}"
+            )
+        else:
+            return (
+                f"🗓️ <b>Upcoming bills ({timeframe_label_en}):</b>\n\n"
+                f"{items_str}\n\n"
+                f"📌 <b>Total pending:</b> {total_str}"
+            )

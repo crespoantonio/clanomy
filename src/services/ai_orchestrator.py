@@ -13,7 +13,7 @@ from sqlalchemy import update as sa_update
 from src.core.config import settings
 from src.core.encryption import EncryptionService
 from src.db.session import engine
-from src.db.models import User, Transaction, Family
+from src.db.models import User, Transaction, Family, ScheduledBill
 from src.services.whisper_service import WhisperService
 from src.services.extraction import ExtractionService, UnifiedResult
 from src.services.telegram_service import TelegramService
@@ -116,10 +116,181 @@ class AIOrchestrator:
                 session.rollback()
                 raise e
 
+    def _persist_batch_items(
+        self,
+        user_uuid: UUID,
+        family_id: UUID,
+        items: list,
+        family_currency: str,
+        ref_time: datetime.datetime
+    ) -> list:
+        results = []
+        with Session(engine) as session:
+            try:
+                tx_count = 0
+                for item in items:
+                    curr = item.currency or family_currency or "USD"
+                    cpt = item.concept.strip() if item.concept else "Expense"
+                    cat = item.category or "Other"
+                    amt = item.amount
+                    tx_type = getattr(item, "type", "expense") or "expense"
+                    item_date = item.to_datetime(ref_time)
+
+                    enc_amt = self.encryption_service.encrypt(f"{amt} {curr}")
+                    enc_cpt = self.encryption_service.encrypt(cpt)
+
+                    if item.is_scheduled_bill:
+                        bill = ScheduledBill(
+                            family_id=family_id,
+                            user_id=user_uuid,
+                            amount=enc_amt,
+                            concept=enc_cpt,
+                            category=cat,
+                            due_date=item_date,
+                            status="pending"
+                        )
+                        session.add(bill)
+                        session.flush()
+                        results.append({
+                            "kind": "bill",
+                            "concept": cpt,
+                            "amount": amt,
+                            "currency": curr,
+                            "due_date": item_date,
+                            "category": cat,
+                            "id": bill.id
+                        })
+                    else:
+                        tx = Transaction(
+                            family_id=family_id,
+                            user_id=user_uuid,
+                            amount=enc_amt,
+                            concept=enc_cpt,
+                            category=cat,
+                            timestamp=item_date,
+                            type=tx_type
+                        )
+                        session.add(tx)
+                        session.flush()
+                        tx_count += 1
+                        results.append({
+                            "kind": "transaction",
+                            "concept": cpt,
+                            "amount": amt,
+                            "currency": curr,
+                            "timestamp": item_date,
+                            "category": cat,
+                            "id": tx.id,
+                            "tx_type": tx_type
+                        })
+
+                if tx_count > 0:
+                    session.execute(
+                        sa_update(Family)
+                        .where(Family.id == family_id)
+                        .values(monthly_tx_count=Family.monthly_tx_count + tx_count)
+                    )
+
+                session.commit()
+                return results
+            except Exception as e:
+                session.rollback()
+                raise e
+
+    def _check_and_settle_bill(
+        self,
+        family_id: UUID,
+        tx_concept: str,
+        tx_amount: float,
+        tx_currency: str,
+        tx_id: UUID
+    ) -> Optional[tuple[str, str]]:
+        """
+        Inspects pending ScheduledBills for the family.
+        If a pending bill matches the transaction concept,
+        marks the bill as 'paid' linked to tx_id, and returns (matched_concept, remaining_pending_str).
+        """
+        with Session(engine) as session:
+            pending_bills = session.exec(
+                select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status == "pending"
+                )
+            ).all()
+
+            if not pending_bills:
+                return None
+
+            def _norm(s: str) -> str:
+                # remove payment verbs
+                s = re.sub(r'\b(?:pagu[ée]|abon[ée]|paid|settled|cancel[ée])\b', '', s, flags=re.IGNORECASE)
+                # remove articles, prepositions
+                s = re.sub(r'\b(?:la|el|los|las|the|de|del|of|por|for)\b', '', s, flags=re.IGNORECASE)
+                # remove currency symbols and numbers
+                s = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', s)
+                # remove special chars
+                s = re.sub(r'[^\w\s]', ' ', s)
+                return " ".join(s.lower().split())
+
+            clean_tx = _norm(tx_concept)
+            tx_tokens = set(clean_tx.split())
+
+            matched_bill = None
+            matched_concept = ""
+            for b in pending_bills:
+                if not hasattr(b, "concept") or not b.concept:
+                    continue
+                dec_concept = self.encryption_service.decrypt(b.concept)
+                if not dec_concept:
+                    continue
+                clean_b = _norm(dec_concept)
+                b_tokens = set(clean_b.split())
+
+                if clean_tx and clean_b:
+                    if (clean_b in clean_tx) or (clean_tx in clean_b) or (tx_tokens and tx_tokens.issubset(b_tokens)) or (b_tokens and b_tokens.issubset(tx_tokens)):
+                        matched_bill = b
+                        matched_concept = dec_concept
+                        break
+
+            if matched_bill:
+                matched_bill.status = "paid"
+                matched_bill.paid_transaction_id = tx_id
+                session.add(matched_bill)
+                session.commit()
+
+                # Calculate remaining pending total for this month
+                remaining_bills = session.exec(
+                    select(ScheduledBill).where(
+                        ScheduledBill.family_id == family_id,
+                        ScheduledBill.status == "pending"
+                    )
+                ).all()
+
+                rem_totals = {}
+                for rb in remaining_bills:
+                    amt_str = self.encryption_service.decrypt(rb.amount)
+                    if amt_str:
+                        parts = amt_str.strip().split()
+                        try:
+                            a = float(parts[0])
+                            c = parts[1].upper() if len(parts) > 1 else "USD"
+                            rem_totals[c] = rem_totals.get(c, 0.0) + a
+                        except (ValueError, IndexError):
+                            pass
+
+                if rem_totals:
+                    rem_str = " + ".join([_format_currency(amt, curr) for curr, amt in rem_totals.items()])
+                else:
+                    rem_str = "$0"
+
+                return matched_concept, rem_str
+
+            return None
+
     def _get_monthly_cash_flow_snapshot(self, family_id: UUID, target_date: datetime.datetime, primary_currency: str = "USD") -> dict:
         """
         Queries and decrypts all transactions for the given family in the calendar month of target_date.
-        Calculates Total In, Total Out, Net Savings, and Savings Rate percentage.
+        Calculates Total In, Total Out, Net Savings, and Savings Rate percentage for the specified currency.
         """
         start_of_month = target_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if target_date.month == 12:
@@ -145,10 +316,9 @@ class AIOrchestrator:
                         continue
                     parts = decrypted_amount_str.strip().split()
                     amt = float(parts[0]) if parts else 0.0
-                    curr = parts[1].upper() if len(parts) > 1 else "USD"
-                    
-                    if curr == primary_currency.upper():
-                        tx_type = getattr(tx, "tx_type", "expense") or "expense"
+                    curr = parts[1].upper() if len(parts) > 1 else (primary_currency or "USD").upper()
+                    if curr == (primary_currency or "USD").upper():
+                        tx_type = getattr(tx, "tx_type", getattr(tx, "type", "expense")) or "expense"
                         if tx_type == "income":
                             total_in += amt
                         else:
@@ -177,14 +347,16 @@ class AIOrchestrator:
             return user.family_id
 
     def _get_user_info(self, user_uuid: UUID) -> dict:
-        """Synchronous database helper to fetch user info for mirroring."""
+        """Helper to fetch user information (display name, username, telegram_id, family_id)."""
         with Session(engine) as session:
             user = session.get(User, user_uuid)
             if not user:
                 raise ValueError("User not found")
             return {
-                "family_id": user.family_id, 
-                "display_name": user.full_name or user.username
+                "display_name": user.full_name or user.username or "User",
+                "username": user.username,
+                "telegram_id": user.telegram_id,
+                "family_id": user.family_id
             }
 
     def _get_latest_transaction(self, user_uuid: UUID) -> Optional[Transaction]:
@@ -198,17 +370,83 @@ class AIOrchestrator:
             )
             return session.exec(statement).first()
 
-    def _handle_transaction_undo(self, user_uuid: UUID) -> str:
-        """Removes the latest transaction logged by the user, recalculating monthly balance."""
+    def _find_target_transaction(
+        self,
+        session: Session,
+        user_uuid: UUID,
+        target_amount: Optional[float] = None,
+        target_currency: Optional[str] = None,
+        target_concept: Optional[str] = None
+    ) -> Optional[Transaction]:
+        """
+        Searches recent transactions for the user matching optional criteria.
+        If no criteria specified, returns the most recent transaction.
+        """
+        recent_txs = session.exec(
+            select(Transaction)
+            .where(Transaction.user_id == user_uuid)
+            .order_by(Transaction.timestamp.desc())
+            .limit(10)
+            .with_for_update()
+        ).all()
+
+        if not recent_txs:
+            return None
+
+        if target_amount is None and not target_currency and not target_concept:
+            return recent_txs[0]
+
+        target_curr_norm = target_currency.upper() if target_currency else None
+        target_concept_norm = target_concept.lower().strip() if target_concept else None
+
+        for tx in recent_txs:
+            dec_amt_str = self.encryption_service.decrypt(tx.amount)
+            dec_concept = self.encryption_service.decrypt(tx.concept) or ""
+            if not dec_amt_str:
+                continue
+            parts = dec_amt_str.strip().split()
+            a = float(parts[0]) if parts else 0.0
+            c = parts[1].upper() if len(parts) > 1 else "USD"
+
+            matches = True
+            if target_amount is not None and abs(a - target_amount) > 0.01:
+                matches = False
+            if target_curr_norm and c != target_curr_norm:
+                matches = False
+            if target_concept_norm and target_concept_norm not in dec_concept.lower():
+                matches = False
+
+            if matches:
+                return tx
+
+        # If strict match didn't find anything, try matching on amount alone if specified
+        if target_amount is not None:
+            for tx in recent_txs:
+                dec_amt_str = self.encryption_service.decrypt(tx.amount)
+                if not dec_amt_str:
+                    continue
+                parts = dec_amt_str.strip().split()
+                a = float(parts[0]) if parts else 0.0
+                if abs(a - target_amount) <= 0.01:
+                    return tx
+
+        # Fallback to the latest transaction
+        return recent_txs[0]
+
+    def _handle_transaction_undo(self, user_uuid: UUID, parsed_query: Optional[ParsedQueryIntent] = None) -> str:
+        """Removes a recent transaction logged by the user, recalculating monthly balance."""
         with Session(engine) as session:
-            statement = (
-                select(Transaction)
-                .where(Transaction.user_id == user_uuid)
-                .order_by(Transaction.timestamp.desc())
-                .limit(1)
-                .with_for_update()
+            t_amt = parsed_query.target_amount if parsed_query else None
+            t_curr = parsed_query.target_currency if parsed_query else None
+            t_cpt = parsed_query.target_concept if parsed_query else None
+
+            tx = self._find_target_transaction(
+                session=session,
+                user_uuid=user_uuid,
+                target_amount=t_amt,
+                target_currency=t_curr,
+                target_concept=t_cpt
             )
-            tx = session.exec(statement).first()
             if not tx:
                 return "ℹ️ You don't have any recent transactions to undo."
 
@@ -244,9 +482,11 @@ class AIOrchestrator:
 
         safe_concept = html.escape(dec_concept)
         safe_category = html.escape(category)
+        has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
+        title = "🗑️ <b>Removed transaction:</b>\n" if has_target else "🗑️ <b>Removed latest transaction:</b>\n"
 
         return (
-            f"🗑️ <b>Removed latest transaction:</b>\n"
+            f"{title}"
             f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n\n"
             f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
             f"• Total In: {formatted_in}\n"
@@ -255,16 +495,15 @@ class AIOrchestrator:
         )
 
     def _handle_transaction_correction(self, user_uuid: UUID, parsed_query: ParsedQueryIntent) -> str:
-        """Modifies fields on the user's latest transaction and updates Notion / cash flow snapshot."""
+        """Modifies fields on the user's targeted or latest transaction and updates Notion / cash flow snapshot."""
         with Session(engine) as session:
-            statement = (
-                select(Transaction)
-                .where(Transaction.user_id == user_uuid)
-                .order_by(Transaction.timestamp.desc())
-                .limit(1)
-                .with_for_update()
+            tx = self._find_target_transaction(
+                session=session,
+                user_uuid=user_uuid,
+                target_amount=parsed_query.target_amount,
+                target_currency=parsed_query.target_currency,
+                target_concept=parsed_query.target_concept
             )
-            tx = session.exec(statement).first()
             if not tx:
                 return "ℹ️ You don't have any recent transactions to update."
 
@@ -332,9 +571,11 @@ class AIOrchestrator:
 
         safe_concept = html.escape(new_concept)
         safe_cat = html.escape(new_cat)
+        has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
+        title = "✏️ <b>Updated transaction:</b>\n" if has_target else "✏️ <b>Updated latest transaction:</b>\n"
 
         return (
-            f"✏️ <b>Updated latest transaction:</b>\n"
+            f"{title}"
             f"• {icon} {sign}{formatted_amt} ({safe_cat} - {safe_concept}){type_note}\n\n"
             f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
             f"• Total In: {formatted_in}\n"
@@ -427,7 +668,7 @@ class AIOrchestrator:
             return None
 
         elif parsed_query.intent == "undo_last":
-            return await asyncio.to_thread(self._handle_transaction_undo, user_uuid)
+            return await asyncio.to_thread(self._handle_transaction_undo, user_uuid, parsed_query)
 
         elif parsed_query.intent == "edit_last":
             return await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
@@ -497,6 +738,15 @@ class AIOrchestrator:
                     member_names=member_names,
                     primary_currency=family_currency
                 )
+
+        elif parsed_query.intent == "upcoming_bills":
+            family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+            query_service = QueryService()
+            return await query_service.get_upcoming_bills_summary(
+                family_id=family_id,
+                timeframe=parsed_query.timeframe or "this_month",
+                raw_text=raw_text
+            )
 
         elif parsed_query.intent == "create_family":
             family_service = FamilyService()
@@ -786,6 +1036,8 @@ class AIOrchestrator:
                         deterministic_intent = ParsedQueryIntent(intent="manage_currency")
                     elif raw_lower.startswith("/notion"):
                         deterministic_intent = ParsedQueryIntent(intent="notion_manage")
+                    elif raw_lower in ["/bills", "/vencimientos", "bills", "vencimientos", "facturas pendientes", "upcoming bills"]:
+                        deterministic_intent = ParsedQueryIntent(intent="upcoming_bills", timeframe="this_month")
                     elif raw_lower.startswith("/familytotal"):
                         parts = raw_lower.split()
                         timeframe = "this_month"
@@ -856,7 +1108,13 @@ class AIOrchestrator:
                                     pass
 
                         if unified.action == "undo_last":
-                            response_text = await asyncio.to_thread(self._handle_transaction_undo, user_uuid)
+                            parsed_query = ParsedQueryIntent(
+                                intent="undo_last",
+                                target_amount=unified.target_amount,
+                                target_currency=unified.target_currency,
+                                target_concept=unified.target_concept
+                            )
+                            response_text = await asyncio.to_thread(self._handle_transaction_undo, user_uuid, parsed_query)
                         elif unified.action == "edit_last":
                             parsed_query = ParsedQueryIntent(
                                 intent="edit_last",
@@ -864,7 +1122,10 @@ class AIOrchestrator:
                                 new_amount=unified.new_amount,
                                 new_currency=unified.new_currency,
                                 new_category=unified.new_category,
-                                new_concept=unified.new_concept
+                                new_concept=unified.new_concept,
+                                target_amount=unified.target_amount,
+                                target_currency=unified.target_currency,
+                                target_concept=unified.target_concept
                             )
                             response_text = await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
                         elif unified.action == "query":
@@ -876,7 +1137,88 @@ class AIOrchestrator:
                             response_text = res
                         else:
                             # action == "log_transaction"
-                            if unified.amount is None:
+                            all_items = unified.get_all_items() if hasattr(unified, "get_all_items") else []
+                            if len(all_items) > 1 or (len(all_items) == 1 and all_items[0].is_scheduled_bill):
+                                try:
+                                    user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
+                                    family_id = user_info["family_id"]
+                                except Exception as u_err:
+                                    logger.warning(f"Failed to get user info: {u_err}")
+                                    family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                    user_info = {"display_name": "User"}
+
+                                try:
+                                    batch_results = await asyncio.to_thread(
+                                        self._persist_batch_items,
+                                        user_uuid=user_uuid,
+                                        family_id=family_id,
+                                        items=all_items,
+                                        family_currency=family_currency,
+                                        ref_time=datetime.datetime.now(datetime.timezone.utc)
+                                    )
+
+                                    is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas"])
+                                    bills = [r for r in batch_results if r["kind"] == "bill"]
+                                    txs = [r for r in batch_results if r["kind"] == "transaction"]
+                                    parts = []
+                                    if bills:
+                                        header = f"📋 <b>{len(bills)} Factura(s) Programada(s):</b>\n\n" if is_spanish else f"📋 <b>{len(bills)} Scheduled Bill(s):</b>\n\n"
+                                        parts.append(header)
+                                        for b in bills:
+                                            fmt_amt = _format_currency(b["amount"], b["currency"])
+                                            due_str = b["due_date"].strftime("%d/%m")
+                                            if is_spanish:
+                                                day_name = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b["due_date"].weekday()]
+                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n")
+                                            else:
+                                                day_name = b["due_date"].strftime("%a")
+                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n")
+
+                                        totals = {}
+                                        for b in bills:
+                                            totals[b["currency"]] = totals.get(b["currency"], 0.0) + b["amount"]
+                                        tot_str = " + ".join([_format_currency(amt, curr) for curr, amt in totals.items()])
+                                        if is_spanish:
+                                            parts.append(f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}")
+                                        else:
+                                            parts.append(f"\n📌 <b>Total pending to pay:</b> {tot_str}")
+
+                                    if txs:
+                                        if parts:
+                                            parts.append("\n\n")
+                                        header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
+                                        parts.append(header)
+                                        for t in txs:
+                                            fmt_amt = _format_currency(t["amount"], t["currency"])
+                                            parts.append(f"• 💸 <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
+
+                                    if bills:
+                                        tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'
+                                        parts.append(tip)
+
+                                    response_text = "".join(parts)
+
+                                    for t in txs:
+                                        try:
+                                            create_logged_task(self._safe_mirror_to_notion(
+                                                family_id=family_id,
+                                                amount=t["amount"],
+                                                currency=t["currency"],
+                                                concept=t["concept"],
+                                                category=t["category"],
+                                                timestamp=t["timestamp"],
+                                                user_name=user_info.get("display_name", "User"),
+                                                transaction_id=t["id"],
+                                                tx_type=t["tx_type"]
+                                            ), name="mirror_to_notion")
+                                        except Exception:
+                                            pass
+                                except Exception as e:
+                                    logger.error(f"Batch persistence failed for user {user_id}: {e}", exc_info=True)
+                                    status = "error"
+                                    response_text = "Failed to save transactions. Please try again later."
+
+                            elif unified.amount is None:
                                 query_service = QueryService()
                                 parsed_query = await query_service.parse_intent(text)
                                 if parsed_query.intent != "log_expense":
@@ -953,6 +1295,23 @@ class AIOrchestrator:
                                         safe_concept = html.escape(tx_concept)
                                         safe_cat = html.escape(tx_category)
                                         response_text = f"Saved {tx_amount} {tx_currency} for '{safe_concept}' under category '{safe_cat}'{date_str}."
+
+                                        # Check and settle matching pending bill
+                                        settlement = await asyncio.to_thread(
+                                            self._check_and_settle_bill,
+                                            family_id=family_id,
+                                            tx_concept=tx_concept,
+                                            tx_amount=tx_amount,
+                                            tx_currency=tx_currency,
+                                            tx_id=tx_id
+                                        )
+                                        if settlement:
+                                            matched_concept, remaining_pending = settlement
+                                            is_spanish = any(w in raw_lower for w in ["pagué", "pague", "aboné", "abone", "tarjeta", "prestamo", "préstamo", "factura", "gastos", "pesos"])
+                                            if is_spanish:
+                                                response_text += f"\n\n✅ <b>¡Marcado como pagado!</b>\n💳 <b>{html.escape(matched_concept)}</b> registrado en tus gastos.\n⏳ Restante pendiente este mes: <b>{remaining_pending}</b>"
+                                            else:
+                                                response_text += f"\n\n✅ <b>Marked as paid!</b>\n💳 <b>{html.escape(matched_concept)}</b> recorded in your expenses.\n⏳ Remaining pending this month: <b>{remaining_pending}</b>"
 
                                     # Trigger background notion mirroring safely without affecting transaction response
                                     try:

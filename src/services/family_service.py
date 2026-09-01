@@ -26,16 +26,25 @@ class FamilyService:
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super(FamilyService, cls).__new__(cls)
+                cls._instance._custom_engine = None
             if engine is not None:
-                cls._instance.engine = engine
-            elif not hasattr(cls._instance, 'engine') or cls._instance.engine is None:
-                from src.db.session import engine as db_engine
-                cls._instance.engine = db_engine
+                cls._instance._custom_engine = engine
             return cls._instance
 
     def __init__(self, engine: Engine = None):
-        if engine:
-            self.engine = engine
+        if engine is not None:
+            self._custom_engine = engine
+
+    @property
+    def engine(self) -> Engine:
+        if getattr(self, "_custom_engine", None) is not None:
+            return self._custom_engine
+        from src.db.session import engine as db_engine
+        return db_engine
+
+    @engine.setter
+    def engine(self, val: Engine):
+        self._custom_engine = val
 
     def _log_3s_audit(self, operation: str, start_time: float):
         elapsed = time.time() - start_time

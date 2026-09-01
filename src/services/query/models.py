@@ -78,7 +78,8 @@ class ParsedQueryIntent(BaseModel):
         "leave_family",
         "edit_last",
         "undo_last",
-        "manage_currency"
+        "manage_currency",
+        "upcoming_bills"
     ]
     timeframe: Optional[str] = "this_month"
     start_date: Optional[str] = None
@@ -96,6 +97,9 @@ class ParsedQueryIntent(BaseModel):
     new_currency: Optional[str] = None
     new_category: Optional[str] = None
     new_concept: Optional[str] = None
+    target_amount: Optional[float] = None
+    target_currency: Optional[str] = None
+    target_concept: Optional[str] = None
 
     @field_validator('category', 'new_category')
     @classmethod
@@ -114,6 +118,21 @@ class DecryptedTransaction(BaseModel):
     category: str
     type: str = "expense"
     timestamp: datetime
+
+class DecryptedScheduledBill(BaseModel):
+    id: UUID
+    family_id: UUID
+    user_id: UUID
+    user_name: Optional[str] = None
+    user_handle: Optional[str] = None
+    amount: float
+    currency: str
+    concept: str
+    category: str
+    due_date: datetime
+    status: str = "pending"
+    paid_transaction_id: Optional[UUID] = None
+    created_at: datetime
 
 class PeriodComparison(BaseModel):
     previous_timeframe: str

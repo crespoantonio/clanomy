@@ -1,8 +1,9 @@
 import re
 import logging
+from datetime import datetime
 from typing import Optional
 from src.core.config import settings
-from src.services.extraction.models import ExtractionResult, UnifiedResult, ExtractionError
+from src.services.extraction.models import ExtractionResult, UnifiedResult, ExtractionError, ParsedItem
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,12 @@ def fallback_regex_extract(text: str, default_currency: Optional[str] = None) ->
         currency = "CLP"
     elif re.search(r'\bpesos?\s+colombian[oa]s?\b|\bcop\b', text_lower):
         currency = "COP"
-    elif re.search(r'\bd[oó]lar(?:es)?\b|\busd\b', text_lower) or ('$' in text_lower and effective_default_currency == "USD"):
+    elif re.search(r'\bpesos?\s+mexican[oa]s?\b|\bmxn\b', text_lower):
+        currency = "MXN"
+    elif re.search(r'\bd[oó]lar(?:es)?\b|\busd\b|\bus\$\b|\bu\$s\b|\bbucks\b', text_lower):
         currency = "USD"
+    elif '$' in text_lower:
+        currency = effective_default_currency
         
     # Classify intent (income vs expense)
     income_keywords = [
@@ -91,16 +96,45 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
         return UnifiedResult(action="query")
 
     # 2. Undo / Delete heuristics
-    if any(re.search(rf'\b{re.escape(w)}\b', text_lower) for w in ["undo", "deshacer"]) or \
-       re.search(r'\b(?:delete|remove|elimina|eliminar|borra|borrar)\s+(?:the\s+)?(?:last|latest|esos\s+ultimos|el\s+último|el\s+ultimo|último|ultimo)\b', text_lower) or \
-       re.search(r'\b(?:delete|elimina|borra)\s+latest\b', text_lower):
-        return UnifiedResult(action="undo_last")
+    undo_match = (
+        any(re.search(rf'\b{re.escape(w)}\b', text_lower) for w in ["undo", "deshacer"]) or
+        re.search(r'\b(?:delete|remove|elimina|eliminar|borra|borrar)\s+(?:the\s+)?(?:last|latest|esos\s+ultimos|el\s+último|el\s+ultimo|último|ultimo)\b', text_lower) or
+        re.search(r'\b(?:delete|remove|elimina|eliminar|borra|borrar)\s+(?:el\s+ingreso|el\s+gasto|la\s+transacci[oó]n|el\s+sueldo|the\s+income|the\s+expense)\b', text_lower)
+    )
+    if undo_match:
+        target_amt_match = re.search(r'\b(\d+(?:[.,]\d+)?)\b', text.replace(',', ''))
+        target_amt = float(target_amt_match.group(1)) if target_amt_match else None
+        target_curr = None
+        if re.search(r'\b(?:d[oó]lar(?:es)?|usd)\b', text_lower):
+            target_curr = "USD"
+        elif re.search(r'\b(?:pesos?|ars)\b', text_lower):
+            target_curr = "ARS"
+        return UnifiedResult(action="undo_last", target_amount=target_amt, target_currency=target_curr)
 
-    # 3. Edit / Update heuristics
+    # 3. Currency correction heuristics: e.g. "el salario de 1606932 es ARS", "era en pesos", "era en ARS", "es en dolares"
+    curr_corr_match = re.search(r'\b(?:el|la)?\s*(?:salario|sueldo|gasto|ingreso|monto|pago)?\s*(?:de\s+)?(\d+(?:[.,]\d+)?)?\s*(?:es|era|fue|en\s+realidad\s+era)\s*(?:en\s+)?(ars|usd|eur|pesos?|d[oó]lares?)\b', text_lower)
+    if curr_corr_match:
+        raw_amt = curr_corr_match.group(1)
+        raw_curr = curr_corr_match.group(2).lower()
+        target_amt = float(raw_amt.replace(',', '')) if raw_amt else None
+        new_curr = "USD" if "dolar" in raw_curr or raw_curr == "usd" else ("EUR" if raw_curr == "eur" else (effective_default_currency if "peso" in raw_curr else raw_curr.upper()))
+        return UnifiedResult(
+            action="edit_last",
+            target_amount=target_amt,
+            new_currency=new_curr
+        )
+
+    # 4. General Edit / Update heuristics
     is_edit = any(re.search(rf'\b{re.escape(w)}\b', text_lower) for w in ["actualizar", "actualiza", "actualizarlo", "actualízalo", "cambiar", "cambia", "cambialo", "cámbiarlo", "corregir", "corrige", "corregilo", "modificar", "modifica", "update", "correct", "fix"]) or \
               re.search(r'\b(?:el\s+último|el\s+ultimo|the\s+last|the\s+latest)\s+(?:importe|monto|cost|amount|costo)?\s*(?:necesito\s+actualizarlo|actualizar|cambiar|fue|es|was|to|a)\b', text_lower)
 
     if is_edit:
+        target_curr = None
+        if re.search(r'\b(?:en\s+)?(?:d[oó]lar(?:es)?|usd)\b', text_lower):
+            target_curr = "USD"
+        elif re.search(r'\b(?:en\s+)?(?:pesos?|ars)\b', text_lower):
+            target_curr = "ARS"
+
         amount_match = re.search(r'\b(\d+(?:[.,]\d{1,2})?)\b', text.replace(',', ''))
         if not amount_match:
             amount_match = re.search(r'[$€£](\d+(?:[.,]\d{1,2})?)', text.replace(',', ''))
@@ -112,14 +146,76 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
         elif "expense" in text_lower or "gasto" in text_lower:
             new_type = "expense"
 
+        new_curr = None
+        if re.search(r'\bd[oó]lar(?:es)?\b|\busd\b', text_lower):
+            new_curr = "USD"
+        elif re.search(r'\bpesos?\b|\bars\b', text_lower):
+            new_curr = "ARS"
+
         return UnifiedResult(
             action="edit_last",
             new_amount=new_amt,
             new_type=new_type,
-            new_currency=effective_default_currency if new_amt is not None else None
+            new_currency=new_curr,
+            target_currency=target_curr
         )
 
-    # 4. Fallback to transaction extraction
+    # 4. Fallback to transaction extraction (supporting single or multi-line items)
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    header_regex = r'^(?:los\s+gastos\s+fijos|gastos\s+fijos|fixed\s+expenses|fixed\s+bills|facturas\s+por\s+pagar|bills\s+due)'
+    if len(lines) > 1 and re.search(header_regex, lines[0].lower()):
+        candidate_lines = lines[1:]
+    else:
+        candidate_lines = lines
+
+    extracted_items = []
+    for line in candidate_lines:
+        try:
+            # Check for due date in line: "con vencimiento el 18/09", "con vencimento el 18/09", "vence el 04/09", "due on 09/18"
+            due_match = re.search(r'(?:(?:con\s+)?(?:vencim(?:iento|ento)|vence|vto\.?|venc\.?)\s+(?:el\s+)?|due\s+(?:on\s+|date\s*:?\s*)?)(\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)', line, re.IGNORECASE)
+            is_bill = False
+            due_date_str = None
+            if due_match:
+                is_bill = True
+                raw_date = due_match.group(1)
+                parts = re.split(r'[/-]', raw_date)
+                curr_year = datetime.now().year
+                if len(parts) == 2:
+                    d, m = int(parts[0]), int(parts[1])
+                    if d > 12 >= m:
+                        due_date_str = f"{curr_year:04d}-{m:02d}-{d:02d}"
+                    elif m > 12 >= d:
+                        due_date_str = f"{curr_year:04d}-{d:02d}-{m:02d}"
+                    else:
+                        due_date_str = f"{curr_year:04d}-{m:02d}-{d:02d}"
+                elif len(parts) == 3:
+                    d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                    y = y if y > 100 else 2000 + y
+                    due_date_str = f"{y:04d}-{m:02d}-{d:02d}"
+
+            item_ex = fallback_regex_extract(line, default_currency=effective_default_currency)
+            clean_concept = re.sub(r'(?:\.\s*)?(?:con\s+)?(?:vencim(?:iento|ento)|vence|vto\.?|venc\.?|due\s+(?:on|date)).*$', '', item_ex.concept, flags=re.IGNORECASE).strip()
+            clean_concept = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', clean_concept).strip()
+            clean_concept = clean_concept.strip(" .:-")
+            extracted_items.append(ParsedItem(
+                type=item_ex.type,
+                amount=item_ex.amount,
+                category=item_ex.category,
+                concept=clean_concept or item_ex.concept,
+                currency=item_ex.currency,
+                transaction_date=item_ex.transaction_date,
+                due_date=due_date_str,
+                is_scheduled_bill=is_bill
+            ))
+        except Exception:
+            continue
+
+    if extracted_items:
+        return UnifiedResult(
+            action="log_transaction",
+            items=extracted_items
+        )
+
     try:
         ex = fallback_regex_extract(text, default_currency=effective_default_currency)
         return UnifiedResult(

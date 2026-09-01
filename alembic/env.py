@@ -12,7 +12,7 @@ from alembic import context
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.core.config import settings
-from src.db.models import Family, User, Transaction, FamilyInvite  # Register all models
+from src.db.models import Family, User, Transaction, FamilyInvite, ScheduledBill  # Register all models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

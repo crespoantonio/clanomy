@@ -16,6 +16,12 @@ def test_environment_isolation():
     original_ai_key = settings.AI_API_KEY
     settings.ENABLE_SUBSCRIPTIONS = True
     settings.AI_API_KEY = None
+    from src.services.query.service import QueryService
+    from src.services.family_service import FamilyService
+    QueryService._instance = None
+    FamilyService._instance = None
     yield
     settings.ENABLE_SUBSCRIPTIONS = original_subs
     settings.AI_API_KEY = original_ai_key
+    QueryService._instance = None
+    FamilyService._instance = None

@@ -37,6 +37,7 @@ class Family(SQLModel, table=True):
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     transactions: List["Transaction"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     invites: List["FamilyInvite"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    scheduled_bills: List["ScheduledBill"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class User(SQLModel, table=True):
     """
@@ -109,3 +110,30 @@ class FamilyInvite(SQLModel, table=True):
 
     family: "Family" = Relationship(back_populates="invites")
     creator: "User" = Relationship(back_populates="created_invites")
+
+class ScheduledBill(SQLModel, table=True):
+    """
+    Represents a scheduled or fixed upcoming bill/commitment.
+    Stored with encrypted amount and concept (matching Zero-Knowledge privacy principles).
+    """
+    __tablename__ = "scheduled_bill"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
+    user_id: UUID = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+
+    # These fields store base64-encoded ciphertext from EncryptionService
+    amount: str
+    concept: str
+
+    category: str = Field(index=True)
+    due_date: datetime = Field(index=True)
+    status: str = Field(default="pending", index=True, max_length=15)  # pending, paid, cancelled
+
+    paid_transaction_id: Optional[UUID] = Field(default=None, foreign_key="transaction.id", nullable=True, ondelete="SET NULL")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    family: Family = Relationship(back_populates="scheduled_bills")
+    user: User = Relationship()
+    transaction: Optional[Transaction] = Relationship()

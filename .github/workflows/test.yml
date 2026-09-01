@@ -32,6 +32,7 @@ jobs:
         env:
           PYTHONPATH: .
           ENCRYPTION_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+          TELEGRAM_BOT_TOKEN: "ci_test_telegram_bot_token"
           MESSAGING_WEBHOOK_SECRET: "ci_test_secret"
           DATABASE_URL: "sqlite:///:memory:"
         run: |

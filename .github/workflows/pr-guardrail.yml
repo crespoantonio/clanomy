@@ -34,6 +34,7 @@ jobs:
           PROTECTED_PATTERNS=(
             "^README\.md$"
             "^src/services/subscription_service\.py$"
+            "^src/services/billing/"
             "^src/core/subscription_config\.py$"
             "^\.github/workflows/"
           )

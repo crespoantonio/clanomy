@@ -101,7 +101,8 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 *   **Multi-Currency & Bilingual Localization:** Household default currency (`/currency`), dynamic currency resolution, and full Spanish/English support.
 *   **Scheduled Obligations & Zero-Amount Settlement:** `ScheduledBill` tracking, due dates, conversational settlement shortcuts, and proactive status alerts.
 *   **Enterprise Security Hardening:** Remediation of SEC-01 through SEC-06 (clean workspace isolation on leave, HTML entity escaping, prompt injection defenses, per-user concurrency locking, bounded queries, Cloudflare Origin Shielding).
-*   **Modular Architecture Decomposition:** Decoupled `extraction/`, `query/`, and `handlers/` domain packages with backwards-compatible shims.
+*   **Modular Architecture Decomposition:** Clean domain decomposition across `core/llm/`, `billing/`, `extraction/`, `query/`, and `handlers/` with zero backwards-compatibility cruft.
+*   **Pluggable LLM Provider Factory:** Unified `BaseLLMProvider` layer enabling seamless switching between local Ollama and cloud OpenAI-compatible endpoints (e.g. Groq Cloud, OpenAI) via environment variables.
 *   **Hybrid AI & Deterministic Fallbacks:** Groq Cloud AI integration alongside local Ollama/Whisper, backed by rule-based regex fallback extraction.
 *   **CI/CD Quality Gates & Migration Automation:** GitHub Actions automated test suites, PR guardrails, 85%+ coverage enforcement, and startup Alembic migrations.
 
@@ -170,6 +171,10 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 *   **FR37:** The `/month` command generates a comprehensive household overview with full member-by-member segregation (individual incomes, expenses, net savings, and top categories), maintaining strict multi-currency isolation.
 *   **FR38:** The `/me` command isolates the caller's personal income, expenses, net savings, and category distribution regardless of household size.
 *   **FR39:** The Free Tier enforces a hard monthly limit of 20 AI operations for natural language logging and queries, while pre-built commands remain 100% free and unlimited. Natural language queries in free tier append a contextual shortcut pro-tip.
+
+### 5.11 Hybrid Open-Core & Self-Hosting Parity
+*   **FR40:** System guarantees functional and architectural parity between Self-Hosted mode (`ENABLE_SUBSCRIPTIONS=false`) and Multi-Tenant SaaS mode (`ENABLE_SUBSCRIPTIONS=true`). Self-hosted deployments run completely unlocked with zero paywalls, unlimited transactions, and bot allowlisting (`ALLOWED_TELEGRAM_USERS`).
+*   **FR41:** System provides a unified pluggable LLM provider abstraction (`BaseLLMProvider`) enabling instant switching between offline local Ollama and cloud OpenAI-compatible APIs (e.g. Groq, OpenAI) via standard environment variables.
 
 ## 6. Non-Functional Requirements
 

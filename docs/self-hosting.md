@@ -69,7 +69,33 @@ CLOUDFLARE_ORIGIN_SECRET=
 ENABLE_DOCS=false
 ```
 
-### 4. Start the Stack
+### 4. Choose Your AI Inference Mode
+
+Clanomy features a unified modular LLM provider layer (`src/core/llm/`). You can choose between **100% Local Inference** or **Lightweight Cloud Inference**:
+
+#### Option A: 100% Local Inference (Ollama)
+- Keeps all text processing completely on your own machine.
+- Requires ~8GB RAM for running LLaMA3 locally.
+- Configuration in `.env`:
+  ```env
+  OLLAMA_BASE_URL=http://ollama:11434
+  AI_MODEL=llama3
+  ```
+
+#### Option B: Lightweight Cloud Inference (Groq Cloud / OpenAI)
+- Extremely low memory footprint (<500MB RAM total), perfect for cheap $3–$5/month cloud VPS (e.g., Hetzner, DigitalOcean, Linode).
+- Sub-second inference (<300ms) with zero GPU overhead.
+- Configuration in `.env`:
+  ```env
+  # Example using free Groq Cloud API
+  AI_API_KEY=gsk_your_groq_api_key_here
+  AI_API_BASE_URL=https://api.groq.com/openai/v1
+  AI_MODEL=llama-3.3-70b-versatile
+  ```
+
+---
+
+### 5. Start the Stack
 Spin up the containers in detached mode:
 ```bash
 # If using Podman
@@ -79,11 +105,9 @@ podman compose up -d --build
 docker compose up -d --build
 ```
 
-### 5. Pull the Local AI Model
-The application requires the LLaMA3 model to understand your expenses. Pull it into the Ollama container:
-```bash
-podman compose exec ollama ollama pull llama3
-```
+*(If using Option A with local Ollama, pull the LLaMA3 model once the containers start: `podman compose exec ollama ollama pull llama3` or `docker compose exec ollama ollama pull llama3`).*
+
+---
 
 ### 6. Connect Telegram to Your Server
 Telegram needs to know where to send your messages. You must expose port `8000` to the internet (e.g., via Cloudflare Tunnels: `https://famfin.yourdomain.com`).

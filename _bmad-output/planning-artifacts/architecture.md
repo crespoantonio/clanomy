@@ -688,3 +688,74 @@ flowchart TD
   - Deterministic slash commands bypass the quota check and are 100% free and unlimited.
   - Natural language queries append a plan-aware Pro-Tip (*💡 Pro-tip: Type /month or /me...*) guiding users to instant commands.
 
+### 9. Modular Clean Code Architecture & Service Decomposition (Post-Audit Refactoring)
+
+Following a comprehensive architectural and clean-code audit, Clanomy completed a full decomposition of legacy monolithic aggregators (`ai_orchestrator.py` and `routes/telegram.py`):
+
+```mermaid
+flowchart TD
+    subgraph Core ["Core Infrastructure & LLM Layer"]
+        LLMFactory[get_llm_provider Factory]
+        BaseLLM[BaseLLMProvider]
+        Ollama[OllamaProvider]
+        OpenAI[OpenAICompatibleProvider]
+        LLMFactory --> BaseLLM
+        BaseLLM --> Ollama
+        BaseLLM --> OpenAI
+    end
+
+    subgraph Transport ["API & Ingress"]
+        WebhookRoute[Telegram Webhook Router<br>src/api/routes/telegram.py]
+        Whisper[Decoupled WhisperService<br>Audio Bytes & Stream Ingestion]
+    end
+
+    subgraph Orchestration ["Coordination Layer"]
+        Orchestrator[AIOrchestrator<br>src/services/ai_orchestrator.py<br>Coordinates flow, delegates logic]
+    end
+
+    subgraph Handlers ["Domain Handlers (src/services/handlers/)"]
+        TxHandler[transaction_handler.py<br>Undo, Edit, Target Lookup, Cash Flow]
+        BillHandler[bill_handler.py<br>Settlement, NLP Payment Claim, Alerts]
+        NotionHandler[notion_handler.py<br>Mirror, Update, Archive Tasks]
+        CmdHandler[command_handler.py<br>Fastpath /commands]
+        FamilyHandler[family_handler.py<br>Family Group Lifecycle]
+    end
+
+    subgraph Billing ["Billing Domain (src/services/billing/)"]
+        BillingService[TelegramBillingService<br>Stars Invoices, Pre-Checkout, Upgrades]
+    end
+
+    WebhookRoute --> Orchestrator
+    WebhookRoute --> BillingService
+    Orchestrator --> LLMFactory
+    Orchestrator --> Whisper
+    Orchestrator --> TxHandler
+    Orchestrator --> BillHandler
+    Orchestrator --> NotionHandler
+    CmdHandler --> TxHandler
+```
+
+1. **Unified LLM Provider Abstraction (`src/core/llm/`):**
+   - **`BaseLLMProvider`**: Core abstract interface enforcing `generate()` and `extract_structured()`.
+   - **`OllamaProvider`**: Native implementation for local, offline inference connecting to Ollama HTTP API (`/api/generate` and `/api/chat`).
+   - **`OpenAICompatibleProvider`**: Connects to OpenAI-compliant APIs (e.g. Groq Cloud, OpenAI, Together AI) supporting JSON-mode and structured schema enforcement.
+   - **`get_llm_provider()` Factory**: Dynamically instantiates the appropriate provider based on environment variables (`AI_API_KEY`, `OLLAMA_BASE_URL`, `AI_MODEL`), enabling zero-code transitions between self-hosted hardware and cloud infrastructure.
+
+2. **Domain Handlers Decomposition (`src/services/handlers/`):**
+   - **`transaction_handler.py`**: Encapsulates targeted undo, field corrections (`amount`, `concept`, `category`, `type`), coupled currency exchange reversals, and multi-currency monthly cash-flow snapshots.
+   - **`bill_handler.py`**: Encapsulates scheduled bill settlement when an expense is logged, zero-amount conversational payment claims (*"Pagué la tarjeta"*), and overdue bill reminder blocks.
+   - **`notion_handler.py`**: Decouples asynchronous background mirroring, page property updates, and archival tasks from the request lifecycle.
+   - **`command_handler.py`**: Dedicated handling of fast-path slash commands with zero quota consumption.
+   - **`family_handler.py`**: Manages family creation, member invitation links, and tenant boundaries.
+
+3. **Decoupled Billing & Payment Domain (`src/services/billing/`):**
+   - **`TelegramBillingService`**: Isolates Telegram Stars invoice generation (`send_subscription_invoice`), pre-checkout query verification (`answer_pre_checkout_query`), and payment charge webhooks (`handle_successful_payment`).
+   - **`telegram_messages.py`**: Dedicated catalog of localized billing templates, tier descriptions, and payment receipts.
+   - **PR Guardrail Protection**: `.github/workflows/pr-guardrail.yml` strictly guards `src/services/billing/` to prevent unauthorized billing alterations from pull requests.
+
+4. **Self-Hosted vs. Multi-Tenant SaaS Parity:**
+   - **Identical Core Codebase:** Both operating models execute identical business logic across the same domain handlers.
+   - **Self-Hosted Mode (`ENABLE_SUBSCRIPTIONS=false`):** Bypasses all quota checks (`can_log_transaction` and `has_unlimited_access` return `True`), suppresses Stars billing invoices, and enables `ALLOWED_TELEGRAM_USERS` pre-inference allowlisting.
+   - **Multi-Tenant SaaS Mode (`ENABLE_SUBSCRIPTIONS=true`):** Enforces family monthly quotas, AES-256 field encryption, tenant isolation, and automated trial expiration lifecycles.
+
+

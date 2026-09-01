@@ -165,6 +165,12 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 *   **FR34:** System supports hybrid AI inference, allowing seamless routing between local Ollama/Faster-Whisper and Groq Cloud AI.
 *   **FR35:** System provides a deterministic, rule-based regex extraction and classification engine to guarantee zero-downtime operation when AI inference fails.
 
+### 5.10 Pre-Built Fast-Path Commands & Hybrid Quota Model
+*   **FR36:** System provides pre-built deterministic slash commands (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help`) that execute purely in Python/SQL in <50ms with zero AI token consumption.
+*   **FR37:** The `/month` command generates a comprehensive household overview with full member-by-member segregation (individual incomes, expenses, net savings, and top categories), maintaining strict multi-currency isolation.
+*   **FR38:** The `/me` command isolates the caller's personal income, expenses, net savings, and category distribution regardless of household size.
+*   **FR39:** The Free Tier enforces a hard monthly limit of 20 AI operations for natural language logging and queries, while pre-built commands remain 100% free and unlimited. Natural language queries in free tier append a contextual shortcut pro-tip.
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance

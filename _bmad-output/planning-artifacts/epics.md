@@ -962,3 +962,67 @@ So that the community can self-host and support the project sustainably.
 **Then** `README.md` and `docs/self-hosting.md` provide verified Podman Compose setup instructions.
 **And** `CONTRIBUTING.md` establishes architectural standards, test requirements, and commit conventions.
 **And** `.github/FUNDING.yml` and badges support community sponsorship via Ko-fi.
+
+---
+
+## Epic 14: Pre-Built Fast-Path Commands & Hybrid Quota Model
+
+Provide instant (<40ms) deterministic slash commands (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help`) running directly in Python/SQL with zero AI token cost, full multi-currency segregation, member-by-member family transparency, personal cash-flow isolation, and a 20-operation/month Free Tier AI quota model.
+
+### Story 14.1: Fast-Path Deterministic Command Router (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help`)
+
+As a User,
+I want routine financial commands to execute instantly without waiting for an AI model or consuming my monthly AI allowance,
+So that I can check my finances daily with zero latency and zero quota anxiety.
+
+**Acceptance Criteria:**
+
+**Given** an incoming message starting with a slash command (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help` or Spanish aliases `/resumen`, `/yo`, `/hoy`, `/vencimientos`, `/saldo`, `/deshacer`, `/ayuda`)
+**When** processed at the Telegram webhook
+**Then** `CommandHandler` executes the operation deterministically in Python/SQL in <40ms without invoking `AIOrchestrator` or LLMs.
+**And** the operation **never** checks or increments `Family.monthly_tx_count`.
+**And** returns formatted Telegram HTML responses directly.
+
+### Story 14.2: Household Member Segregation & Personal Isolation
+
+As a Household Member,
+I want `/month` to show each person's earnings and expenses, and `/me` to isolate my personal spending,
+So that my partner and I have complete budget transparency while keeping personal financial visibility.
+
+**Acceptance Criteria:**
+
+**Given** transactions logged by multiple family members
+**When** a user runs `/month`
+**Then** the output displays total household income, expenses, and net balance, followed by a `👥 Member Breakdown` displaying each member's total income, expenses, net balance, and top expense category.
+**And** when a user runs `/me`, the system filters strictly by `user_id == user.id`, showing only the caller's personal income, expenses, net savings, and top 4 expense categories.
+
+### Story 14.3: Multi-Currency Ledger Aggregation per Member
+
+As an Expat or Multi-Currency Family,
+I want multi-currency transactions reported separately for both household and individual member totals,
+So that different currencies are never incorrectly summed together.
+
+**Acceptance Criteria:**
+
+**Given** transactions recorded in multiple ISO currencies (e.g. USD and EUR)
+**When** generating `/month`, `/me`, `/today`, or `/balance`
+**Then** `MemberSpending.income_currency_totals` and `MemberSpending.expense_currency_totals` track each currency independently.
+**And** output formatters list distinct amounts per currency (e.g. `3,500.00 USD · 450.00 EUR`) without cross-currency mathematical addition.
+
+### Story 14.4: 20-Log Free Tier Quota & Context-Aware Pro-Tips
+
+As a Free Tier User,
+I want to know how many AI operations I have remaining and receive tips on instant free commands,
+So that I can maximize my usage and upgrade to Pro when my household volume grows.
+
+**Acceptance Criteria:**
+
+**Given** a Free Tier workspace (`plan_type="free"`)
+**When** transactions or queries are processed
+**Then** `FREE_TIER_MONTHLY_LIMIT` enforces a 20 AI operation/month allowance for natural language inputs.
+**And** `/family` displays `Monthly AI Logs: {used} / 20 (⚡ Commands are 100% free & unlimited)`.
+**And** natural language queries append a plan-aware Pro-Tip:
+  - Free: *💡 Pro-tip: Type /month or /me anytime for an instant response that doesn't use your monthly AI quota!*
+  - Pro: *💡 Pro-tip: Type /month or /me anytime for an instant response!*
+**And** when the 20-operation limit is reached, natural text logging is paused with an upgrade notice, but all slash commands (`/month`, `/me`, `/bills`, etc.) remain 100% operational.
+

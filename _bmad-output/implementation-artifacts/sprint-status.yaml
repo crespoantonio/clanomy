@@ -132,3 +132,7 @@ development_status:
   13-3-automated-alembic-startup-migration-lifecycle: done
   13-4-community-funding-and-containerized-self-hosting-framework: done
   epic-13-retrospective: done
+
+  epic-14: done
+  14-1-prebuilt-fastpath-commands-and-hybrid-quota: done
+  epic-14-retrospective: optional

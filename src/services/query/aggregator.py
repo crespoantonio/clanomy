@@ -227,6 +227,11 @@ def aggregate_by_member(
         m = members_by_id[u_id]
         m.currency_totals[tx.currency] = m.currency_totals.get(tx.currency, 0.0) + tx.amount
         tx_type = getattr(tx, "type", "expense") or "expense"
+        if tx_type == "income":
+            m.income_currency_totals[tx.currency] = m.income_currency_totals.get(tx.currency, 0.0) + tx.amount
+        else:
+            m.expense_currency_totals[tx.currency] = m.expense_currency_totals.get(tx.currency, 0.0) + tx.amount
+
         if tx.currency == effective_currency:
             if tx_type == "income":
                 m.total_earned += tx.amount
@@ -254,8 +259,11 @@ def aggregate_by_member(
             
         m.total_amount = round(m.total_amount, 2)
         m.currency_totals = {k: round(v, 2) for k, v in m.currency_totals.items()}
+        m.income_currency_totals = {k: round(v, 2) for k, v in m.income_currency_totals.items()}
+        m.expense_currency_totals = {k: round(v, 2) for k, v in m.expense_currency_totals.items()}
         
         cats = category_totals_per_user_id.get(u_id, {})
+        m.category_totals = {k: round(v, 2) for k, v in cats.items()}
         if cats:
             m.top_category = max(cats.items(), key=lambda x: x[1])[0]
 

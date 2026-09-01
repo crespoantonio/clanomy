@@ -24,7 +24,7 @@ class SubscriptionTier:
         return self.duration_days * 86400
 
 # Global Free Tier & Trial Constants
-FREE_TIER_MONTHLY_LIMIT: int = 30
+FREE_TIER_MONTHLY_LIMIT: int = 20
 TRIAL_DURATION_DAYS: int = 60
 
 # Centralized Subscription Registry (Only specify duration_days - seconds are auto-calculated!)

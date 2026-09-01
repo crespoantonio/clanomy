@@ -169,6 +169,9 @@ class MemberSpending(BaseModel):
     total_amount: float
     primary_currency: str = "USD"
     currency_totals: Dict[str, float]
+    income_currency_totals: Dict[str, float] = {}
+    expense_currency_totals: Dict[str, float] = {}
+    category_totals: Dict[str, float] = {}
     transaction_count: int
     percentage_of_total: Optional[float] = None
     average_per_transaction: float

@@ -148,3 +148,78 @@ def test_webhook_net_cash_flow_query(app_client, mock_telegram, telegram_payload
     assert "500" in response_text
     assert "1,500" in response_text or "1500" in response_text or "savings" in response_text or "surplus" in response_text
 
+def test_webhook_fastpath_commands(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Fast-path slash commands (/month, /me, /today, /bills, /balance, /help) should execute instantly without touching AI quota."""
+    user_id = 999
+    # Start bot
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    
+    # Log an expense
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="50 for groceries", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+    
+    # Test /month
+    res = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/month", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert res.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    assert "family summary" in mock_telegram.messages[-1]["text"].lower()
+    assert "50.00" in mock_telegram.messages[-1]["text"]
+
+    mock_telegram.messages.clear()
+    # Test /me
+    res = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/me", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert res.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    assert "personal summary" in mock_telegram.messages[-1]["text"].lower()
+    assert "50.00" in mock_telegram.messages[-1]["text"]
+
+    mock_telegram.messages.clear()
+    # Test /today
+    res = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/today", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert res.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    assert "today's activity" in mock_telegram.messages[-1]["text"].lower()
+
+    mock_telegram.messages.clear()
+    # Test /balance
+    res = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/balance", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert res.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    assert "cash flow & balance" in mock_telegram.messages[-1]["text"].lower()
+
+    mock_telegram.messages.clear()
+    # Test /help
+    res = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/help", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert res.status_code == 200
+    assert len(mock_telegram.messages) > 0
+    assert "unlimited free commands" in mock_telegram.messages[-1]["text"].lower()
+
+

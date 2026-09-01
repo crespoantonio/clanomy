@@ -1,7 +1,15 @@
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from src.core.config import settings
-from src.services.query.models import QueryResult
+from src.services.query.models import QueryResult, DecryptedScheduledBill
 from src.services.query.date_resolver import _sanitize_concept_for_prompt
+
+def format_currency_dict(curr_dict: Optional[Dict[str, float]], default_curr: str = "USD") -> str:
+    if not curr_dict:
+        return f"0.00 {default_curr}"
+    if len(curr_dict) == 1:
+        c, val = next(iter(curr_dict.items()))
+        return f"{val:,.2f} {c}"
+    return ", ".join(f"{val:,.2f} {c}" for c, val in sorted(curr_dict.items()))
 
 def build_summary_prompt_context(
     query_result: QueryResult, 
@@ -74,9 +82,16 @@ def build_summary_prompt_context(
         mb = query_result.member_breakdown
         ctx.append("Member Breakdown:")
         for name, m in mb.members.items():
-            pct = f", {m.percentage_of_total:.1f}% of total" if m.percentage_of_total is not None else ""
             top = f", Top category: {m.top_category}" if m.top_category else ""
-            ctx.append(f"- {name}: {m.total_amount:,.2f} {m.primary_currency} ({m.transaction_count} transactions{pct}{top})")
+            if m.total_earned > 0:
+                pct = f", {m.percentage_of_total:.1f}% of expenses" if m.percentage_of_total is not None else ""
+                inc_str = format_currency_dict(m.income_currency_totals, m.primary_currency) if m.income_currency_totals else f"{m.total_earned:,.2f} {m.primary_currency}"
+                exp_str = format_currency_dict(m.expense_currency_totals, m.primary_currency) if m.expense_currency_totals else f"{m.total_spent:,.2f} {m.primary_currency}"
+                ctx.append(f"- {name}: Earned {inc_str} | Spent {exp_str} (Net: {m.net_balance:+,.2f} {m.primary_currency}{pct}{top})")
+            else:
+                pct = f", {m.percentage_of_total:.1f}% of total" if m.percentage_of_total is not None else ""
+                amt_str = f"{m.total_amount:,.2f} {m.primary_currency}"
+                ctx.append(f"- {name}: {amt_str} ({m.transaction_count} transactions{pct}{top})")
 
     if query_result.transactions:
         samples = []
@@ -220,3 +235,224 @@ def generate_fallback_summary(
         member_str = f" ({'; '.join(member_parts)})"
             
     return f"{greeting}{subject} {has_verb} spent {total_str} across {agg.transaction_count} transactions {tf_period}{member_str}{top_cat_str}.{comp_str}"
+
+def format_month_summary(
+    query_result: QueryResult, 
+    family_name: Optional[str] = None,
+    timeframe_label: Optional[str] = None
+) -> str:
+    agg = query_result.aggregation
+    curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
+    tf_str = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    fam_label = f" — {family_name}" if family_name else ""
+    
+    lines = [
+        f"📊 <b>Family Summary — {tf_str}</b>{fam_label}",
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+    
+    if not agg or query_result.total_count == 0:
+        lines.append("<i>No transactions recorded for this month yet.</i>")
+        lines.append("")
+        lines.append("💡 <i>Type /help to see available commands or log an expense in chat!</i>")
+        return "\n".join(lines)
+        
+    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+    
+    if has_multi_curr:
+        lines.append("💰 <b>Household Income:</b>")
+        if agg.income_currency_totals:
+            for c, val in sorted(agg.income_currency_totals.items()):
+                lines.append(f"  • {val:,.2f} {c}")
+        else:
+            lines.append(f"  • 0.00 {curr}")
+            
+        lines.append("💸 <b>Household Expenses:</b>")
+        if agg.expense_currency_totals:
+            for c, val in sorted(agg.expense_currency_totals.items()):
+                lines.append(f"  • {val:,.2f} {c}")
+        else:
+            lines.append(f"  • 0.00 {curr}")
+    else:
+        sign = "+" if agg.net_balance > 0 else ""
+        sav_str = f" ({agg.savings_rate:.1f}% saved)" if agg.savings_rate is not None and agg.total_income > 0 else ""
+        lines.append(f"💰 <b>Household Income:</b> {agg.total_income:,.2f} {curr}")
+        lines.append(f"💸 <b>Household Expenses:</b> {agg.total_expenses:,.2f} {curr}")
+        lines.append(f"📈 <b>Net Family Balance:</b> {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+
+    # Member Breakdown
+    if query_result.member_breakdown and query_result.member_breakdown.members:
+        lines.append("")
+        lines.append("👥 <b>Member Breakdown:</b>")
+        for name, m in query_result.member_breakdown.members.items():
+            top_str = f" (Top: {m.top_category})" if m.top_category else ""
+            if has_multi_curr:
+                m_inc = format_currency_dict(m.income_currency_totals, curr)
+                m_exp = format_currency_dict(m.expense_currency_totals, curr)
+                lines.append(f"👤 <b>{name}</b>:")
+                lines.append(f"  • Incomes: {m_inc}")
+                lines.append(f"  • Expenses: {m_exp}{top_str}")
+            else:
+                lines.append(f"👤 <b>{name}</b>:")
+                lines.append(f"  • Incomes: {m.total_earned:,.2f} {curr} | Expenses: {m.total_spent:,.2f} {curr}")
+                sign_m = "+" if m.net_balance > 0 else ""
+                lines.append(f"  • Net: {sign_m}{m.net_balance:,.2f} {curr}{top_str}")
+                
+    lines.append("")
+    lines.append(f"📊 <i>Total logs: {agg.transaction_count} transaction(s)</i>")
+    return "\n".join(lines)
+
+def format_me_summary(
+    query_result: QueryResult, 
+    user_name: Optional[str] = None,
+    timeframe_label: Optional[str] = None
+) -> str:
+    agg = query_result.aggregation
+    curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
+    tf_str = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    u_label = f" — {user_name}" if user_name else ""
+    
+    lines = [
+        f"👤 <b>Personal Summary — {tf_str}</b>{u_label}",
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+    
+    if not agg or query_result.total_count == 0:
+        lines.append("<i>You haven't logged any transactions for this month yet.</i>")
+        lines.append("")
+        lines.append("💡 <i>Log your first expense or income simply by texting me!</i>")
+        return "\n".join(lines)
+
+    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+
+    if has_multi_curr:
+        lines.append("💰 <b>Income:</b>")
+        if agg.income_currency_totals:
+            for c, val in sorted(agg.income_currency_totals.items()):
+                lines.append(f"  • {val:,.2f} {c}")
+        else:
+            lines.append(f"  • 0.00 {curr}")
+            
+        lines.append("💸 <b>Expenses:</b>")
+        if agg.expense_currency_totals:
+            for c, val in sorted(agg.expense_currency_totals.items()):
+                lines.append(f"  • {val:,.2f} {c}")
+        else:
+            lines.append(f"  • 0.00 {curr}")
+    else:
+        sign = "+" if agg.net_balance > 0 else ""
+        sav_str = f" ({agg.savings_rate:.1f}% saved)" if agg.savings_rate is not None and agg.total_income > 0 else ""
+        lines.append(f"💰 <b>Income:</b> {agg.total_income:,.2f} {curr}")
+        lines.append(f"💸 <b>Expenses:</b> {agg.total_expenses:,.2f} {curr}")
+        lines.append(f"📈 <b>Net Balance:</b> {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+
+    # Top Categories
+    if agg.expense_category_breakdown:
+        lines.append("")
+        lines.append("🏷️ <b>Top Categories:</b>")
+        sorted_cats = sorted(agg.expense_category_breakdown.items(), key=lambda x: x[1], reverse=True)[:4]
+        for cat, val in sorted_cats:
+            pct = (val / agg.total_expenses * 100) if agg.total_expenses > 0 else 0.0
+            lines.append(f"  • {cat}: {val:,.2f} {curr} ({pct:.1f}%)")
+
+    lines.append("")
+    lines.append(f"📊 <i>Total logs: {agg.transaction_count} transaction(s)</i>")
+    return "\n".join(lines)
+
+def format_today_summary(
+    query_result: QueryResult,
+    is_family: bool = True
+) -> str:
+    agg = query_result.aggregation
+    curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
+    
+    scope_title = "Household" if is_family else "Personal"
+    lines = [
+        f"📅 <b>Today's Activity ({scope_title})</b>",
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+    
+    if not query_result.transactions:
+        lines.append("<i>No transactions logged today.</i>")
+        return "\n".join(lines)
+        
+    has_multi_curr = agg and (len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1)
+    
+    if agg:
+        if has_multi_curr:
+            exp_str = format_currency_dict(agg.expense_currency_totals, curr)
+            inc_str = format_currency_dict(agg.income_currency_totals, curr)
+            lines.append(f"💸 Spent Today: {exp_str}")
+            if agg.income_count > 0:
+                lines.append(f"💰 Earned Today: {inc_str}")
+        else:
+            lines.append(f"💸 Spent Today: {agg.total_expenses:,.2f} {curr}")
+            if agg.total_income > 0:
+                lines.append(f"💰 Earned Today: {agg.total_income:,.2f} {curr}")
+                
+    lines.append("")
+    lines.append("📝 <b>Today's Transactions:</b>")
+    for tx in query_result.transactions[:10]:
+        tx_type_icon = "🟢" if getattr(tx, "type", "expense") == "income" else "🔴"
+        u_str = f" ({tx.user_name})" if is_family and tx.user_name else ""
+        lines.append(f"{tx_type_icon} {tx.amount:,.2f} {tx.currency} — {tx.concept} [<i>{tx.category}</i>]{u_str}")
+        
+    if len(query_result.transactions) > 10:
+        lines.append(f"<i>...and {len(query_result.transactions) - 10} more</i>")
+        
+    return "\n".join(lines)
+
+def format_bills_summary(
+    bills: List[DecryptedScheduledBill],
+    timeframe_label: str = "This Month"
+) -> str:
+    lines = [
+        f"⏰ <b>Upcoming Bills — {timeframe_label}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+    
+    if not bills:
+        lines.append("<i>No pending bills due for this period! 🎉</i>")
+        return "\n".join(lines)
+        
+    for b in bills:
+        date_str = b.due_date.strftime("%b %d") if hasattr(b.due_date, "strftime") else str(b.due_date)
+        u_str = f" • by {b.user_name}" if b.user_name else ""
+        lines.append(f"🗓️ <b>{date_str}</b>: {b.amount:,.2f} {b.currency} — {b.concept} (<i>{b.category}</i>){u_str}")
+        
+    lines.append("")
+    lines.append(f"📋 <i>{len(bills)} pending commitment(s)</i>")
+    return "\n".join(lines)
+
+def format_balance_summary(query_result: QueryResult) -> str:
+    agg = query_result.aggregation
+    curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
+    tf_str = (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    
+    lines = [
+        f"💰 <b>Cash Flow & Balance — {tf_str}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+    
+    if not agg or query_result.total_count == 0:
+        lines.append("<i>No transactions recorded for this period.</i>")
+        return "\n".join(lines)
+        
+    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+    
+    if has_multi_curr:
+        inc_str = format_currency_dict(agg.income_currency_totals, curr)
+        exp_str = format_currency_dict(agg.expense_currency_totals, curr)
+        lines.append(f"💰 Total Incomes: {inc_str}")
+        lines.append(f"💸 Total Expenses: {exp_str}")
+    else:
+        sign = "+" if agg.net_balance > 0 else ""
+        sav_str = f" ({agg.savings_rate:.1f}% savings rate)" if agg.savings_rate is not None and agg.total_income > 0 else ""
+        lines.append(f"💰 Total Incomes: {agg.total_income:,.2f} {curr}")
+        lines.append(f"💸 Total Expenses: {agg.total_expenses:,.2f} {curr}")
+        lines.append(f"📈 Net Cash Flow: {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+        
+    lines.append("")
+    lines.append(f"📊 <i>Total: {agg.transaction_count} transaction(s)</i>")
+    return "\n".join(lines)
+

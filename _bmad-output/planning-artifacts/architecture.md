@@ -651,3 +651,40 @@ class ScheduledBill(SQLModel, table=True):
 - **Automated Workflows:**
   - `.github/workflows/test.yml`: Runs on push and PR to `master`, isolates SQLite/Postgres test environments, and enforces an **85% minimum code coverage threshold**.
   - `.github/workflows/pr-guardrail.yml`: Protects sensitive files (`subscription_service.py`, `subscription_config.py`, `monetization-and-subscription-strategy.md`, `README.md`, `.github/workflows/`) against unauthorized alterations.
+
+### 8. Pre-Built Fast-Path Commands & Hybrid Quota Architecture (Epic 14)
+
+To achieve maximum response speed, zero AI operational cost, and eliminate user quota anxiety, Clanomy implements a **Hybrid Execution Routing Engine**:
+
+```mermaid
+flowchart TD
+    Webhook[Incoming Telegram Webhook] --> IsCommand{Starts with /command?<br>/month, /me, /today, /bills, /balance}
+    
+    IsCommand -- YES --> FastPath[CommandHandler<br>Pure Python & SQL]
+    FastPath --> DirectAgg[In-Memory Aggregator & Multi-Currency Formatter]
+    DirectAgg --> InstantResp[Telegram HTML Response<br>Latency: <40ms | Cost: $0 | Quota: Unlimited]
+    
+    IsCommand -- NO (Natural Text/Voice) --> QuotaCheck{Free Tier Quota<br>< 20 AI logs/mo?}
+    QuotaCheck -- Exceeded --> BlockMsg[Upgrade Notice + Suggest Unlimited /commands]
+    QuotaCheck -- OK --> AIOrchestrator[AI Orchestrator Pipeline<br>STT + LLM Inference]
+    AIOrchestrator --> IncQuota[Increment Family.monthly_tx_count]
+    IncQuota --> AppendTip[Append Contextual Shortcut Pro-Tip]
+    AppendTip --> AIResp[Telegram Response<br>Latency: ~1.5s | Cost: LLM tokens]
+```
+
+- **Deterministic Command Suite (`src/services/handlers/command_handler.py`):**
+  - `/month` (and `/resumen`): Whole family financial status with member-by-member breakdown. Supports `/month last`.
+  - `/me` (and `/yo`): Caller's personal income, expenses, net savings, and top 4 expense categories.
+  - `/today` (and `/hoy`): Summary of transactions recorded today.
+  - `/bills` (and `/vencimientos`): Upcoming pending scheduled obligations.
+  - `/balance` (and `/saldo`): Net cash flow and savings rate overview.
+  - `/undo` (and `/deshacer`): Reverts caller's latest recorded transaction.
+  - `/help` (and `/ayuda`): Complete command directory and AI guide.
+- **Member Segregation with Multi-Currency Isolation:**
+  - `MemberSpending.income_currency_totals` and `MemberSpending.expense_currency_totals` record distinct currency maps for every family member.
+  - Formatter renders single-currency budgets compactly and multi-currency budgets with distinct ISO totals, never mixing un-converted currencies.
+- **20-Log Free Tier Quota & Context-Aware Pro-Tips:**
+  - `FREE_TIER_MONTHLY_LIMIT = 20` governs natural language AI processing.
+  - Deterministic slash commands bypass the quota check and are 100% free and unlimited.
+  - Natural language queries append a plan-aware Pro-Tip (*💡 Pro-tip: Type /month or /me...*) guiding users to instant commands.
+

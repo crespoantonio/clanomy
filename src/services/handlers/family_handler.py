@@ -35,12 +35,17 @@ async def handle_family_info(user_uuid: UUID) -> str:
         handle = f" (@{m['username']})" if m.get("username") else ""
         role = " 👑 (Admin)" if m.get("is_admin") else ""
         members_str.append(f"• {name}{handle}{role}")
-    members_formatted = "\n".join(members_str)
-    plan_desc = info.get("plan_type", "free").replace("_", " ").title()
+    plan_type = info.get("plan_type", "free")
+    plan_desc = plan_type.replace("_", " ").title()
+    if plan_type == "free":
+        tx_info = f"{info.get('monthly_tx_count', 0)} / 20 (⚡ Commands are 100% free & unlimited)"
+    else:
+        tx_info = f"{info.get('monthly_tx_count', 0)} (Unlimited)"
+        
     return (
         f"👪 <b>Family Workspace: {info['name']}</b>\n"
         f"📋 <b>Plan:</b> {plan_desc}\n"
-        f"📊 <b>Monthly Logs:</b> {info.get('monthly_tx_count', 0)}\n\n"
+        f"📊 <b>Monthly AI Logs:</b> {tx_info}\n\n"
         f"<b>Members:</b>\n{members_formatted}\n\n"
         f"<b>Total Transactions:</b> {info['transactions_count']}\n"
         f"<b>Active Invites:</b> {info['active_invites_count']}"

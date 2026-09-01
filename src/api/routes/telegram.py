@@ -19,6 +19,7 @@ from src.services.subscription_service import (
     handle_subscription_expiry,
     handle_payment_failure
 )
+from src.services.handlers.command_handler import CommandHandler
 from src.db.session import get_session
 from src.db.models import User, Family, Transaction
 from collections import OrderedDict
@@ -324,6 +325,7 @@ async def telegram_webhook(
 
             # Dynamic Plan Badge based on exact subscription tier and quota
             plan_badge = ""
+            command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for instant (<40ms) summaries!"
             if family:
                 if family.plan_type == "trial":
                     days_left = 60
@@ -331,10 +333,12 @@ async def telegram_webhook(
                         now_utc = datetime.now(timezone.utc)
                         trial_end = family.trial_ends_at if family.trial_ends_at.tzinfo else family.trial_ends_at.replace(tzinfo=timezone.utc)
                         days_left = max(0, (trial_end - now_utc).days)
-                    plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs and family features!\n\n"
+                    plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs & family features!\n\n"
+                    command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for instant (<40ms) responses!"
                 elif family.plan_type == "free":
                     used = getattr(family, "monthly_tx_count", 0)
-                    plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/30 logs used this month). Type /upgrade anytime for unlimited logs.\n\n"
+                    plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/20 AI logs used this month).\n\n"
+                    command_bullet = "• ⚡ <b>Unlimited Free Commands:</b> Type /month, /me, /today, /bills, or /balance anytime — they are 100% free and don't count against your 20 monthly AI logs!"
                 elif family.plan_type == "solo_pro":
                     plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text & voice logs, personal workspace).\n\n"
                 elif family.plan_type == "family_pro":
@@ -346,19 +350,62 @@ async def telegram_webhook(
             welcome_text = (
                 f"👋 <b>Welcome to {settings.PROJECT_NAME}, {user_display_name}!</b>\n\n"
                 f"{plan_badge}"
+                "<b>How Clanomy Works:</b>\n"
+                "• 🎙️ <b>AI Logging:</b> Send voice notes or text anytime (<i>\"Coffee 4\"</i>, <i>\"Earned 3,500 salary\"</i>, <i>\"Internet 50 due the 15th\"</i>).\n"
+                f"{command_bullet}\n\n"
                 "💡 <b>Quick Setup:</b>\n"
-                "Set your household default currency so Clanomy knows what currency to use when you log amounts without a currency (e.g. <i>\"500 on dinner\"</i> or <i>\"pesos\"</i>):\n"
-                "👉 Reply with <code>/currency USD</code>, <code>/currency ARS</code>, <code>/currency MXN</code>, <code>/currency EUR</code>, etc.\n\n"
+                "Set your household default currency:\n"
+                "👉 <code>/currency USD</code> <i>(or ARS, EUR, MXN, GBP, etc.)</i>\n\n"
                 "<b>Try sending me something right now:</b>\n"
                 "• 🎙️ <i>Send a voice note:</i> \"Coffee 4\"\n"
                 "• 💬 <i>Type an expense:</i> \"Spent 45 on groceries\"\n"
                 "• 💰 <i>Type an income:</i> \"Got paid 3,000 salary\"\n"
-                "• 📊 <i>Ask a question:</i> \"¿Cuáles fueron mis gastos de los últimos 15 días?\"\n\n"
-                "Type /help anytime to explore all commands & Notion sync."
+                "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
+                "Type /help anytime for Notion sync, family invites, and data export."
             )
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_text)
             return {"status": "ok"}
 
+        # Fast-Path Deterministic Slash Commands (Zero AI Cost, Instant, Never increment AI quota)
+        if text and text.strip().startswith("/"):
+            clean_cmd = text.strip().split()[0].lower()
+            cmd_args = " ".join(text.strip().split()[1:]) if len(text.strip().split()) > 1 else ""
+            cmd_handler = CommandHandler()
+
+            if clean_cmd in ["/month", "/resumen"]:
+                res_text = await cmd_handler.handle_month(user, family, cmd_args)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
+
+            elif clean_cmd in ["/me", "/yo"]:
+                res_text = await cmd_handler.handle_me(user, family, cmd_args)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
+
+            elif clean_cmd in ["/today", "/hoy"]:
+                res_text = await cmd_handler.handle_today(user, family, cmd_args)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
+
+            elif clean_cmd in ["/bills", "/vencimientos"]:
+                res_text = await cmd_handler.handle_bills(user, family, cmd_args)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
+
+            elif clean_cmd in ["/balance", "/saldo"]:
+                res_text = await cmd_handler.handle_balance(user, family, cmd_args)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
+
+            elif clean_cmd in ["/undo", "/deshacer"]:
+                res_text = await cmd_handler.handle_undo(user, family)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
+
+            elif clean_cmd in ["/help", "/ayuda"]:
+                res_text = await cmd_handler.handle_help(user, family)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                return {"status": "ok"}
 
         # Process /upgrade command
         if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
@@ -441,30 +488,6 @@ async def telegram_webhook(
                 )
                 return {"status": "ok"}
 
-        # Process /help command
-        if text and (text.strip().lower() == "/help" or text.strip().lower().startswith("/help")):
-            help_text = (
-                "🤖 <b>Clanomy Assistant - Command Reference</b>\n\n"
-                "<b>💡 Logging Transactions:</b>\n"
-                "• 🎙️ <i>Voice Note:</i> Just send an audio message (e.g. \"Coffee $4.50\" or \"Salary $3,500\")\n"
-                "• 💬 <i>Text:</i> \"Spent 25 on Uber\", \"Bought shoes for 60 EUR\", \"Got paid 3000 USD\"\n"
-                "• ✏️ <i>Corrections:</i> \"Change last amount to 35\", \"Change category to Transport\", \"Undo\"\n\n"
-                "<b>📊 Insights & Queries:</b>\n"
-                "• \"How much did we spend this month?\"\n"
-                "• \"Show breakdown for food & drinks\"\n"
-                "• \"What's our net savings this month?\"\n\n"
-                "<b>⚙️ Management Commands:</b>\n"
-                "• /currency - View or update household default currency (e.g. /currency ARS)\n"
-                "• /upgrade - View Pro plans & upgrade with Telegram Stars\n"
-                "• /family - View family workspace and members\n"
-                "• /invite - Generate invite link for household members\n"
-                "• /notion - Connect and test your Notion database mirror\n"
-                "• /export - Download full ledger as CSV or JSON\n"
-                "• /deleteaccount - Permanently delete your account and data"
-            )
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=help_text)
-            return {"status": "ok"}
-
         # Determine if there is text or audio to process
         audio_file_id = None
         if voice:
@@ -492,15 +515,15 @@ async def telegram_webhook(
                 is_admin = family_service.is_family_admin(family.id, user.id)
                 if is_admin:
                     quota_msg = (
-                        "⛔ <b>Monthly Free Limit Reached (30/30 logs)</b>\n\n"
-                        "Your family has reached the limit of 30 free transaction logs for this month. "
-                        "Type /upgrade to unlock unlimited logs for your household."
+                        "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
+                        "Your family has reached the limit of 20 free transaction logs for this month. "
+                        "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
                     )
                 else:
                     quota_msg = (
-                        "⛔ <b>Monthly Free Limit Reached (30/30 logs)</b>\n\n"
-                        "Your family has reached the limit of 30 free transaction logs for this month. "
-                        "Please ask your family admin to upgrade the workspace via /upgrade."
+                        "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
+                        "Your family has reached the limit of 20 free transaction logs for this month. "
+                        "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
                     )
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
                 return {"status": "ok"}

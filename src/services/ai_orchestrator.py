@@ -1025,16 +1025,33 @@ class AIOrchestrator:
                     if overdue_block:
                         summary_res += f"\n\n{overdue_block}"
 
+            # Append friendly shortcut pro-tip if asked in natural language
+            plan_type = family_info.get("plan_type", "free")
+            if not raw_text.strip().startswith("/"):
+                if plan_type == "free":
+                    summary_res += "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response that doesn't use your monthly AI quota!</i>"
+                else:
+                    summary_res += "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response!</i>"
+
             return summary_res
 
         elif parsed_query.intent == "upcoming_bills":
             family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
             query_service = QueryService()
-            return await query_service.get_upcoming_bills_summary(
+            bills_res = await query_service.get_upcoming_bills_summary(
                 family_id=family_id,
                 timeframe=parsed_query.timeframe or "this_month",
                 raw_text=raw_text
             )
+            if not raw_text.strip().startswith("/"):
+                family_service = FamilyService()
+                f_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
+                p_type = f_info.get("plan_type", "free")
+                if p_type == "free":
+                    bills_res += "\n\n💡 <i>Pro-tip: Type /bills anytime for an instant check that doesn't use your monthly AI quota!</i>"
+                else:
+                    bills_res += "\n\n💡 <i>Pro-tip: Type /bills anytime for an instant check!</i>"
+            return bills_res
 
         elif parsed_query.intent == "create_family":
             family_service = FamilyService()
@@ -1070,11 +1087,17 @@ class AIOrchestrator:
                 role = " 👑 (Admin)" if m.get("is_admin") else ""
                 members_str.append(f"• {name}{handle}{role}")
             members_formatted = "\n".join(members_str)
-            plan_desc = info.get("plan_type", "free").replace("_", " ").title()
+            plan_type = info.get("plan_type", "free")
+            plan_desc = plan_type.replace("_", " ").title()
+            if plan_type == "free":
+                tx_info = f"{info.get('monthly_tx_count', 0)} / 20 (⚡ Commands are 100% free & unlimited)"
+            else:
+                tx_info = f"{info.get('monthly_tx_count', 0)} (Unlimited)"
+
             return (
                 f"👪 <b>Family Workspace: {info['name']}</b>\n"
                 f"📋 <b>Plan:</b> {plan_desc}\n"
-                f"📊 <b>Monthly Logs:</b> {info.get('monthly_tx_count', 0)}\n\n"
+                f"📊 <b>Monthly AI Logs:</b> {tx_info}\n\n"
                 f"<b>Members:</b>\n{members_formatted}\n\n"
                 f"<b>Total Transactions:</b> {info['transactions_count']}\n"
                 f"<b>Active Invites:</b> {info['active_invites_count']}"

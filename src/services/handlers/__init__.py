@@ -8,6 +8,7 @@ from src.services.handlers.family_handler import (
 from src.services.handlers.notion_handler import handle_notion_manage
 from src.services.handlers.currency_handler import handle_manage_currency
 from src.services.handlers.account_handler import handle_delete_account
+from src.services.handlers.command_handler import CommandHandler
 
 __all__ = [
     "handle_create_family",
@@ -18,4 +19,5 @@ __all__ = [
     "handle_notion_manage",
     "handle_manage_currency",
     "handle_delete_account",
+    "CommandHandler",
 ]

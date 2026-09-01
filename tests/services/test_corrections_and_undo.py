@@ -22,6 +22,8 @@ def db_setup(monkeypatch):
     
     monkeypatch.setattr("src.db.session.engine", test_engine)
     monkeypatch.setattr("src.services.ai_orchestrator.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.transaction_handler.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.notion_handler.engine", test_engine)
     
     encryption = EncryptionService()
     family_id = uuid4()

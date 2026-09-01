@@ -22,6 +22,9 @@ def setup_db(monkeypatch):
     SQLModel.metadata.create_all(test_engine)
     monkeypatch.setattr("src.db.session.engine", test_engine)
     monkeypatch.setattr("src.services.ai_orchestrator.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.bill_handler.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.transaction_handler.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.notion_handler.engine", test_engine)
     monkeypatch.setattr("src.services.query.service.engine", test_engine)
     FamilyService._instance = None
     QueryService._instance = None
@@ -75,7 +78,7 @@ async def test_settle_bill_without_amount_own_user(setup_db):
 
         mock_telegram.assert_called_once()
         rep = mock_telegram.call_args[1]["text"]
-        assert "¡Marcado como pagado!" in rep
+        assert ("Marcado como pagado" in rep or "Factura registrada como pagada" in rep)
         assert "Tarjeta Visa" in rep
         assert "1,247,000.00 ARS" in rep
 

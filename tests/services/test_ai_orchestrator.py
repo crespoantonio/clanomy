@@ -555,7 +555,7 @@ async def test_orchestrator_notion_commands(mock_notion_cls, orchestrator, monke
     assert "Connected" in mock_send_message.call_args[1]["text"]
 
 @pytest.mark.anyio
-@patch("src.services.ai_orchestrator.NotionService")
+@patch("src.services.handlers.notion_handler.NotionService")
 async def test_orchestrator_expense_mirroring(mock_notion_cls, orchestrator, monkeypatch):
     user_id = "00000000-0000-0000-0000-000000000000"
     family_id = "11111111-1111-1111-1111-111111111111"
@@ -583,6 +583,7 @@ async def test_orchestrator_expense_mirroring(mock_notion_cls, orchestrator, mon
     mock_session_class = MagicMock()
     mock_session_class.return_value.__enter__.return_value = mock_session
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    monkeypatch.setattr("src.services.handlers.notion_handler.Session", mock_session_class)
 
     mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony", username="tony")
     mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")

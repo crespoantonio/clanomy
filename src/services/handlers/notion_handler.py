@@ -144,6 +144,84 @@ async def handle_notion_manage(
                     return f"✅ <b>Notion Sync is Up to Date!</b>\nAll transactions are already synchronized with your Notion database <b>{db_name}</b>."
                 else:
                     return f"⚠️ <b>Notion Sync Failed:</b> Could not reach Notion API for {failed} transaction(s). The system will retry on your next sync or message."
-            return "⚠️ <b>Notion is not connected.</b>\nPlease run <code>/notion</code> to connect your workspace first."
         else:
             return "Unknown Notion command."
+
+
+async def safe_mirror_to_notion(
+    family_id: UUID,
+    amount: float,
+    currency: str,
+    concept: str,
+    category: str,
+    timestamp,
+    user_name: Optional[str],
+    transaction_id: Optional[UUID] = None,
+    tx_type: str = "expense"
+):
+    """Background task for Notion Mirroring. Fails silently with logs."""
+    try:
+        with Session(engine) as session:
+            family = session.get(Family, family_id)
+            from src.services.subscription_service import has_unlimited_access
+            if family and not has_unlimited_access(family):
+                return
+            notion_service = NotionService(session)
+            await notion_service.mirror_transaction(
+                family_id=family_id,
+                amount=amount,
+                currency=currency,
+                concept=concept,
+                category=category,
+                timestamp=timestamp,
+                user_name=user_name,
+                transaction_id=transaction_id,
+                tx_type=tx_type
+            )
+    except Exception as e:
+        logger.error(f"[Notion Mirror] Uncaught error in mirror background task: {e}")
+
+
+async def safe_update_notion_page(
+    family_id: UUID,
+    page_id: str,
+    amount: float,
+    currency: str,
+    concept: str,
+    category: str,
+    timestamp,
+    user_name: Optional[str],
+    tx_type: str = "expense"
+):
+    """Background task for Notion Page Updates. Fails silently with logs."""
+    try:
+        with Session(engine) as session:
+            family = session.get(Family, family_id)
+            from src.services.subscription_service import has_unlimited_access
+            if family and not has_unlimited_access(family):
+                return
+            notion_service = NotionService(session)
+            await notion_service.update_transaction_page(
+                family_id=family_id,
+                page_id=page_id,
+                amount=amount,
+                currency=currency,
+                concept=concept,
+                category=category,
+                timestamp=timestamp,
+                user_name=user_name,
+                tx_type=tx_type
+            )
+    except Exception as e:
+        logger.error(f"[Notion Mirror] Uncaught error in update background task: {e}")
+
+
+async def safe_archive_notion_page(family_id: UUID, page_id: str):
+    """Background task for Notion Page Archival. Fails silently with logs."""
+    try:
+        with Session(engine) as session:
+            notion_service = NotionService(session)
+            await notion_service.archive_transaction_page(family_id=family_id, page_id=page_id)
+    except Exception as e:
+        logger.error(f"[Notion Mirror] Uncaught error in archive background task: {e}")
+

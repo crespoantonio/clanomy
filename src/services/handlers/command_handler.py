@@ -231,9 +231,8 @@ class CommandHandler:
         /undo
         Instantly reverts the user's latest recorded transaction.
         """
-        from src.services.ai_orchestrator import AIOrchestrator
-        orchestrator = AIOrchestrator()
-        return await asyncio.to_thread(orchestrator._handle_transaction_undo, user.id, None)
+        from src.services.handlers.transaction_handler import handle_transaction_undo
+        return await asyncio.to_thread(handle_transaction_undo, user.id, None)
 
     async def handle_help(self, user: User, family: Family) -> str:
         """

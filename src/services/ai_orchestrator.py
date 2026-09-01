@@ -32,7 +32,24 @@ from src.services.handlers.family_handler import (
 )
 from src.services.handlers.account_handler import handle_delete_account
 from src.services.handlers.currency_handler import handle_manage_currency
-from src.services.handlers.notion_handler import handle_notion_manage
+from src.services.handlers.notion_handler import (
+    handle_notion_manage,
+    safe_mirror_to_notion,
+    safe_update_notion_page,
+    safe_archive_notion_page
+)
+from src.services.handlers.transaction_handler import (
+    format_currency as _format_currency,
+    get_monthly_cash_flow_snapshot,
+    find_target_transaction,
+    handle_transaction_undo,
+    handle_transaction_correction
+)
+from src.services.handlers.bill_handler import (
+    check_and_settle_bill,
+    settle_bill_without_amount,
+    get_overdue_bills_reminder
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,25 +72,6 @@ def create_logged_task(coro, *, name: Optional[str] = None) -> asyncio.Task:
             logger.error(f"Unhandled exception in background task '{task_name}': {exc}", exc_info=exc)
     task.add_done_callback(_handle_task_result)
     return task
-
-def _format_currency(amount: float, currency: str = "USD", show_sign: bool = False) -> str:
-    curr_upper = (currency or settings.DEFAULT_CURRENCY or "USD").upper()
-    symbols = {
-        "USD": "$",
-        "EUR": "€",
-        "GBP": "£",
-        "ARS": "$",
-        "MXN": "$",
-        "CLP": "$",
-        "COP": "$",
-        "UYU": "$",
-        "BRL": "R$",
-        "PEN": "S/"
-    }
-    sym = symbols.get(curr_upper, "")
-    sign = "-" if (amount or 0.0) < 0 else ("+" if show_sign and (amount or 0.0) > 0 else "")
-    abs_amt = abs(amount or 0.0)
-    return f"{sign}{sym}{abs_amt:,.2f} {curr_upper}".strip()
 
 class _BoundedLockStore:
     """LRU-bounded dictionary of asyncio.Lock instances.
@@ -238,89 +236,8 @@ class AIOrchestrator:
         tx_id: UUID,
         user_id: Optional[UUID] = None
     ) -> Optional[tuple[str, str]]:
-        """
-        Inspects pending ScheduledBills for the family.
-        If a pending bill matches the transaction concept,
-        marks the bill as 'paid' linked to tx_id, and returns (matched_concept, remaining_pending_str).
-        Prioritizes bills created by/assigned to user_id.
-        """
-        with Session(engine) as session:
-            pending_bills = session.exec(
-                select(ScheduledBill).where(
-                    ScheduledBill.family_id == family_id,
-                    ScheduledBill.status == "pending"
-                )
-            ).all()
-
-            if not pending_bills:
-                return None
-
-            def _norm(s: str) -> str:
-                s = re.sub(r'\b(?:pagu[ée]|abon[ée]|paid|settled|cancel[ée])\b', '', s, flags=re.IGNORECASE)
-                s = re.sub(r'\b(?:la|el|los|las|the|de|del|of|por|for|mi|my|tarjeta|card)\b', '', s, flags=re.IGNORECASE)
-                s = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', s)
-                s = re.sub(r'[^\w\s]', ' ', s)
-                return " ".join(s.lower().split())
-
-            clean_tx = _norm(tx_concept)
-            tx_tokens = set(clean_tx.split())
-
-            candidates = []
-            for b in pending_bills:
-                if not hasattr(b, "concept") or not b.concept:
-                    continue
-                dec_concept = self.encryption_service.decrypt(b.concept)
-                if not dec_concept:
-                    continue
-                clean_b = _norm(dec_concept)
-                b_tokens = set(clean_b.split())
-
-                if clean_tx and clean_b:
-                    if (clean_b in clean_tx) or (clean_tx in clean_b) or (tx_tokens and tx_tokens.issubset(b_tokens)) or (b_tokens and b_tokens.issubset(tx_tokens)) or (tx_tokens & b_tokens):
-                        score = len(tx_tokens & b_tokens)
-                        if clean_b in clean_tx or clean_tx in clean_b:
-                            score += 5
-                        if user_id is not None and b.user_id == user_id:
-                            score += 10
-                        candidates.append((score, b, dec_concept))
-
-            if not candidates:
-                return None
-
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            best_score, matched_bill, matched_concept = candidates[0]
-
-            matched_bill.status = "paid"
-            matched_bill.paid_transaction_id = tx_id
-            session.add(matched_bill)
-            session.commit()
-
-            # Calculate remaining pending total for this month
-            remaining_bills = session.exec(
-                select(ScheduledBill).where(
-                    ScheduledBill.family_id == family_id,
-                    ScheduledBill.status == "pending"
-                )
-            ).all()
-
-            rem_totals = {}
-            for rb in remaining_bills:
-                amt_str = self.encryption_service.decrypt(rb.amount)
-                if amt_str:
-                    parts = amt_str.strip().split()
-                    try:
-                        a = float(parts[0])
-                        c = parts[1].upper() if len(parts) > 1 else "USD"
-                        rem_totals[c] = rem_totals.get(c, 0.0) + a
-                    except (ValueError, IndexError):
-                        pass
-
-            if rem_totals:
-                rem_str = " + ".join([_format_currency(amt, curr) for curr, amt in rem_totals.items()])
-            else:
-                rem_str = "$0"
-
-            return matched_concept, rem_str
+        """Inspects pending ScheduledBills and marks matching bills paid."""
+        return check_and_settle_bill(family_id, tx_concept, tx_amount, tx_currency, tx_id, user_id, self.encryption_service, session_factory=Session)
 
     def _settle_bill_without_amount(
         self,
@@ -329,253 +246,26 @@ class AIOrchestrator:
         raw_text: str,
         is_spanish: bool
     ) -> Optional[str]:
-        """
-        Settles a pending scheduled bill when the user sends a payment claim without an amount
-        (e.g., "Pagué la tarjeta visa", "Visa card paid").
-        Prioritizes bills created by/assigned to user_uuid, falling back to other family members' bills.
-        """
-        with Session(engine) as session:
-            pending_bills = session.exec(
-                select(ScheduledBill).where(
-                    ScheduledBill.family_id == family_id,
-                    ScheduledBill.status == "pending"
-                )
-            ).all()
-
-            if not pending_bills:
-                return None
-
-            def _norm(s: str) -> str:
-                s = re.sub(r'\b(?:pagu[ée]|abon[ée]|paid|settled|cancel[ée]|liquid[ée]|pay)\b', '', s, flags=re.IGNORECASE)
-                s = re.sub(r'\b(?:la|el|los|las|the|de|del|of|por|for|mi|my|tarjeta|card)\b', '', s, flags=re.IGNORECASE)
-                s = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', s)
-                s = re.sub(r'[^\w\s]', ' ', s)
-                return " ".join(s.lower().split())
-
-            clean_input = _norm(raw_text)
-            input_tokens = set(clean_input.split())
-
-            if not clean_input and not input_tokens:
-                return None
-
-            candidates = []
-            for b in pending_bills:
-                if not hasattr(b, "concept") or not b.concept:
-                    continue
-                dec_cpt = self.encryption_service.decrypt(b.concept) or ""
-                clean_b = _norm(dec_cpt)
-                b_tokens = set(clean_b.split())
-
-                if clean_input and clean_b:
-                    if (clean_b in clean_input) or (clean_input in clean_b) or (input_tokens and input_tokens.issubset(b_tokens)) or (b_tokens and b_tokens.issubset(input_tokens)) or (input_tokens & b_tokens):
-                        score = len(input_tokens & b_tokens)
-                        if clean_b in clean_input or clean_input in clean_b:
-                            score += 5
-                        if b.user_id == user_uuid:
-                            score += 10
-                        candidates.append((score, b, dec_cpt))
-
-            if not candidates:
-                return None
-
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            best_score, matched_bill, matched_concept = candidates[0]
-
-            dec_amount_str = self.encryption_service.decrypt(matched_bill.amount) or "0.00 USD"
-            parts = dec_amount_str.strip().split()
-            amt = float(parts[0]) if parts else 0.0
-            curr = parts[1].upper() if len(parts) > 1 else "USD"
-            category = matched_bill.category or "Rent/Bills"
-
-            now_dt = datetime.datetime.now(datetime.timezone.utc)
-            new_tx = Transaction(
-                user_id=user_uuid,
-                family_id=family_id,
-                amount=matched_bill.amount,
-                concept=matched_bill.concept,
-                category=category,
-                type="expense",
-                timestamp=now_dt
-            )
-            session.add(new_tx)
-            session.flush()
-
-            matched_bill.status = "paid"
-            matched_bill.paid_transaction_id = new_tx.id
-            session.add(matched_bill)
-            session.commit()
-
-            tx_id = new_tx.id
-
-        # Dispatch Notion mirror
-        try:
-            user_info = self._get_user_info(user_uuid)
-            coro = self._safe_mirror_to_notion(
-                family_id=family_id,
-                amount=amt,
-                currency=curr,
-                concept=matched_concept,
-                category=category,
-                timestamp=now_dt,
-                user_name=user_info.get("display_name", "User"),
-                transaction_id=tx_id,
-                tx_type="expense"
-            )
-            try:
-                create_logged_task(coro, name="mirror_to_notion")
-            except Exception:
-                coro.close()
-                raise
-        except Exception as e:
-            logger.warning(f"Could not dispatch Notion mirror task for settled bill: {e}")
-
-        # Calculate remaining pending total for family
-        with Session(engine) as session:
-            remaining_bills = session.exec(
-                select(ScheduledBill).where(
-                    ScheduledBill.family_id == family_id,
-                    ScheduledBill.status == "pending"
-                )
-            ).all()
-
-            rem_totals = {}
-            for rb in remaining_bills:
-                amt_str = self.encryption_service.decrypt(rb.amount)
-                if amt_str:
-                    parts = amt_str.strip().split()
-                    try:
-                        a = float(parts[0])
-                        c = parts[1].upper() if len(parts) > 1 else "USD"
-                        rem_totals[c] = rem_totals.get(c, 0.0) + a
-                    except (ValueError, IndexError):
-                        pass
-
-            rem_str = " + ".join([_format_currency(a, c) for c, a in rem_totals.items()]) if rem_totals else "$0"
-
-        formatted_amt = _format_currency(amt, curr)
-        if is_spanish:
-            return (
-                f"✅ <b>¡Marcado como pagado!</b>\n"
-                f"💳 <b>{html.escape(matched_concept)}</b> ({formatted_amt}) registrado en tus gastos.\n\n"
-                f"⏳ Restante pendiente este mes: <b>{rem_str}</b>"
-            )
-        else:
-            return (
-                f"✅ <b>Marked as paid!</b>\n"
-                f"💳 <b>{html.escape(matched_concept)}</b> ({formatted_amt}) recorded in your expenses.\n\n"
-                f"⏳ Remaining pending this month: <b>{rem_str}</b>"
-            )
+        """Settles a pending scheduled bill from a payment claim without an amount."""
+        return settle_bill_without_amount(family_id, user_uuid, raw_text, is_spanish, self.encryption_service, session_factory=Session)
 
     def _get_overdue_bills_reminder(
         self,
         family_id: UUID,
-        reference_time: datetime.datetime,
-        is_spanish: bool
-    ) -> Optional[str]:
-        """Checks for scheduled bills in the current month with due_date <= reference_time and returns a reminder block."""
-        with Session(engine) as session:
-            start_of_month = reference_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            if reference_time.month == 12:
-                next_month = reference_time.replace(year=reference_time.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-            else:
-                next_month = reference_time.replace(month=reference_time.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        is_spanish: bool = False,
+        reference_time: Optional[datetime.datetime] = None
+    ) -> str:
+        """Returns formatted reminder block for upcoming/overdue bills."""
+        return get_overdue_bills_reminder(family_id, is_spanish, self.encryption_service, reference_time, session_factory=Session)
 
-            bills = session.exec(
-                select(ScheduledBill).where(
-                    ScheduledBill.family_id == family_id,
-                    ScheduledBill.status == "pending",
-                    ScheduledBill.due_date < next_month
-                ).order_by(ScheduledBill.due_date.asc())
-            ).all()
-
-            if not bills:
-                return None
-
-            # Check if any bills are due today or overdue (or due in next 2 days)
-            due_or_overdue = [b for b in bills if b.due_date.date() <= (reference_time + datetime.timedelta(days=2)).date()]
-            if not due_or_overdue:
-                due_or_overdue = bills[:3]
-
-            lines = []
-            if is_spanish:
-                lines.append("⚠️ <b>Recordatorio de Vencimientos:</b>\n<i>Tienes facturas programadas pendientes de pago:</i>")
-                for b in due_or_overdue:
-                    dec_cpt = self.encryption_service.decrypt(b.concept) or "Factura"
-                    amt_str = self.encryption_service.decrypt(b.amount) or "0 USD"
-                    parts = amt_str.split()
-                    amt = float(parts[0]) if parts else 0.0
-                    curr = parts[1].upper() if len(parts) > 1 else "USD"
-                    fmt_amt = _format_currency(amt, curr)
-                    due_fmt = b.due_date.strftime("%d/%m")
-                    status_note = "Venció el" if b.due_date.date() < reference_time.date() else "Vence el"
-                    lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
-                lines.append('\n👉 <i>Si ya pagaste alguna, solo dime "Pagué [nombre]" (ej: "Pagué la visa") para registrarla.</i>')
-            else:
-                lines.append("⚠️ <b>Upcoming / Due Bills Reminder:</b>\n<i>You have pending scheduled bills:</i>")
-                for b in due_or_overdue:
-                    dec_cpt = self.encryption_service.decrypt(b.concept) or "Bill"
-                    amt_str = self.encryption_service.decrypt(b.amount) or "0 USD"
-                    parts = amt_str.split()
-                    amt = float(parts[0]) if parts else 0.0
-                    curr = parts[1].upper() if len(parts) > 1 else "USD"
-                    fmt_amt = _format_currency(amt, curr)
-                    due_fmt = b.due_date.strftime("%b %d")
-                    status_note = "Was due on" if b.due_date.date() < reference_time.date() else "Due on"
-                    lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
-                lines.append('\n👉 <i>If you already paid any, simply tell me "Paid [name]" (e.g. "Paid the visa") to record it.</i>')
-
-            return "\n".join(lines)
-
-    def _get_monthly_cash_flow_snapshot(self, family_id: UUID, target_date: datetime.datetime, primary_currency: str = "USD") -> dict:
-        """
-        Queries and decrypts all transactions for the given family in the calendar month of target_date.
-        Calculates Total In, Total Out, Net Savings, and Savings Rate percentage for the specified currency.
-        """
-        start_of_month = target_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if target_date.month == 12:
-            next_month = target_date.replace(year=target_date.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        else:
-            next_month = target_date.replace(month=target_date.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
-
-        with Session(engine) as session:
-            statement = select(Transaction).where(
-                Transaction.family_id == family_id,
-                Transaction.timestamp >= start_of_month,
-                Transaction.timestamp < next_month
-            )
-            transactions = session.exec(statement).all()
-
-            total_in = 0.0
-            total_out = 0.0
-
-            for tx in transactions:
-                try:
-                    decrypted_amount_str = self.encryption_service.decrypt(tx.amount)
-                    if not decrypted_amount_str:
-                        continue
-                    parts = decrypted_amount_str.strip().split()
-                    amt = float(parts[0]) if parts else 0.0
-                    curr = parts[1].upper() if len(parts) > 1 else (primary_currency or "USD").upper()
-                    if curr == (primary_currency or "USD").upper():
-                        tx_type = getattr(tx, "tx_type", getattr(tx, "type", "expense")) or "expense"
-                        if tx_type == "income":
-                            total_in += amt
-                        else:
-                            total_out += amt
-                except Exception as e:
-                    logger.warning(f"Failed to decrypt transaction {tx.id} for cash flow snapshot: {e}")
-
-            net_savings = total_in - total_out
-            savings_pct = round((net_savings / total_in) * 100) if total_in > 0 else 0
-
-            return {
-                "month_name": target_date.strftime("%B"),
-                "total_in": round(total_in, 2),
-                "total_out": round(total_out, 2),
-                "net_savings": round(net_savings, 2),
-                "savings_pct": savings_pct,
-                "currency": primary_currency
-            }
+    def _get_monthly_cash_flow_snapshot(
+        self,
+        family_id: UUID,
+        target_date: datetime.datetime,
+        primary_currency: str = "USD"
+    ) -> dict:
+        """Calculates monthly cash flow snapshot for family."""
+        return get_monthly_cash_flow_snapshot(family_id, target_date, primary_currency, self.encryption_service, session_factory=Session)
 
     def _get_user_family_id(self, user_uuid: UUID) -> UUID:
         """Synchronous database helper to fetch family_id."""
@@ -617,316 +307,22 @@ class AIOrchestrator:
         target_currency: Optional[str] = None,
         target_concept: Optional[str] = None
     ) -> Optional[Transaction]:
-        """
-        Searches recent transactions for the user matching optional criteria.
-        If no criteria specified, returns the most recent transaction.
-        """
-        recent_txs = session.exec(
-            select(Transaction)
-            .where(Transaction.user_id == user_uuid)
-            .order_by(Transaction.timestamp.desc())
-            .limit(10)
-            .with_for_update()
-        ).all()
-
-        if not recent_txs:
-            return None
-
-        if target_amount is None and not target_currency and not target_concept:
-            return recent_txs[0]
-
-        target_curr_norm = target_currency.upper() if target_currency else None
-        target_concept_norm = target_concept.lower().strip() if target_concept else None
-
-        for tx in recent_txs:
-            dec_amt_str = self.encryption_service.decrypt(tx.amount)
-            dec_concept = self.encryption_service.decrypt(tx.concept) or ""
-            if not dec_amt_str:
-                continue
-            parts = dec_amt_str.strip().split()
-            a = float(parts[0]) if parts else 0.0
-            c = parts[1].upper() if len(parts) > 1 else "USD"
-
-            matches = True
-            if target_amount is not None and abs(a - target_amount) > 0.01:
-                matches = False
-            if target_curr_norm and c != target_curr_norm:
-                matches = False
-            if target_concept_norm and target_concept_norm not in dec_concept.lower():
-                matches = False
-
-            if matches:
-                return tx
-
-        # If strict match didn't find anything, try matching on amount alone if specified
-        if target_amount is not None:
-            for tx in recent_txs:
-                dec_amt_str = self.encryption_service.decrypt(tx.amount)
-                if not dec_amt_str:
-                    continue
-                parts = dec_amt_str.strip().split()
-                a = float(parts[0]) if parts else 0.0
-                if abs(a - target_amount) <= 0.01:
-                    return tx
-
-        # Fallback to the latest transaction
-        return recent_txs[0]
+        return find_target_transaction(session, user_uuid, target_amount, target_currency, target_concept, self.encryption_service)
 
     def _handle_transaction_undo(self, user_uuid: UUID, parsed_query: Optional[ParsedQueryIntent] = None) -> str:
-        """Removes a recent transaction logged by the user, recalculating monthly balance."""
-        with Session(engine) as session:
-            t_amt = parsed_query.target_amount if parsed_query else None
-            t_curr = parsed_query.target_currency if parsed_query else None
-            t_cpt = parsed_query.target_concept if parsed_query else None
-
-            tx = self._find_target_transaction(
-                session=session,
-                user_uuid=user_uuid,
-                target_amount=t_amt,
-                target_currency=t_curr,
-                target_concept=t_cpt
-            )
-            if not tx:
-                return "ℹ️ You don't have any recent transactions to undo."
-
-            dec_amount = self.encryption_service.decrypt(tx.amount) or "0.00 USD"
-            dec_concept = self.encryption_service.decrypt(tx.concept) or "Transaction"
-            parts = dec_amount.strip().split()
-            amt = float(parts[0]) if parts else 0.0
-            curr = parts[1].upper() if len(parts) > 1 else "USD"
-            old_type = getattr(tx, "tx_type", getattr(tx, "type", "expense")) or "expense"
-            category = tx.category
-            notion_page_id = tx.notion_page_id
-            family_id = tx.family_id
-            tx_time = tx.timestamp
-
-            counterpart = None
-            if category == "Exchange":
-                recent_exchange_txs = session.exec(
-                    select(Transaction)
-                    .where(
-                        Transaction.user_id == user_uuid,
-                        Transaction.category == "Exchange",
-                        Transaction.id != tx.id
-                    )
-                    .order_by(Transaction.timestamp.desc())
-                    .limit(5)
-                ).all()
-                for cand in recent_exchange_txs:
-                    if abs((cand.timestamp - tx_time).total_seconds()) <= 15:
-                        counterpart = cand
-                        break
-
-            counterpart_info = None
-            if counterpart:
-                c_dec_amount = self.encryption_service.decrypt(counterpart.amount) or "0.00 USD"
-                c_dec_concept = self.encryption_service.decrypt(counterpart.concept) or "Transaction"
-                c_parts = c_dec_amount.strip().split()
-                c_amt = float(c_parts[0]) if c_parts else 0.0
-                c_curr = c_parts[1].upper() if len(c_parts) > 1 else "USD"
-                c_type = getattr(counterpart, "tx_type", getattr(counterpart, "type", "income")) or "income"
-                counterpart_info = {
-                    "amount": c_amt,
-                    "currency": c_curr,
-                    "type": c_type,
-                    "concept": c_dec_concept,
-                    "notion_page_id": counterpart.notion_page_id
-                }
-                session.delete(counterpart)
-
-            session.delete(tx)
-            session.commit()
-
-        if notion_page_id:
-            try:
-                create_logged_task(self._safe_archive_notion_page(family_id, notion_page_id), name="archive_notion_page")
-            except Exception as e:
-                logger.warning(f"Could not dispatch Notion archive task: {e}")
-
-        if counterpart_info and counterpart_info.get("notion_page_id"):
-            try:
-                create_logged_task(self._safe_archive_notion_page(family_id, counterpart_info["notion_page_id"]), name="archive_counterpart_notion_page")
-            except Exception as e:
-                logger.warning(f"Could not dispatch counterpart Notion archive task: {e}")
-
-        snapshot = self._get_monthly_cash_flow_snapshot(family_id, tx_time, curr)
-
-        icon = "💰" if old_type == "income" else "💸"
-        sign = "+" if old_type == "income" else "-"
-        formatted_amt = _format_currency(amt, curr, show_sign=False)
-        formatted_in = _format_currency(snapshot["total_in"], curr, show_sign=False)
-        formatted_out = _format_currency(snapshot["total_out"], curr, show_sign=False)
-        formatted_net = _format_currency(snapshot["net_savings"], curr, show_sign=True)
-        pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
-
-        safe_concept = html.escape(dec_concept)
-        safe_category = html.escape(category)
-        has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
-
-        if counterpart_info:
-            c_icon = "💰" if counterpart_info["type"] == "income" else "💸"
-            c_sign = "+" if counterpart_info["type"] == "income" else "-"
-            c_formatted = _format_currency(counterpart_info["amount"], counterpart_info["currency"], show_sign=False)
-            return (
-                f"🗑️ <b>Removed currency exchange:</b>\n"
-                f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n"
-                f"• {c_icon} {c_sign}{c_formatted} ({safe_category} - {html.escape(counterpart_info['concept'])})\n\n"
-                f"📊 <b>Updated {snapshot['month_name']} Balance ({curr}):</b>\n"
-                f"• Total In: {formatted_in}\n"
-                f"• Total Out: {formatted_out}\n"
-                f"• Net Savings: {formatted_net}{pct_str}"
-            )
-
-        title = "🗑️ <b>Removed transaction:</b>\n" if has_target else "🗑️ <b>Removed latest transaction:</b>\n"
-
-        return (
-            f"{title}"
-            f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n\n"
-            f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
-            f"• Total In: {formatted_in}\n"
-            f"• Total Out: {formatted_out}\n"
-            f"• Net Savings: {formatted_net}{pct_str}"
-        )
+        return handle_transaction_undo(user_uuid, parsed_query, self.encryption_service, session_factory=Session)
 
     def _handle_transaction_correction(self, user_uuid: UUID, parsed_query: ParsedQueryIntent) -> str:
-        """Modifies fields on the user's targeted or latest transaction and updates Notion / cash flow snapshot."""
-        with Session(engine) as session:
-            tx = self._find_target_transaction(
-                session=session,
-                user_uuid=user_uuid,
-                target_amount=parsed_query.target_amount,
-                target_currency=parsed_query.target_currency,
-                target_concept=parsed_query.target_concept
-            )
-            if not tx:
-                return "ℹ️ You don't have any recent transactions to update."
-
-            dec_amount = self.encryption_service.decrypt(tx.amount) or "0.00 USD"
-            dec_concept = self.encryption_service.decrypt(tx.concept) or "Transaction"
-            parts = dec_amount.strip().split()
-            current_amt = float(parts[0]) if parts else 0.0
-            current_curr = parts[1].upper() if len(parts) > 1 else "USD"
-            current_type = getattr(tx, "tx_type", getattr(tx, "type", "expense")) or "expense"
-            current_cat = tx.category
-
-            new_type = parsed_query.new_type or current_type
-            new_amt = parsed_query.new_amount if parsed_query.new_amount is not None else current_amt
-            new_curr = (parsed_query.new_currency.upper() if parsed_query.new_currency else current_curr)
-            new_cat = parsed_query.new_category or current_cat
-            new_concept = parsed_query.new_concept or dec_concept
-
-            tx.type = new_type
-            if hasattr(tx, "tx_type"):
-                tx.tx_type = new_type
-            tx.category = new_cat
-            tx.amount = self.encryption_service.encrypt(f"{new_amt:.2f} {new_curr}")
-            tx.concept = self.encryption_service.encrypt(new_concept)
-
-            session.add(tx)
-            session.commit()
-            session.refresh(tx)
-
-            notion_page_id = tx.notion_page_id
-            family_id = tx.family_id
-            tx_time = tx.timestamp
-
-        if notion_page_id:
-            try:
-                user_info = self._get_user_info(user_uuid)
-                create_logged_task(self._safe_update_notion_page(
-                    family_id=family_id,
-                    page_id=notion_page_id,
-                    amount=new_amt,
-                    currency=new_curr,
-                    concept=new_concept,
-                    category=new_cat,
-                    timestamp=tx_time,
-                    user_name=user_info.get("display_name"),
-                    tx_type=new_type
-                ), name="update_notion_page")
-            except Exception as e:
-                logger.warning(f"Could not dispatch Notion update task: {e}")
-
-        snapshot = self._get_monthly_cash_flow_snapshot(family_id, tx_time, new_curr)
-
-        type_note = ""
-        if current_type != new_type:
-            old_label = "Expense 💸" if current_type == "expense" else "Income 💰"
-            new_label = "Income 💰" if new_type == "income" else "Expense 💸"
-            type_note = f"\n<i>[Switched from {old_label} to {new_label}]</i>"
-
-        icon = "💰" if new_type == "income" else "💸"
-        sign = "+" if new_type == "income" else "-"
-        formatted_amt = _format_currency(new_amt, new_curr, show_sign=False)
-        formatted_in = _format_currency(snapshot["total_in"], new_curr, show_sign=False)
-        formatted_out = _format_currency(snapshot["total_out"], new_curr, show_sign=False)
-        formatted_net = _format_currency(snapshot["net_savings"], new_curr, show_sign=True)
-        pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
-
-        safe_concept = html.escape(new_concept)
-        safe_cat = html.escape(new_cat)
-        has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
-        title = "✏️ <b>Updated transaction:</b>\n" if has_target else "✏️ <b>Updated latest transaction:</b>\n"
-
-        return (
-            f"{title}"
-            f"• {icon} {sign}{formatted_amt} ({safe_cat} - {safe_concept}){type_note}\n\n"
-            f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
-            f"• Total In: {formatted_in}\n"
-            f"• Total Out: {formatted_out}\n"
-            f"• Net Savings: {formatted_net}{pct_str}"
-        )
+        return handle_transaction_correction(user_uuid, parsed_query, self.encryption_service, session_factory=Session)
 
     async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None, tx_type: str = "expense"):
-        """Background task for Notion Mirroring. Fails silently with logs."""
-        try:
-            with Session(engine) as session:
-                family = session.get(Family, family_id)
-                from src.services.subscription_service import has_unlimited_access
-                if family and not has_unlimited_access(family):
-                    return
-                notion_service = NotionService(session)
-                await notion_service.mirror_transaction(
-                    family_id=family_id,
-                    amount=amount,
-                    currency=currency,
-                    concept=concept,
-                    category=category,
-                    timestamp=timestamp,
-                    user_name=user_name,
-                    transaction_id=transaction_id,
-                    tx_type=tx_type
-                )
-        except Exception as e:
-            logger.error(f"[Notion Mirror] Uncaught error in background task: {e}")
+        return await safe_mirror_to_notion(family_id, amount, currency, concept, category, timestamp, user_name, transaction_id, tx_type)
 
-    async def _safe_update_notion_page(self, family_id: UUID, page_id: str, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str] = None, tx_type: str = "expense"):
-        """Background task for Notion Page Update. Fails silently with logs."""
-        try:
-            with Session(engine) as session:
-                notion_service = NotionService(session)
-                await notion_service.update_transaction_page(
-                    family_id=family_id,
-                    page_id=page_id,
-                    amount=amount,
-                    currency=currency,
-                    concept=concept,
-                    category=category,
-                    timestamp=timestamp,
-                    user_name=user_name,
-                    tx_type=tx_type
-                )
-        except Exception as e:
-            logger.error(f"[Notion Mirror] Uncaught error in update background task: {e}")
+    async def _safe_update_notion_page(self, family_id: UUID, page_id: str, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], tx_type: str = "expense"):
+        return await safe_update_notion_page(family_id, page_id, amount, currency, concept, category, timestamp, user_name, tx_type)
 
     async def _safe_archive_notion_page(self, family_id: UUID, page_id: str):
-        """Background task for Notion Page Archival. Fails silently with logs."""
-        try:
-            with Session(engine) as session:
-                notion_service = NotionService(session)
-                await notion_service.archive_transaction_page(family_id=family_id, page_id=page_id)
-        except Exception as e:
-            logger.error(f"[Notion Mirror] Uncaught error in archive background task: {e}")
+        return await safe_archive_notion_page(family_id, page_id)
 
     async def _execute_parsed_query(
         self,
@@ -1026,7 +422,7 @@ class AIOrchestrator:
             if intent_str in [IntentType.SPENDING_SUMMARY, "spending_summary", IntentType.QUERY_SPENDING, "query_spending", IntentType.NET_CASH_FLOW, "net_cash_flow", IntentType.NET_BALANCE, "net_balance", IntentType.CASH_FLOW_SUMMARY, "cash_flow_summary"]:
                 if parsed_query.timeframe in ["this_month", "all_time", "current_month"] or not parsed_query.timeframe:
                     is_spanish = any(w in raw_lower for w in ["como", "cómo", "venimos", "mes", "gastos", "resumen", "balance", "pesos"])
-                    overdue_block = await asyncio.to_thread(self._get_overdue_bills_reminder, family_id, reference_time, is_spanish)
+                    overdue_block = await asyncio.to_thread(self._get_overdue_bills_reminder, family_id, is_spanish, reference_time)
                     if overdue_block:
                         summary_res += f"\n\n{overdue_block}"
 
@@ -1507,7 +903,7 @@ class AIOrchestrator:
                                     except Exception as mirror_err:
                                         logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")
                                 except Exception as e:
-                                    logger.error(f"Persistence failed for user {user_id}. (Exception details omitted for security)")
+                                    logger.error(f"Persistence failed for user {user_id}. (Exception details omitted for security)", exc_info=True)
                                     status = "error"
                                     response_text = "Failed to save transaction. Please try again later."
                 except Exception as e:

@@ -21,6 +21,9 @@ def setup_db(monkeypatch):
     SQLModel.metadata.create_all(test_engine)
     monkeypatch.setattr("src.db.session.engine", test_engine)
     monkeypatch.setattr("src.services.ai_orchestrator.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.transaction_handler.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.bill_handler.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.notion_handler.engine", test_engine)
     monkeypatch.setattr("src.services.query.service.engine", test_engine)
     yield test_engine
 

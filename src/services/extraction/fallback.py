@@ -328,4 +328,14 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
             transaction_date=ex.transaction_date
         )
     except Exception:
+        # Check if this is a payment claim without an amount (e.g. "pagué la tarjeta visa", "pague la visa", "visa paid")
+        if re.search(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay)\b', text_lower):
+            concept_candidate = re.sub(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay|la|el|los|las|the|de|del|por|for|mi|my)\b', '', text, flags=re.IGNORECASE).strip()
+            return UnifiedResult(
+                action="log_transaction",
+                type="expense",
+                amount=None,
+                concept=concept_candidate or text.strip(),
+                category="Rent/Bills"
+            )
         return UnifiedResult(action="query")

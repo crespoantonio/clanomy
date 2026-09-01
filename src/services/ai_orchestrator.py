@@ -203,12 +203,14 @@ class AIOrchestrator:
         tx_concept: str,
         tx_amount: float,
         tx_currency: str,
-        tx_id: UUID
+        tx_id: UUID,
+        user_id: Optional[UUID] = None
     ) -> Optional[tuple[str, str]]:
         """
         Inspects pending ScheduledBills for the family.
         If a pending bill matches the transaction concept,
         marks the bill as 'paid' linked to tx_id, and returns (matched_concept, remaining_pending_str).
+        Prioritizes bills created by/assigned to user_id.
         """
         with Session(engine) as session:
             pending_bills = session.exec(
@@ -222,21 +224,16 @@ class AIOrchestrator:
                 return None
 
             def _norm(s: str) -> str:
-                # remove payment verbs
                 s = re.sub(r'\b(?:pagu[ée]|abon[ée]|paid|settled|cancel[ée])\b', '', s, flags=re.IGNORECASE)
-                # remove articles, prepositions
-                s = re.sub(r'\b(?:la|el|los|las|the|de|del|of|por|for)\b', '', s, flags=re.IGNORECASE)
-                # remove currency symbols and numbers
+                s = re.sub(r'\b(?:la|el|los|las|the|de|del|of|por|for|mi|my|tarjeta|card)\b', '', s, flags=re.IGNORECASE)
                 s = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', s)
-                # remove special chars
                 s = re.sub(r'[^\w\s]', ' ', s)
                 return " ".join(s.lower().split())
 
             clean_tx = _norm(tx_concept)
             tx_tokens = set(clean_tx.split())
 
-            matched_bill = None
-            matched_concept = ""
+            candidates = []
             for b in pending_bills:
                 if not hasattr(b, "concept") or not b.concept:
                     continue
@@ -247,43 +244,250 @@ class AIOrchestrator:
                 b_tokens = set(clean_b.split())
 
                 if clean_tx and clean_b:
-                    if (clean_b in clean_tx) or (clean_tx in clean_b) or (tx_tokens and tx_tokens.issubset(b_tokens)) or (b_tokens and b_tokens.issubset(tx_tokens)):
-                        matched_bill = b
-                        matched_concept = dec_concept
-                        break
+                    if (clean_b in clean_tx) or (clean_tx in clean_b) or (tx_tokens and tx_tokens.issubset(b_tokens)) or (b_tokens and b_tokens.issubset(tx_tokens)) or (tx_tokens & b_tokens):
+                        score = len(tx_tokens & b_tokens)
+                        if clean_b in clean_tx or clean_tx in clean_b:
+                            score += 5
+                        if user_id is not None and b.user_id == user_id:
+                            score += 10
+                        candidates.append((score, b, dec_concept))
 
-            if matched_bill:
-                matched_bill.status = "paid"
-                matched_bill.paid_transaction_id = tx_id
-                session.add(matched_bill)
-                session.commit()
+            if not candidates:
+                return None
 
-                # Calculate remaining pending total for this month
-                remaining_bills = session.exec(
-                    select(ScheduledBill).where(
-                        ScheduledBill.family_id == family_id,
-                        ScheduledBill.status == "pending"
-                    )
-                ).all()
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            best_score, matched_bill, matched_concept = candidates[0]
 
-                rem_totals = {}
-                for rb in remaining_bills:
-                    amt_str = self.encryption_service.decrypt(rb.amount)
-                    if amt_str:
-                        parts = amt_str.strip().split()
-                        try:
-                            a = float(parts[0])
-                            c = parts[1].upper() if len(parts) > 1 else "USD"
-                            rem_totals[c] = rem_totals.get(c, 0.0) + a
-                        except (ValueError, IndexError):
-                            pass
+            matched_bill.status = "paid"
+            matched_bill.paid_transaction_id = tx_id
+            session.add(matched_bill)
+            session.commit()
 
-                if rem_totals:
-                    rem_str = " + ".join([_format_currency(amt, curr) for curr, amt in rem_totals.items()])
-                else:
-                    rem_str = "$0"
+            # Calculate remaining pending total for this month
+            remaining_bills = session.exec(
+                select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status == "pending"
+                )
+            ).all()
 
-                return matched_concept, rem_str
+            rem_totals = {}
+            for rb in remaining_bills:
+                amt_str = self.encryption_service.decrypt(rb.amount)
+                if amt_str:
+                    parts = amt_str.strip().split()
+                    try:
+                        a = float(parts[0])
+                        c = parts[1].upper() if len(parts) > 1 else "USD"
+                        rem_totals[c] = rem_totals.get(c, 0.0) + a
+                    except (ValueError, IndexError):
+                        pass
+
+            if rem_totals:
+                rem_str = " + ".join([_format_currency(amt, curr) for curr, amt in rem_totals.items()])
+            else:
+                rem_str = "$0"
+
+            return matched_concept, rem_str
+
+    def _settle_bill_without_amount(
+        self,
+        family_id: UUID,
+        user_uuid: UUID,
+        raw_text: str,
+        is_spanish: bool
+    ) -> Optional[str]:
+        """
+        Settles a pending scheduled bill when the user sends a payment claim without an amount
+        (e.g., "Pagué la tarjeta visa", "Visa card paid").
+        Prioritizes bills created by/assigned to user_uuid, falling back to other family members' bills.
+        """
+        with Session(engine) as session:
+            pending_bills = session.exec(
+                select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status == "pending"
+                )
+            ).all()
+
+            if not pending_bills:
+                return None
+
+            def _norm(s: str) -> str:
+                s = re.sub(r'\b(?:pagu[ée]|abon[ée]|paid|settled|cancel[ée]|liquid[ée]|pay)\b', '', s, flags=re.IGNORECASE)
+                s = re.sub(r'\b(?:la|el|los|las|the|de|del|of|por|for|mi|my|tarjeta|card)\b', '', s, flags=re.IGNORECASE)
+                s = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', s)
+                s = re.sub(r'[^\w\s]', ' ', s)
+                return " ".join(s.lower().split())
+
+            clean_input = _norm(raw_text)
+            input_tokens = set(clean_input.split())
+
+            if not clean_input and not input_tokens:
+                return None
+
+            candidates = []
+            for b in pending_bills:
+                if not hasattr(b, "concept") or not b.concept:
+                    continue
+                dec_cpt = self.encryption_service.decrypt(b.concept) or ""
+                clean_b = _norm(dec_cpt)
+                b_tokens = set(clean_b.split())
+
+                if clean_input and clean_b:
+                    if (clean_b in clean_input) or (clean_input in clean_b) or (input_tokens and input_tokens.issubset(b_tokens)) or (b_tokens and b_tokens.issubset(input_tokens)) or (input_tokens & b_tokens):
+                        score = len(input_tokens & b_tokens)
+                        if clean_b in clean_input or clean_input in clean_b:
+                            score += 5
+                        if b.user_id == user_uuid:
+                            score += 10
+                        candidates.append((score, b, dec_cpt))
+
+            if not candidates:
+                return None
+
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            best_score, matched_bill, matched_concept = candidates[0]
+
+            dec_amount_str = self.encryption_service.decrypt(matched_bill.amount) or "0.00 USD"
+            parts = dec_amount_str.strip().split()
+            amt = float(parts[0]) if parts else 0.0
+            curr = parts[1].upper() if len(parts) > 1 else "USD"
+            category = matched_bill.category or "Rent/Bills"
+
+            now_dt = datetime.datetime.now(datetime.timezone.utc)
+            new_tx = Transaction(
+                user_id=user_uuid,
+                family_id=family_id,
+                amount=matched_bill.amount,
+                concept=matched_bill.concept,
+                category=category,
+                type="expense",
+                timestamp=now_dt
+            )
+            session.add(new_tx)
+            session.flush()
+
+            matched_bill.status = "paid"
+            matched_bill.paid_transaction_id = new_tx.id
+            session.add(matched_bill)
+            session.commit()
+
+            tx_id = new_tx.id
+
+        # Dispatch Notion mirror
+        try:
+            user_info = self._get_user_info(user_uuid)
+            create_logged_task(self._safe_mirror_to_notion(
+                family_id=family_id,
+                amount=amt,
+                currency=curr,
+                concept=matched_concept,
+                category=category,
+                timestamp=now_dt,
+                user_name=user_info.get("display_name", "User"),
+                transaction_id=tx_id,
+                tx_type="expense"
+            ), name="mirror_to_notion")
+        except Exception as e:
+            logger.warning(f"Could not dispatch Notion mirror task for settled bill: {e}")
+
+        # Calculate remaining pending total for family
+        with Session(engine) as session:
+            remaining_bills = session.exec(
+                select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status == "pending"
+                )
+            ).all()
+
+            rem_totals = {}
+            for rb in remaining_bills:
+                amt_str = self.encryption_service.decrypt(rb.amount)
+                if amt_str:
+                    parts = amt_str.strip().split()
+                    try:
+                        a = float(parts[0])
+                        c = parts[1].upper() if len(parts) > 1 else "USD"
+                        rem_totals[c] = rem_totals.get(c, 0.0) + a
+                    except (ValueError, IndexError):
+                        pass
+
+            rem_str = " + ".join([_format_currency(a, c) for c, a in rem_totals.items()]) if rem_totals else "$0"
+
+        formatted_amt = _format_currency(amt, curr)
+        if is_spanish:
+            return (
+                f"✅ <b>¡Marcado como pagado!</b>\n"
+                f"💳 <b>{html.escape(matched_concept)}</b> ({formatted_amt}) registrado en tus gastos.\n\n"
+                f"⏳ Restante pendiente este mes: <b>{rem_str}</b>"
+            )
+        else:
+            return (
+                f"✅ <b>Marked as paid!</b>\n"
+                f"💳 <b>{html.escape(matched_concept)}</b> ({formatted_amt}) recorded in your expenses.\n\n"
+                f"⏳ Remaining pending this month: <b>{rem_str}</b>"
+            )
+
+    def _get_overdue_bills_reminder(
+        self,
+        family_id: UUID,
+        reference_time: datetime.datetime,
+        is_spanish: bool
+    ) -> Optional[str]:
+        """Checks for scheduled bills in the current month with due_date <= reference_time and returns a reminder block."""
+        with Session(engine) as session:
+            start_of_month = reference_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            if reference_time.month == 12:
+                next_month = reference_time.replace(year=reference_time.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                next_month = reference_time.replace(month=reference_time.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+            bills = session.exec(
+                select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status == "pending",
+                    ScheduledBill.due_date < next_month
+                ).order_by(ScheduledBill.due_date.asc())
+            ).all()
+
+            if not bills:
+                return None
+
+            # Check if any bills are due today or overdue (or due in next 2 days)
+            due_or_overdue = [b for b in bills if b.due_date.date() <= (reference_time + datetime.timedelta(days=2)).date()]
+            if not due_or_overdue:
+                due_or_overdue = bills[:3]
+
+            lines = []
+            if is_spanish:
+                lines.append("⚠️ <b>Recordatorio de Vencimientos:</b>\n<i>Tienes facturas programadas pendientes de pago:</i>")
+                for b in due_or_overdue:
+                    dec_cpt = self.encryption_service.decrypt(b.concept) or "Factura"
+                    amt_str = self.encryption_service.decrypt(b.amount) or "0 USD"
+                    parts = amt_str.split()
+                    amt = float(parts[0]) if parts else 0.0
+                    curr = parts[1].upper() if len(parts) > 1 else "USD"
+                    fmt_amt = _format_currency(amt, curr)
+                    due_fmt = b.due_date.strftime("%d/%m")
+                    status_note = "Venció el" if b.due_date.date() < reference_time.date() else "Vence el"
+                    lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
+                lines.append('\n👉 <i>Si ya pagaste alguna, solo dime "Pagué [nombre]" (ej: "Pagué la visa") para registrarla.</i>')
+            else:
+                lines.append("⚠️ <b>Upcoming / Due Bills Reminder:</b>\n<i>You have pending scheduled bills:</i>")
+                for b in due_or_overdue:
+                    dec_cpt = self.encryption_service.decrypt(b.concept) or "Bill"
+                    amt_str = self.encryption_service.decrypt(b.amount) or "0 USD"
+                    parts = amt_str.split()
+                    amt = float(parts[0]) if parts else 0.0
+                    curr = parts[1].upper() if len(parts) > 1 else "USD"
+                    fmt_amt = _format_currency(amt, curr)
+                    due_fmt = b.due_date.strftime("%b %d")
+                    status_note = "Was due on" if b.due_date.date() < reference_time.date() else "Due on"
+                    lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
+                lines.append('\n👉 <i>If you already paid any, simply tell me "Paid [name]" (e.g. "Paid the visa") to record it.</i>')
+
+            return "\n".join(lines)
 
             return None
 
@@ -762,7 +966,7 @@ class AIOrchestrator:
             query_service = QueryService()
 
             if parsed_query.intent in ["income_summary", "query_income", "earnings_summary"]:
-                return await query_service.get_income_summary(
+                summary_res = await query_service.get_income_summary(
                     family_id=family_id,
                     timeframe=parsed_query.timeframe,
                     category=parsed_query.category,
@@ -773,7 +977,7 @@ class AIOrchestrator:
                     primary_currency=family_currency
                 )
             elif parsed_query.intent in ["net_cash_flow", "net_balance", "cash_flow_summary"]:
-                return await query_service.get_net_cash_flow_summary(
+                summary_res = await query_service.get_net_cash_flow_summary(
                     family_id=family_id,
                     timeframe=parsed_query.timeframe,
                     user_name=user_name,
@@ -783,7 +987,7 @@ class AIOrchestrator:
                     primary_currency=family_currency
                 )
             else:
-                return await query_service.get_spending_summary(
+                summary_res = await query_service.get_spending_summary(
                     family_id=family_id,
                     timeframe=parsed_query.timeframe,
                     category=parsed_query.category,
@@ -793,6 +997,16 @@ class AIOrchestrator:
                     member_names=member_names,
                     primary_currency=family_currency
                 )
+
+            # Proactive reminder for due/overdue scheduled bills when inquiring about current status/month
+            if parsed_query.intent in ["spending_summary", "query_spending", "net_cash_flow", "net_balance", "cash_flow_summary"]:
+                if parsed_query.timeframe in ["this_month", "all_time", "current_month"] or not parsed_query.timeframe:
+                    is_spanish = any(w in raw_lower for w in ["como", "cómo", "venimos", "mes", "gastos", "resumen", "balance", "pesos"])
+                    overdue_block = await asyncio.to_thread(self._get_overdue_bills_reminder, family_id, reference_time, is_spanish)
+                    if overdue_block:
+                        summary_res += f"\n\n{overdue_block}"
+
+            return summary_res
 
         elif parsed_query.intent == "upcoming_bills":
             family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
@@ -1311,15 +1525,34 @@ class AIOrchestrator:
                                     response_text = "Failed to save transactions. Please try again later."
 
                             elif unified.amount is None:
-                                query_service = QueryService()
-                                parsed_query = await query_service.parse_intent(text)
-                                if parsed_query.intent != "log_expense":
-                                    res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
-                                    if res is None:
-                                        return {"status": "ok"}
-                                    response_text = res
+                                is_spanish = any(w in raw_lower for w in ["pagué", "pague", "aboné", "abone", "tarjeta", "pesos", "factura", "prestamo", "préstamo", "cuentas", "luz", "gas", "agua"])
+                                is_payment_claim = bool(re.search(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay)\b', raw_lower))
+                                if is_payment_claim:
+                                    settle_res = await asyncio.to_thread(
+                                        self._settle_bill_without_amount,
+                                        family_id=family_id,
+                                        user_uuid=user_uuid,
+                                        raw_text=raw_text,
+                                        is_spanish=is_spanish
+                                    )
+                                    if settle_res:
+                                        response_text = settle_res
+                                    else:
+                                        concept_hint = re.sub(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay|la|el|los|las|the|de|del|por|for|mi|my)\b', '', raw_text, flags=re.IGNORECASE).strip()
+                                        if is_spanish:
+                                            response_text = f"ℹ️ No encontré ninguna factura pendiente para '{html.escape(concept_hint or raw_text)}'. ¿Cuánto fue el monto que pagaste?"
+                                        else:
+                                            response_text = f"ℹ️ I couldn't find an upcoming bill matching '{html.escape(concept_hint or raw_text)}'. What was the amount paid?"
                                 else:
-                                    response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
+                                    query_service = QueryService()
+                                    parsed_query = await query_service.parse_intent(text)
+                                    if parsed_query.intent != "log_expense":
+                                        res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
+                                        if res is None:
+                                            return {"status": "ok"}
+                                        response_text = res
+                                    else:
+                                        response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
                             else:
                                 transaction_time = override_tx_time if override_tx_time is not None else unified.to_datetime()
                                 tx_amount = unified.amount
@@ -1395,7 +1628,8 @@ class AIOrchestrator:
                                             tx_concept=tx_concept,
                                             tx_amount=tx_amount,
                                             tx_currency=tx_currency,
-                                            tx_id=tx_id
+                                            tx_id=tx_id,
+                                            user_id=user_uuid
                                         )
                                         if settlement:
                                             matched_concept, remaining_pending = settlement

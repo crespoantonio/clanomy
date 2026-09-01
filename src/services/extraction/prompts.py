@@ -63,6 +63,10 @@ ACTIONS ('action'):
          * Item 2 (Received/Income): type="income", amount=received_amount (or sold_amount * rate), currency=received_currency, category="Exchange", concept="Currency Exchange"
          * Set top-level 'exchange_rate' to received_amount / sold_amount.
 
+     * ZERO-AMOUNT BILL SETTLEMENT CLAIM:
+       - If the user states they paid a scheduled bill or card without providing a numeric amount (e.g. "Pagué la tarjeta visa", "Pague la visa", "Visa card paid", "Paid the electric bill", "Aboné el préstamo"):
+       - Emit action="log_transaction", type="expense", amount=null, category="Rent/Bills", concept=<bill name> (e.g. "Tarjeta Visa", "Electric bill").
+
 2. "edit_last": The user wants to correct, update, change, or specify currency for a recent transaction.
    - English: "Update internet cost to 250", "Change the last amount to 250", "The last one was 50 for food", "Change to income", "Fix the category to Transport", "Actually it was 300", "the salary of 1606932 is ARS", "it was in EUR, not USD", "change currency to ARS", "modify the dollar incomes, we only had 1 in dollars".
    - Spanish: "El último importe necesito actualizarlo a 250", "Actualizar el último a 250", "Cambiar el último a 300", "El último fue 50 en comida", "Corregir monto a 250", "Cambiá el último a ingreso", "En realidad fueron 250", "el salario de 1606932 es ARS", "era en pesos", "era en ARS", "corregir moneda a ARS", "el último fue en pesos no en dólares", "modifica los ingresos en dolares".

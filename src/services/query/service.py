@@ -283,6 +283,21 @@ class QueryService:
                 tf = "this_month"
             return ParsedQueryIntent(intent="upcoming_bills", timeframe=tf, scope="family")
 
+        # Fast-path deterministic matching for net_cash_flow / balance / status
+        status_patterns = [
+            r'¿?c[oó]mo\s+(?:venimos|vamos)\b',
+            r'\bhow\s+are\s+we\s+doing\b',
+            r'\bbalance\s+(?:del?\s+)?(?:este\s+)?mes\b',
+            r'\bnet\s+balance\b',
+            r'\bcash\s+flow\b',
+            r'\bflujo\s+de\s+caja\b'
+        ]
+        if any(re.search(pat, clean_lower) for pat in status_patterns):
+            tf = "this_month"
+            if "semana" in clean_lower or "week" in clean_lower:
+                tf = "this_week"
+            return ParsedQueryIntent(intent="net_cash_flow", timeframe=tf, scope="family")
+
         ref_time = reference_time or datetime.now(timezone.utc)
         current_date_str = ref_time.strftime("%Y-%m-%d %H:%M:%S UTC")
         

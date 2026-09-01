@@ -4,7 +4,7 @@ Welcome! Clanomy operates on a **Hybrid Open Core model**. While we offer a zero
 
 If you are privacy-obsessed, technically inclined, or just prefer to own your infrastructure, you can self-host the entire Clanomy stack for free!
 
-If you find this open-source version valuable and it saves you money, consider supporting the project via [Patreon/Ko-fi] (link coming soon) to help us keep maintaining the code and adding new features!
+If you find this open-source version valuable and it saves you money, consider supporting the project via [Ko-fi](https://ko-fi.com/crespoantonio) to help maintain the code and keep adding new features!
 
 ---
 

@@ -1,5 +1,8 @@
 # Clanomy 💰🤖
 
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Project-F16061?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/crespoantonio)
+
 Clanomy is an open-source, privacy-first, multi-tenant family financial assistant. It combines a high-performance FastAPI backend with AI pipeline options (local Faster-Whisper + Ollama or ultra-fast cloud inference with Groq / OpenAI) and application-level AES-256 zero-knowledge encryption.
 
 ---
@@ -105,7 +108,18 @@ curl http://localhost:8000/health
 
 ---
 
+## ☕ Support the Project
+
+Clanomy is 100% free and open-source. If this project saves you time, money, or helps your family keep finances organized, consider supporting its development:
+
+[![Buy Me a Coffee](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/crespoantonio)
+
+Your support helps cover testing environments, third-party AI tokens, and ongoing maintenance!
+
+---
+
 ## 📄 License & Architecture
 
 Clanomy is distributed under the open-core model. For architecture and sprint planning details, see the `_bmad-output/` directory.
+
 

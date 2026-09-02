@@ -49,6 +49,7 @@ def test_create_invite(session: Session, family_service: FamilyService):
     session.add(user)
     session.commit()
     
+    # Test custom ttl_hours
     invite, link = family_service.create_invite(family_id=family.id, user_id=user.id, ttl_hours=24)
     
     assert invite is not None
@@ -60,6 +61,25 @@ def test_create_invite(session: Session, family_service: FamilyService):
     expires_at = invite.expires_at.replace(tzinfo=timezone.utc) if invite.expires_at.tzinfo is None else invite.expires_at
     delta = expires_at - datetime.now(timezone.utc)
     assert 23 < delta.total_seconds() / 3600 <= 24
+
+def test_create_invite_default_1h_ttl(session: Session, family_service: FamilyService):
+    family = Family(name="Invite Gen Default")
+    session.add(family)
+    session.commit()
+    
+    user = User(telegram_id=223, family_id=family.id)
+    session.add(user)
+    session.commit()
+    
+    # Test default TTL is 1 hour
+    invite, link = family_service.create_invite(family_id=family.id, user_id=user.id)
+    
+    assert invite is not None
+    assert invite.token in link
+    assert invite.is_active is True
+    expires_at = invite.expires_at.replace(tzinfo=timezone.utc) if invite.expires_at.tzinfo is None else invite.expires_at
+    delta = expires_at - datetime.now(timezone.utc)
+    assert 0.9 <= delta.total_seconds() / 3600 <= 1.0
 
 def test_join_family_via_invite_success(session: Session, family_service: FamilyService):
     family = Family(name="Target")
@@ -88,6 +108,42 @@ def test_join_family_via_invite_success(session: Session, family_service: Family
     
     session.refresh(joiner)
     assert joiner.family_id == family.id
+
+    # Verify single-use: invite is marked inactive immediately upon successful join
+    updated_invite = session.get(FamilyInvite, invite.id)
+    assert updated_invite.is_active is False
+
+def test_join_family_via_invite_single_use_blocked(session: Session, family_service: FamilyService):
+    family = Family(name="Target Single Use")
+    session.add(family)
+    session.commit()
+    
+    creator = User(telegram_id=5551, family_id=family.id)
+    session.add(creator)
+    session.commit()
+    
+    invite, _ = family_service.create_invite(family_id=family.id, user_id=creator.id)
+    
+    fam1 = Family(name="Fam1")
+    fam2 = Family(name="Fam2")
+    session.add(fam1)
+    session.add(fam2)
+    session.commit()
+    
+    user1 = User(telegram_id=5552, family_id=fam1.id)
+    user2 = User(telegram_id=5553, family_id=fam2.id)
+    session.add(user1)
+    session.add(user2)
+    session.commit()
+    
+    # First join succeeds
+    success1, _, _ = family_service.join_family_via_invite(token=invite.token, user_id=user1.id)
+    assert success1 is True
+    
+    # Second join with same token must fail because token was invalidated
+    success2, msg2, _ = family_service.join_family_via_invite(token=invite.token, user_id=user2.id)
+    assert success2 is False
+    assert "invalid or has expired" in msg2
 
 def test_join_family_via_invite_expired(session: Session, family_service: FamilyService):
     family = Family(name="Expired")

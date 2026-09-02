@@ -124,8 +124,9 @@ class FamilyService:
             logger.error(f"Failed to create family for user_id={user_id}: {e}")
             raise
 
-    def create_invite(self, family_id: UUID, user_id: UUID, bot_username: str = None, ttl_hours: int = 48) -> Tuple[FamilyInvite, str]:
+    def create_invite(self, family_id: UUID, user_id: UUID, bot_username: str = None, ttl_hours: Optional[int] = None) -> Tuple[FamilyInvite, str]:
         start_time = time.time()
+        hours = ttl_hours if ttl_hours is not None else getattr(settings, "FAMILY_INVITE_TTL_HOURS", 1)
         
         with Session(self.engine, expire_on_commit=False) as session:
             family = session.get(Family, family_id)
@@ -135,7 +136,7 @@ class FamilyService:
                 raise PlanLimitExceededError("Solo Pro plan only supports 1 user. Please upgrade to Family Pro using /upgrade to invite family members.")
 
             token = secrets.token_urlsafe(16)
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
             invite = FamilyInvite(
                 family_id=family_id,
                 created_by_user_id=user_id,
@@ -210,6 +211,10 @@ class FamilyService:
                 user.family_id = invite.family_id
                 user.is_admin = False
                 session.add(user)
+
+                # Invalidate invite so it is single-use
+                invite.is_active = False
+                session.add(invite)
 
                 
                 # Migrate transactions if old family was single-member

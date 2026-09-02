@@ -16,7 +16,7 @@ async def handle_generate_invite(user_uuid: UUID, family_id: UUID) -> str:
     bot_username = await telegram_service.get_bot_username()
     try:
         invite, link = await asyncio.to_thread(family_service.create_invite, family_id, user_uuid, bot_username)
-        return f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 48 hours."
+        return f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 1 hour."
     except PlanLimitExceededError:
         return (
             "⚠️ <b>Family Invites Require Family Pro</b>\n\n"

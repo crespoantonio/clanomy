@@ -369,7 +369,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
      > `✅ Family group created successfully!`
      > `Invite your partner/roommates using this link:`
      > `https://t.me/<bot_username>?start=join_<token>`
-     > `This link is valid for 48 hours.`
+     > `This link is valid for 1 hour.`
 3. Note the generated link containing the secret joining token.
 
 ---

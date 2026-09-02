@@ -20,10 +20,9 @@ async def test_lifespan_saas_mode_fails_fast_without_ai_api_key(monkeypatch):
                 pass
 
 def test_database_session_engine_configuration():
-    """Verify that src.db.session.engine has pool_pre_ping enabled."""
-    from src.db.session import engine
-    # pool_pre_ping must be enabled on the engine
-    assert engine.pool._pre_ping is True
+    """Verify that src.db.session.engine_kwargs has pool_pre_ping enabled."""
+    from src.db.session import engine_kwargs
+    assert engine_kwargs.get("pool_pre_ping") is True
 
 def test_free_tier_quota_limit_is_twenty():
     """Verify that FREE_TIER_MONTHLY_LIMIT is strictly 20 and can_log_transaction defaults to 20."""

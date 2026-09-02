@@ -242,7 +242,13 @@ class LemonSqueezyBillingService:
                 background_tasks=background_tasks
             )
 
-        elif event_name in ("subscription_updated", "subscription_payment_success"):
+        elif event_name in (
+            "subscription_updated",
+            "subscription_payment_success",
+            "subscription_plan_changed",
+            "subscription_payment_recovered",
+            "subscription_unpaused",
+        ):
             return self._on_subscription_updated(
                 session=session,
                 family=target_family,

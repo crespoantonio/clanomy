@@ -1,9 +1,10 @@
+import os
 import sys
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Response, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db, run_migrations
 from src.core.config import settings
@@ -110,13 +111,39 @@ async def security_and_origin_middleware(request: Request, call_next):
 
     return response
 
+_LANDING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "landing")
+
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
 app.include_router(lemonsqueezy_router)
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
+    index_path = os.path.join(_LANDING_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return {"message": f"Welcome to {settings.PROJECT_NAME}"}
+
+@app.get("/styles.css", include_in_schema=False)
+async def landing_styles():
+    css_path = os.path.join(_LANDING_DIR, "styles.css")
+    if os.path.exists(css_path):
+        return FileResponse(css_path, media_type="text/css")
+    return Response(status_code=404)
+
+@app.get("/script.js", include_in_schema=False)
+async def landing_script():
+    js_path = os.path.join(_LANDING_DIR, "script.js")
+    if os.path.exists(js_path):
+        return FileResponse(js_path, media_type="application/javascript")
+    return Response(status_code=404)
+
+@app.get("/assets/{file_path:path}", include_in_schema=False)
+async def landing_assets(file_path: str):
+    asset_file = os.path.join(_LANDING_DIR, "assets", file_path)
+    if os.path.exists(asset_file) and os.path.isfile(asset_file):
+        return FileResponse(asset_file)
+    return Response(status_code=404)
 
 
 @app.get("/health")

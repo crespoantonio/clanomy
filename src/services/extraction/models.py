@@ -11,6 +11,11 @@ class ExtractionError(Exception):
     """Custom exception raised when extraction fails."""
     pass
 
+
+class PayloadTruncatedError(ExtractionError):
+    """Raised when LLM output generation exceeds token budget and was truncated."""
+    pass
+
 class ParsedItem(BaseModel):
     type: Literal["expense", "income"] = Field(
         default="expense",

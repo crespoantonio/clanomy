@@ -16,7 +16,8 @@ from src.core.encryption import EncryptionService
 from src.db.session import engine
 from src.db.models import User, Transaction, Family, ScheduledBill
 from src.services.whisper_service import WhisperService
-from src.services.extraction import ExtractionService, UnifiedResult
+from src.services.extraction import ExtractionService, UnifiedResult, PayloadTruncatedError
+from src.services.handlers.batch_tracker import BatchTracker
 from src.services.telegram_service import TelegramService
 from src.services.query import QueryService, ParsedQueryIntent
 from src.services.export_service import ExportService
@@ -589,43 +590,64 @@ class AIOrchestrator:
 
                         extraction_service = ExtractionService()
                         override_tx_time = None
-                        if hasattr(extraction_service, "classify_and_extract"):
-                            unified = await extraction_service.classify_and_extract(text=text, default_currency=family_currency)
-                        else:
-                            ex = await extraction_service.extract(text=text, default_currency=family_currency)
-                            amt = getattr(ex, "amount", None)
-                            if not isinstance(amt, (int, float)):
-                                amt = None
-                            curr = getattr(ex, "currency", None)
-                            if not isinstance(curr, str):
-                                curr = family_currency or "USD"
-                            cat = getattr(ex, "category", None)
-                            if not isinstance(cat, str):
-                                cat = "Other"
-                            cpt = getattr(ex, "concept", None)
-                            if not isinstance(cpt, str):
-                                cpt = text.strip()
-                            tp = getattr(ex, "type", None)
-                            if not isinstance(tp, str):
-                                tp = "expense"
-                            t_date = getattr(ex, "transaction_date", None)
-                            if not isinstance(t_date, str):
-                                t_date = None
+                        try:
+                            if hasattr(extraction_service, "classify_and_extract"):
+                                unified = await extraction_service.classify_and_extract(text=text, default_currency=family_currency)
+                            else:
+                                ex = await extraction_service.extract(text=text, default_currency=family_currency)
+                                amt = getattr(ex, "amount", None)
+                                if not isinstance(amt, (int, float)):
+                                    amt = None
+                                curr = getattr(ex, "currency", None)
+                                if not isinstance(curr, str):
+                                    curr = family_currency or "USD"
+                                cat = getattr(ex, "category", None)
+                                if not isinstance(cat, str):
+                                    cat = "Other"
+                                cpt = getattr(ex, "concept", None)
+                                if not isinstance(cpt, str):
+                                    cpt = text.strip()
+                                tp = getattr(ex, "type", None)
+                                if not isinstance(tp, str):
+                                    tp = "expense"
+                                t_date = getattr(ex, "transaction_date", None)
+                                if not isinstance(t_date, str):
+                                    t_date = None
 
-                            unified = UnifiedResult(
-                                action="log_transaction",
-                                type=tp,
-                                amount=amt,
-                                category=cat,
-                                concept=cpt,
-                                currency=curr,
-                                transaction_date=t_date
-                            )
-                            if hasattr(ex, "to_datetime") and callable(ex.to_datetime):
-                                try:
-                                    override_tx_time = ex.to_datetime()
-                                except Exception:
-                                    pass
+                                unified = UnifiedResult(
+                                    action="log_transaction",
+                                    type=tp,
+                                    amount=amt,
+                                    category=cat,
+                                    concept=cpt,
+                                    currency=curr,
+                                    transaction_date=t_date
+                                )
+                                if hasattr(ex, "to_datetime") and callable(ex.to_datetime):
+                                    try:
+                                        override_tx_time = ex.to_datetime()
+                                    except Exception:
+                                        pass
+                        except PayloadTruncatedError:
+                            is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares"])
+                            if is_spanish:
+                                response_text = (
+                                    "⚠️ <b>Lista demasiado extensa:</b>\n\n"
+                                    "Por tu seguridad financiera, no se guardó ningún gasto parcial de este mensaje.\n"
+                                    "Por favor, divide la lista y envíala en 2 mensajes más cortos."
+                                )
+                            else:
+                                response_text = (
+                                    "⚠️ <b>List is too long:</b>\n\n"
+                                    "For your financial safety, no partial transactions were saved.\n"
+                                    "Please split your list and send it in 2 smaller messages."
+                                )
+                            try:
+                                tg_svc = TelegramService()
+                                await tg_svc.send_message(chat_id=chat_id, text=response_text)
+                            except Exception as e:
+                                logger.error(f"Failed to send direct reply to Telegram: {e}")
+                            return {"status": "ok", "response": response_text}
 
                         if unified.action == "undo_last":
                             parsed_query = ParsedQueryIntent(
@@ -676,6 +698,9 @@ class AIOrchestrator:
                                         family_currency=family_currency,
                                         ref_time=datetime.datetime.now(datetime.timezone.utc)
                                     )
+                                    batch_tx_ids = [r["id"] for r in batch_results if r.get("kind") == "transaction"]
+                                    if batch_tx_ids:
+                                        BatchTracker.set_last_batch(user_uuid, batch_tx_ids)
 
                                     is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares"])
                                     bills = [r for r in batch_results if r["kind"] == "bill"]
@@ -826,6 +851,8 @@ class AIOrchestrator:
                                         timestamp=transaction_time,
                                         tx_type=tx_type
                                     )
+                                    if tx_id:
+                                        BatchTracker.set_last_batch(user_uuid, [tx_id])
 
                                     try:
                                         user_info = await asyncio.to_thread(self._get_user_info, user_uuid)

@@ -1,0 +1,235 @@
+import asyncio
+from datetime import datetime, timezone
+from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
+from sqlmodel import Session, SQLModel, create_engine, select
+from sqlalchemy.pool import StaticPool
+
+from src.core.encryption import EncryptionService
+from src.db.models import User, Family, Transaction
+from src.services.extraction.models import PayloadTruncatedError
+from src.services.handlers.batch_tracker import BatchTracker
+from src.services.handlers.transaction_handler import handle_transaction_undo
+from src.services.query.models import ParsedQueryIntent
+from src.services.ai_orchestrator import AIOrchestrator
+from src.core.llm.providers.openai_provider import OpenAICompatibleProvider
+
+
+@pytest.fixture
+def db_setup(monkeypatch):
+    test_engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(test_engine)
+
+    monkeypatch.setattr("src.db.session.engine", test_engine)
+    monkeypatch.setattr("src.services.ai_orchestrator.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.transaction_handler.engine", test_engine)
+    monkeypatch.setattr("src.services.handlers.notion_handler.engine", test_engine)
+
+    encryption = EncryptionService()
+    family_id = uuid4()
+    user_id = uuid4()
+
+    with Session(test_engine) as session:
+        family = Family(id=family_id, name="Test Family", plan_type="free")
+        user = User(id=user_id, telegram_id=987654321, username="testuser", full_name="Test User", family_id=family_id)
+        session.add(family)
+        session.add(user)
+        session.commit()
+
+    return {"family_id": family_id, "user_id": user_id, "encryption": encryption, "engine": test_engine}
+
+
+def test_batch_tracker_basic_flow():
+    user_id = uuid4()
+    tx_ids = [uuid4(), uuid4(), uuid4()]
+
+    # Initially empty
+    assert BatchTracker.get_last_batch(user_id) is None
+
+    # Set batch
+    BatchTracker.set_last_batch(user_id, tx_ids)
+    retrieved = BatchTracker.get_last_batch(user_id)
+    assert retrieved == tx_ids
+
+    # Clear batch
+    BatchTracker.clear_last_batch(user_id)
+    assert BatchTracker.get_last_batch(user_id) is None
+
+
+def test_openai_provider_truncation_detection():
+    from pydantic import BaseModel
+
+    class DummySchema(BaseModel):
+        val: str
+
+    provider = OpenAICompatibleProvider(api_key="test_key")
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {
+        "choices": [
+            {
+                "message": {"content": '{"val": "truncated'},
+                "finish_reason": "length"
+            }
+        ]
+    }
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    with patch("src.core.llm.providers.openai_provider.get_http_client", return_value=mock_client):
+        with pytest.raises(PayloadTruncatedError) as exc_info:
+            asyncio.run(provider.complete_structured(
+                system_prompt="system",
+                user_prompt="user",
+                schema=DummySchema
+            ))
+        assert "exceeded token budget" in str(exc_info.value)
+
+
+def test_ai_orchestrator_truncation_guard_rejects_without_saving(db_setup):
+    orchestrator = AIOrchestrator()
+    user_id = str(db_setup["user_id"])
+    chat_id = 987654321
+
+    mock_extraction_svc = MagicMock()
+    mock_extraction_svc.classify_and_extract = AsyncMock(side_effect=PayloadTruncatedError("Token budget exceeded"))
+
+    sent_messages = []
+    async def mock_send(chat_id, text, **kwargs):
+        sent_messages.append(text)
+
+    mock_tg = MagicMock()
+    mock_tg.send_message = AsyncMock(side_effect=mock_send)
+
+    with patch("src.services.ai_orchestrator.ExtractionService", return_value=mock_extraction_svc):
+        with patch("src.services.ai_orchestrator.TelegramService", return_value=mock_tg):
+            asyncio.run(orchestrator.orchestrate(
+                user_id=user_id,
+                chat_id=chat_id,
+                text="*Gastos Septiembre\n-1/9 Empanadas $20000\n-2/9 Cheroga $4800",
+                audio_file_id=None
+            ))
+
+    assert len(sent_messages) == 1
+    assert "Lista demasiado extensa" in sent_messages[0] or "List is too long" in sent_messages[0]
+
+
+def test_batch_undo_removes_all_items_in_batch(db_setup):
+    test_engine = db_setup["engine"]
+    user_uuid = db_setup["user_id"]
+    family_id = db_setup["family_id"]
+    enc = db_setup["encryption"]
+
+    with Session(test_engine) as session:
+        tx1 = Transaction(
+            family_id=family_id,
+            user_id=user_uuid,
+            amount=enc.encrypt("20000.00 USD"),
+            concept=enc.encrypt("Empanadas"),
+            category="Food/Drink",
+            timestamp=datetime.now(timezone.utc),
+            type="expense"
+        )
+        tx2 = Transaction(
+            family_id=family_id,
+            user_id=user_uuid,
+            amount=enc.encrypt("6500.00 USD"),
+            concept=enc.encrypt("Manglar"),
+            category="Food/Drink",
+            timestamp=datetime.now(timezone.utc),
+            type="expense"
+        )
+        tx3 = Transaction(
+            family_id=family_id,
+            user_id=user_uuid,
+            amount=enc.encrypt("4800.00 USD"),
+            concept=enc.encrypt("Cheroga"),
+            category="Food/Drink",
+            timestamp=datetime.now(timezone.utc),
+            type="expense"
+        )
+        session.add_all([tx1, tx2, tx3])
+        session.commit()
+        session.refresh(tx1)
+        session.refresh(tx2)
+        session.refresh(tx3)
+        tx1_id, tx2_id, tx3_id = tx1.id, tx2.id, tx3.id
+
+    # Track in BatchTracker
+    BatchTracker.set_last_batch(user_uuid, [tx1_id, tx2_id, tx3_id])
+
+    # Perform bare /undo
+    result = handle_transaction_undo(
+        user_uuid=user_uuid,
+        parsed_query=None,
+        encryption_service=enc
+    )
+
+    # Verify response lists all 3 transactions
+    assert "Removed 3 transactions from your last message" in result
+    assert "Empanadas" in result
+    assert "Manglar" in result
+    assert "Cheroga" in result
+
+    # Verify all 3 transactions were deleted from DB
+    with Session(test_engine) as session:
+        remaining = session.exec(select(Transaction).where(Transaction.user_id == user_uuid)).all()
+        assert len(remaining) == 0
+
+    # Verify BatchTracker was cleared
+    assert BatchTracker.get_last_batch(user_uuid) is None
+
+
+def test_targeted_undo_only_removes_specified_item(db_setup):
+    test_engine = db_setup["engine"]
+    user_uuid = db_setup["user_id"]
+    family_id = db_setup["family_id"]
+    enc = db_setup["encryption"]
+
+    with Session(test_engine) as session:
+        tx1 = Transaction(
+            family_id=family_id,
+            user_id=user_uuid,
+            amount=enc.encrypt("20000.00 USD"),
+            concept=enc.encrypt("Empanadas"),
+            category="Food/Drink",
+            timestamp=datetime.now(timezone.utc),
+            type="expense"
+        )
+        tx2 = Transaction(
+            family_id=family_id,
+            user_id=user_uuid,
+            amount=enc.encrypt("4800.00 USD"),
+            concept=enc.encrypt("Cheroga"),
+            category="Food/Drink",
+            timestamp=datetime.now(timezone.utc),
+            type="expense"
+        )
+        session.add_all([tx1, tx2])
+        session.commit()
+        session.refresh(tx1)
+        session.refresh(tx2)
+        tx1_id, tx2_id = tx1.id, tx2.id
+
+    BatchTracker.set_last_batch(user_uuid, [tx1_id, tx2_id])
+
+    # Targeted undo for Cheroga
+    query = ParsedQueryIntent(intent="undo_last", target_concept="Cheroga")
+    result = handle_transaction_undo(
+        user_uuid=user_uuid,
+        parsed_query=query,
+        encryption_service=enc
+    )
+
+    assert "Cheroga" in result
+    with Session(test_engine) as session:
+        remaining = session.exec(select(Transaction).where(Transaction.user_id == user_uuid)).all()
+        assert len(remaining) == 1
+        assert remaining[0].id == tx1_id

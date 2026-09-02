@@ -187,9 +187,77 @@ def handle_transaction_undo(
     encryption_service: Optional[EncryptionService] = None,
     session_factory=Session
 ) -> str:
-    """Removes a recent transaction logged by the user, recalculating monthly balance."""
+    """Removes a recent transaction or entire batch logged by the user, recalculating monthly balance."""
     enc_service = encryption_service or EncryptionService()
+    has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
+
+    from src.services.handlers.batch_tracker import BatchTracker
+    last_batch_ids = BatchTracker.get_last_batch(user_uuid) if not has_target else None
+
     with session_factory(engine) as session:
+        if last_batch_ids and len(last_batch_ids) > 1:
+            txs_to_delete = session.exec(
+                select(Transaction).where(
+                    Transaction.id.in_(last_batch_ids),
+                    Transaction.user_id == user_uuid
+                )
+            ).all()
+            if txs_to_delete:
+                deleted_items = []
+                notion_page_ids = []
+                family_id = txs_to_delete[0].family_id
+                tx_time = txs_to_delete[0].timestamp
+                primary_curr = "USD"
+                for t in txs_to_delete:
+                    dec_amount = enc_service.decrypt(t.amount) or "0.00 USD"
+                    dec_concept = enc_service.decrypt(t.concept) or "Transaction"
+                    parts = dec_amount.strip().split()
+                    amt = float(parts[0]) if parts else 0.0
+                    curr = parts[1].upper() if len(parts) > 1 else "USD"
+                    primary_curr = curr
+                    ttype = getattr(t, "tx_type", getattr(t, "type", "expense")) or "expense"
+                    deleted_items.append({
+                        "concept": dec_concept,
+                        "amount": amt,
+                        "currency": curr,
+                        "category": t.category,
+                        "type": ttype
+                    })
+                    if t.notion_page_id:
+                        notion_page_ids.append(t.notion_page_id)
+                    session.delete(t)
+                session.commit()
+                BatchTracker.clear_last_batch(user_uuid)
+
+                for n_id in notion_page_ids:
+                    try:
+                        create_logged_task(safe_archive_notion_page(family_id, n_id), name="archive_notion_page")
+                    except Exception as e:
+                        logger.warning(f"Could not dispatch Notion archive task: {e}")
+
+                snapshot = get_monthly_cash_flow_snapshot(family_id, tx_time, primary_curr, encryption_service=enc_service, session_factory=session_factory)
+                formatted_in = format_currency(snapshot["total_in"], primary_curr, show_sign=False)
+                formatted_out = format_currency(snapshot["total_out"], primary_curr, show_sign=False)
+                formatted_net = format_currency(snapshot["net_savings"], primary_curr, show_sign=True)
+                pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
+
+                item_lines = []
+                for it in deleted_items:
+                    icon = "💰" if it["type"] == "income" else "💸"
+                    sign = "+" if it["type"] == "income" else "-"
+                    fmt_amt = format_currency(it["amount"], it["currency"], show_sign=False)
+                    item_lines.append(f"• {icon} {sign}{fmt_amt} ({html.escape(it['category'])} - {html.escape(it['concept'])})")
+
+                items_block = "\n".join(item_lines)
+                return (
+                    f"🗑️ <b>Removed {len(deleted_items)} transactions from your last message:</b>\n"
+                    f"{items_block}\n\n"
+                    f"📊 <b>Updated {snapshot['month_name']} Balance ({primary_curr}):</b>\n"
+                    f"• Total In: {formatted_in}\n"
+                    f"• Total Out: {formatted_out}\n"
+                    f"• Net Savings: {formatted_net}{pct_str}"
+                )
+
         t_amt = parsed_query.target_amount if parsed_query else None
         t_curr = parsed_query.target_currency if parsed_query else None
         t_cpt = parsed_query.target_concept if parsed_query else None
@@ -252,6 +320,7 @@ def handle_transaction_undo(
 
         session.delete(tx)
         session.commit()
+        BatchTracker.clear_last_batch(user_uuid)
 
     if notion_page_id:
         try:

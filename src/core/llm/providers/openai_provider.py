@@ -12,6 +12,7 @@ from src.core.config import settings
 from src.core.http_client import get_http_client
 from src.core.ai_client import sanitize_prompt_input
 from src.core.llm.base import BaseLLMProvider
+from src.services.extraction.models import PayloadTruncatedError
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,10 @@ logger = logging.getLogger(__name__)
 def is_retryable_provider_error(exception: BaseException) -> bool:
     """
     Only retries transient network errors, rate limits (429), and server errors (5xx).
-    Never retries client errors (400, 401, 403, 404, 422).
+    Never retries client errors (400, 401, 403, 404, 422) or deterministic truncation.
     """
+    if isinstance(exception, PayloadTruncatedError):
+        return False
     if isinstance(exception, (httpx.RequestError, asyncio.TimeoutError, ConnectionError, OSError)):
         return True
     if isinstance(exception, httpx.HTTPStatusError):
@@ -115,7 +118,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             ],
             "response_format": {"type": "json_object"},
             "temperature": temperature,
-            "max_tokens": 600
+            "max_tokens": 2000
         }
 
         logger.info(f"Calling Cloud AI model {self.model} at {self.base_url}...")
@@ -127,7 +130,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         )
         response.raise_for_status()
         data = response.json()
-        content = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
+        if choice.get("finish_reason") == "length":
+            raise PayloadTruncatedError("AI output exceeded token budget and was truncated.")
+        content = choice["message"]["content"]
         if not content:
             raise ValueError("Received empty response from Cloud AI provider")
         return content

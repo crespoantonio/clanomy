@@ -56,6 +56,11 @@ ACTIONS ('action'):
        - 'is_scheduled_bill': true ONLY if the item specifies an explicit future due date ("con vencimiento", "due on", "vence"). If no explicit future due date is given, set false (immediate expense).
      * Top-level scalar fields ('amount', 'category', 'concept', 'currency', 'type', 'transaction_date', 'due_date', 'is_scheduled_bill') populated from the first item.
 
+     * EXHAUSTIVE BATCH LIST EXTRACTION RULE:
+       - When the user sends a list of multiple transactions, expenses, or bills (e.g. 5, 9, 15 items), you MUST extract and return EVERY SINGLE ITEM in the 'items' array.
+       - NEVER truncate, summarize, or stop early after a few items.
+       - If there are 9 items in the user's message, 'items' MUST contain exactly 9 parsed items.
+
      * CURRENCY EXCHANGE / SWAP RULE:
        - If the user exchanged, swapped, sold, or bought currency (e.g. "Cambie 200 dolares por 300000 pesos", "I change 200 USD for 300000 ARS", "Cambié 200 dolares a 1500", "Vendí 200 dólares a 1500", "Compré 100 dólares con 150000 pesos"):
        - Emit EXACTLY 2 items under 'items' with action="log_transaction" and set top-level 'is_exchange': true:

@@ -702,7 +702,7 @@ class AIOrchestrator:
                                     if batch_tx_ids:
                                         BatchTracker.set_last_batch(user_uuid, batch_tx_ids)
 
-                                    is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares"])
+                                    is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares", "cobre", "cobré", "ingreso", "ingresos", "sueldo"])
                                     bills = [r for r in batch_results if r["kind"] == "bill"]
                                     txs = [r for r in batch_results if r["kind"] == "transaction"]
 
@@ -768,11 +768,20 @@ class AIOrchestrator:
                                         if txs:
                                             if parts:
                                                 parts.append("\n\n")
-                                            header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
+                                            incomes = [t for t in txs if t.get("tx_type") == "income"]
+                                            expenses = [t for t in txs if t.get("tx_type") != "income"]
+                                            if len(incomes) > 0 and len(expenses) == 0:
+                                                header = f"📋 <b>{len(txs)} Ingreso(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Income(s) Logged:</b>\n\n"
+                                            elif len(expenses) > 0 and len(incomes) == 0:
+                                                header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
+                                            else:
+                                                header = f"📋 <b>{len(txs)} Transacciones Registradas:</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Transactions Logged:</b>\n\n"
                                             parts.append(header)
                                             for t in txs:
-                                                fmt_amt = _format_currency(t["amount"], t["currency"])
-                                                parts.append(f"• 💸 <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
+                                                is_inc = t.get("tx_type") == "income"
+                                                icon = "💰" if is_inc else "💸"
+                                                fmt_amt = _format_currency(t["amount"], t["currency"], show_sign=is_inc)
+                                                parts.append(f"• {icon} <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
 
                                         if bills:
                                             tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'

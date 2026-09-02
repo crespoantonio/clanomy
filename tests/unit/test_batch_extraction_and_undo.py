@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from src.core.encryption import EncryptionService
 from src.db.models import User, Family, Transaction
-from src.services.extraction.models import PayloadTruncatedError
+from src.services.extraction.models import PayloadTruncatedError, ParsedItem, UnifiedResult
 from src.services.handlers.batch_tracker import BatchTracker
 from src.services.handlers.transaction_handler import handle_transaction_undo
 from src.services.query.models import ParsedQueryIntent
@@ -233,3 +233,104 @@ def test_targeted_undo_only_removes_specified_item(db_setup):
         remaining = session.exec(select(Transaction).where(Transaction.user_id == user_uuid)).all()
         assert len(remaining) == 1
         assert remaining[0].id == tx1_id
+
+
+@pytest.mark.anyio
+async def test_batch_confirmation_formatting_mixed_income_and_expense(db_setup):
+    user_uuid = db_setup["user_id"]
+    orchestrator = AIOrchestrator()
+
+    mock_unified = UnifiedResult(
+        action="log_transaction",
+        items=[
+            ParsedItem(concept="trabajo freelance", amount=450.0, currency="USD", type="income", category="Freelance"),
+            ParsedItem(concept="seña bicicleta", amount=25000.0, currency="ARS", type="income", category="Sale"),
+            ParsedItem(concept="verdulería", amount=3500.0, currency="ARS", type="expense", category="Food/Drink"),
+            ParsedItem(concept="nafta", amount=18000.0, currency="ARS", type="expense", category="Transport"),
+        ]
+    )
+
+    mock_tg = AsyncMock()
+    with patch("src.services.ai_orchestrator.ExtractionService.classify_and_extract", AsyncMock(return_value=mock_unified)), \
+         patch("src.services.ai_orchestrator.TelegramService.send_message", mock_tg):
+        
+        # Test in Spanish
+        await orchestrator.orchestrate(
+            user_id=str(user_uuid),
+            text="cobré 450 dólares freelance, 25000 de seña, gasté 3500 en verdulería y 18000 de nafta",
+            audio_file_id=None,
+            chat_id=12345
+        )
+
+        mock_tg.assert_called_once()
+        reply = mock_tg.call_args[1]["text"]
+
+        assert "4 Transacciones Registradas" in reply
+        assert "• 💰 <b>trabajo freelance:</b> +$450.00 USD (Freelance)" in reply
+        assert "• 💰 <b>seña bicicleta:</b> +$25,000.00 ARS (Sale)" in reply
+        assert "• 💸 <b>verdulería:</b> $3,500.00 ARS (Food/Drink)" in reply
+        assert "• 💸 <b>nafta:</b> $18,000.00 ARS (Transport)" in reply
+
+
+@pytest.mark.anyio
+async def test_batch_confirmation_formatting_incomes_only(db_setup):
+    user_uuid = db_setup["user_id"]
+    orchestrator = AIOrchestrator()
+
+    mock_unified = UnifiedResult(
+        action="log_transaction",
+        items=[
+            ParsedItem(concept="freelance", amount=500.0, currency="USD", type="income", category="Freelance"),
+            ParsedItem(concept="dividendos", amount=120.0, currency="USD", type="income", category="Investment"),
+        ]
+    )
+
+    mock_tg = AsyncMock()
+    with patch("src.services.ai_orchestrator.ExtractionService.classify_and_extract", AsyncMock(return_value=mock_unified)), \
+         patch("src.services.ai_orchestrator.TelegramService.send_message", mock_tg):
+        
+        await orchestrator.orchestrate(
+            user_id=str(user_uuid),
+            text="cobré 500 de freelance y 120 de dividendos",
+            audio_file_id=None,
+            chat_id=12345
+        )
+
+        mock_tg.assert_called_once()
+        reply = mock_tg.call_args[1]["text"]
+
+        assert "2 Ingreso(s) Registrado(s)" in reply
+        assert "• 💰 <b>freelance:</b> +$500.00 USD (Freelance)" in reply
+        assert "• 💰 <b>dividendos:</b> +$120.00 USD (Investment)" in reply
+
+
+@pytest.mark.anyio
+async def test_batch_confirmation_formatting_expenses_only(db_setup):
+    user_uuid = db_setup["user_id"]
+    orchestrator = AIOrchestrator()
+
+    mock_unified = UnifiedResult(
+        action="log_transaction",
+        items=[
+            ParsedItem(concept="almuerzo", amount=15.0, currency="USD", type="expense", category="Food/Drink"),
+            ParsedItem(concept="taxi", amount=10.0, currency="USD", type="expense", category="Transport"),
+        ]
+    )
+
+    mock_tg = AsyncMock()
+    with patch("src.services.ai_orchestrator.ExtractionService.classify_and_extract", AsyncMock(return_value=mock_unified)), \
+         patch("src.services.ai_orchestrator.TelegramService.send_message", mock_tg):
+        
+        await orchestrator.orchestrate(
+            user_id=str(user_uuid),
+            text="gastos de hoy: almuerzo 15 y taxi 10",
+            audio_file_id=None,
+            chat_id=12345
+        )
+
+        mock_tg.assert_called_once()
+        reply = mock_tg.call_args[1]["text"]
+
+        assert "2 Gasto(s) Registrado(s)" in reply
+        assert "• 💸 <b>almuerzo:</b> $15.00 USD (Food/Drink)" in reply
+        assert "• 💸 <b>taxi:</b> $10.00 USD (Transport)" in reply

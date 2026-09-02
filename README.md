@@ -10,13 +10,16 @@ Clanomy is an open-source, privacy-first, multi-tenant family financial assistan
 ## ✨ Features
 
 - **🎙️ Dual Natural Language Logging**: Log both expenses and income seamlessly via voice notes or text in **English and Spanish** (*"Coffee $4"*, *"Spent 45 on groceries"*, *"Gané 3000 de sueldo"*, *"Gasté 500 en helado"*).
+- **📦 Compound Batch Logging**: Report multiple items in a single voice note or text message (*"Gasté 18500 en el súper y 8000 en la farmacia"*); undo compound batches with a single `/undo`.
+- **⚡ Instant Fast-Path Slash Commands**: Zero-latency deterministic commands (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help`) running in Python/SQL in <40ms with $0 AI overhead.
+- **🕒 Household Timezone Localization**: Set your household's local timezone with `/timezone <IANA_TZ>` (e.g. `America/Argentina/Buenos_Aires`) so queries and daily summaries align with your local calendar day.
 - **🌐 Per-Family Currency & Multi-Currency Segregation**: Configure your household's default currency with `/currency <ISO_CODE>` (USD, ARS, MXN, EUR, CLP, COP, etc.). Multi-currency ledgers are strictly segregated without arbitrary exchange rate blending.
-- **🤖 Flexible AI Engine**: Runs 100% locally with Faster-Whisper + Ollama (LLaMA3) or via cloud inference with a single unified `AI_API_KEY` (Groq, OpenAI, Gemini).
-- **👨‍👩‍👧‍👦 Family Workspaces**: Multi-user ledger with per-member attribution, shared balances, and custom roles.
+- **🤖 Flexible AI Engine**: Runs 100% locally with Faster-Whisper + Ollama (LLaMA3) or via cloud inference with a single unified `AI_API_KEY` (Groq, OpenAI, Google Gemini).
+- **👨‍👩‍👧‍👦 Family Workspaces**: Multi-user ledger with per-member attribution, shared balances, and flat household transparency.
 - **📊 Conversational Financial Insights**: Ask queries in Spanish or English like *"How much did we spend on groceries this month?"* or *"¿Cuáles fueron mis gastos de los últimos 15 días?"*.
 - **🔄 Real-Time Notion Sync**: Two-way encrypted synchronization directly into your family's personal Notion database.
 - **🔐 Zero-Knowledge Security**: Application-level AES-256 field encryption for all transaction amounts and concepts before database persistence.
-- **📦 100% Free & Unrestricted Self-Hosting**: Deploy on your own hardware or cloud with zero paywalls, tiers, or artificial limits.
+- **🏠 100% Free & Unrestricted Self-Hosting**: Deploy on your own server or home lab using Podman (or Docker) with zero paywalls, tiers, or artificial restrictions.
 
 ---
 
@@ -26,6 +29,13 @@ When creating your bot with `@BotFather`, register the following command list:
 
 ```text
 start - Start Clanomy and view workspace status
+month - Full monthly breakdown for the household (/month last for prior month)
+me - Personal breakdown of expenses, income, and top categories
+today - Summary of transactions recorded today
+bills - View upcoming scheduled bills and due dates
+balance - Net cash flow and savings rate overview
+undo - Revert your latest recorded transaction or batch
+timezone - View or update household timezone (e.g. /timezone America/Argentina/Buenos_Aires)
 currency - View or update household default currency (e.g. /currency ARS)
 family - Manage family members and shared ledger
 invite - Generate invite link for household members
@@ -33,6 +43,7 @@ notion - Connect and mirror transactions to Notion
 export - Export financial logs to CSV or JSON
 help - View available commands and AI logging tips
 ```
+
 
 ---
 

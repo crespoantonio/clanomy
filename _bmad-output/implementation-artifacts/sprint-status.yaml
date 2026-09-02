@@ -135,4 +135,31 @@ development_status:
 
   epic-14: done
   14-1-prebuilt-fastpath-commands-and-hybrid-quota: done
-  epic-14-retrospective: optional
+  14-2-household-member-segregation-and-personal-isolation: done
+  14-3-multi-currency-ledger-aggregation-per-member: done
+  14-4-20-log-free-tier-quota-and-context-aware-pro-tips: done
+  epic-14-retrospective: done
+
+  epic-15: done
+  15-1-database-schema-and-migration-for-family-timezone: done
+  15-2-family-timezone-configuration-and-chat-command: done
+  15-3-timezone-aware-date-resolution-and-aggregations: done
+  epic-15-retrospective: optional
+
+  epic-16: done
+  16-1-compound-batch-transaction-pydantic-models-and-prompts: done
+  16-2-batch-tracker-and-multi-item-undo-orchestration: done
+  epic-16-retrospective: optional
+
+  epic-17: done
+  17-1-database-schema-and-migration-for-lemonsqueezy: done
+  17-2-lemonsqueezy-billing-service-and-checkout-generation: done
+  17-3-lemonsqueezy-webhook-verification-and-subscription-lifecycle: done
+  17-4-customer-billing-portal-and-tier-limits: done
+  epic-17-retrospective: optional
+
+  epic-18: done
+  18-1-multi-provider-whisper-speech-to-text-engine: done
+  18-2-openai-compatible-provider-and-gemini-support: done
+  18-3-static-prompt-caching-and-exponential-backoff-resilience: done
+  epic-18-retrospective: optional

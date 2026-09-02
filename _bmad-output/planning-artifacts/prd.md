@@ -46,9 +46,10 @@ The elimination of "App Fatigue" through a zero-friction entry model. While trad
 
 ### 2.2 Business Success
 *   **Initial Traction:** Achieve 50 active users logging ≥3 transactions (expenses or income) per week for 30 consecutive days.
-*   **Monetization Validation:** Validate willingness to pay for Premium Tiers (Family Groups, Notion Mirroring, Advanced Cash-Flow Analytics, Telegram Stars subscriptions).
-*   **Global Localization Adoption:** Validate multi-currency adoption across international households (e.g. ARS, EUR, MXN, BRL, USD).
-*   **Brand Authority:** Establish a reputation in the "Privacy-First" niche leveraging Estonian e-Residency trust, open-source transparency, and community funding (Ko-fi).
+*   **Monetization Validation (SaaS Mode):** Validate willingness to pay for Premium Tiers (Solo Pro at $4.99/mo, Family Pro at $9.99/mo) via Merchant of Record (Lemon Squeezy) with automated global sales tax/VAT remittance and domestic US ACH payouts direct to DolarApp USDc accounts.
+*   **Self-Hosting Sovereignty:** Ensure 100% feature and architectural parity for self-hosted community instances (`ENABLE_SUBSCRIPTIONS=false`), delivering unmetered, paywall-free operations.
+*   **Global Localization Adoption:** Validate multi-currency and household timezone adoption across international households (e.g. ARS, EUR, MXN, BRL, USD).
+*   **Brand Authority:** Establish a reputation in the "Privacy-First" niche leveraging open-source transparency, community funding (Ko-fi), and clean separation between open-core self-hosting and managed SaaS.
 
 ### 2.3 Technical Success
 *   **Extraction Accuracy:** 90% success rate extracting Type (`income` vs `expense`), Amount, Category, and Concept from natural language.
@@ -83,6 +84,15 @@ Mateo and Lucía live in Buenos Aires. Upon running `/start`, the onboarding flo
 ### 3.8 The Proactive Bill Management & Settlement (Sofía)
 Sofía tracks household obligations with Clanomy. At the beginning of the month, she logs: *"El 10 vence la tarjeta Visa 85000 y el 15 internet 18000"*. Clanomy schedules both bills. Mid-month, when Sofía asks *"¿Cómo venimos este mes?"*, Clanomy delivers her spending summary and proactively appends an alert: *"⚠️ Tienes facturas pendientes: Tarjeta Visa ($85,000 ARS) — Vence en 2 días. Si ya la pagaste, solo dime 'Pagué la visa'"*. Sofía replies *"Pagué la visa"*. Clanomy instantly settles the bill, records the expense, and updates her cash flow.
 
+### 3.9 Household Timezone Awareness & Relative Dates (Martín)
+Martín lives in Buenos Aires (`America/Argentina/Buenos_Aires`). He configures his household timezone with `/timezone America/Argentina/Buenos_Aires`. At 11:30 PM on a Sunday night, Martín messages *"¿Cuánto gastamos hoy?"*. Because the server operates on UTC, UTC is already Monday morning. However, Clanomy's `DateResolver` computes the query window using `America/Argentina/Buenos_Aires`, capturing all of Martín's Sunday transactions accurately without day-boundary spillover.
+
+### 3.10 Compound Batch Transaction Logging & Rollback (Camila)
+Camila returns from running errands and sends a single audio message: *"Gasté 18500 en el supermercado y 8000 en la farmacia"*. Clanomy's extraction engine detects a compound intent, parsing two discrete transactions in a single pass. Both records are atomically written with matching batch linkage. When Camila realizes she made an error and sends `/undo`, Clanomy rolls back both transactions together, acknowledging the batch rollback cleanly.
+
+### 3.11 Merchant of Record Checkout & Customer Portal (SaaS User Diego)
+Diego is using the hosted SaaS version of Clanomy and approaches his monthly 20-AI operation limit. He executes `/upgrade` and receives a dynamic Lemon Squeezy hosted checkout button pre-seeded with his `family_id`. Diego pays seamlessly with Apple Pay. Lemon Squeezy automatically remits local VAT and dispatches an HMAC-SHA256 signed webhook to Clanomy. Diego's family is instantly upgraded to Family Pro, unlocking unlimited AI interactions and generating a Customer Portal link for self-service subscription management.
+
 ## 4. Phased Development Roadmap
 
 ### Phase 1: MVP (V1) - [COMPLETED]
@@ -97,13 +107,16 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 *   **Notion Mirror:** Premium integration to push logs (both expenses and income) to user Notion databases using the official Python SDK.
 *   **Family Groups:** Multi-user sync and shared ledgers (Flat permission model).
 *   **Income & Net Cash Flow Tracking:** Dual-intent transaction logging, earnings summaries, and net balance calculation (Income − Expenses).
-*   **Monetization & Telegram Stars:** In-app auto-renewing subscriptions (`/upgrade`), 60-day trial lifecycle scheduler, and quota gating.
+*   **Merchant of Record (Lemon Squeezy) Migration:** Replaced prototype Telegram Stars (`XTR`) with Lemon Squeezy MoR hosted checkout, automated webhook ingestion, customer billing portal, and domestic US ACH payouts (DolarApp USDc) with zero forced pesification.
 *   **Multi-Currency & Bilingual Localization:** Household default currency (`/currency`), dynamic currency resolution, and full Spanish/English support.
+*   **Household Timezone Localization:** Per-family timezone setting (`/timezone`), database migration `0008`, and timezone-aware dynamic date resolution (`DateResolver`).
+*   **Compound Batch Transaction Extraction:** Multi-transaction parsing from single voice/text inputs and atomic multi-item batch undo (`BatchTracker`).
 *   **Scheduled Obligations & Zero-Amount Settlement:** `ScheduledBill` tracking, due dates, conversational settlement shortcuts, and proactive status alerts.
 *   **Enterprise Security Hardening:** Remediation of SEC-01 through SEC-06 (clean workspace isolation on leave, HTML entity escaping, prompt injection defenses, per-user concurrency locking, bounded queries, Cloudflare Origin Shielding).
 *   **Modular Architecture Decomposition:** Clean domain decomposition across `core/llm/`, `billing/`, `extraction/`, `query/`, and `handlers/` with zero backwards-compatibility cruft.
-*   **Pluggable LLM Provider Factory:** Unified `BaseLLMProvider` layer enabling seamless switching between local Ollama and cloud OpenAI-compatible endpoints (e.g. Groq Cloud, OpenAI) via environment variables.
-*   **Hybrid AI & Deterministic Fallbacks:** Groq Cloud AI integration alongside local Ollama/Whisper, backed by rule-based regex fallback extraction.
+*   **Universal Multi-Provider AI Inference:** Unified `OpenAICompatibleProvider` supporting Groq Cloud, OpenAI, Together AI, Google Gemini, and Ollama, featuring static prompt caching and exponential backoff retry with jitter.
+*   **Universal Speech-to-Text Engine:** Decoupled `WhisperService` supporting local Faster-Whisper, Groq Whisper API (`whisper-large-v3`), and OpenAI Whisper API with graceful fallbacks.
+*   **Deterministic Fast-Path Commands & Hybrid Quota:** Slash commands (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help`) running in Python/SQL in <40ms with $0 AI token cost, alongside a 20-operation/month Free Tier AI allowance.
 *   **CI/CD Quality Gates & Migration Automation:** GitHub Actions automated test suites, PR guardrails, 85%+ coverage enforcement, and startup Alembic migrations.
 
 ### Phase 3: Vision (V3) - [UPCOMING]
@@ -176,6 +189,23 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 *   **FR40:** System guarantees functional and architectural parity between Self-Hosted mode (`ENABLE_SUBSCRIPTIONS=false`) and Multi-Tenant SaaS mode (`ENABLE_SUBSCRIPTIONS=true`). Self-hosted deployments run completely unlocked with zero paywalls, unlimited transactions, and bot allowlisting (`ALLOWED_TELEGRAM_USERS`).
 *   **FR41:** System provides a unified pluggable LLM provider abstraction (`BaseLLMProvider`) enabling instant switching between offline local Ollama and cloud OpenAI-compatible APIs (e.g. Groq, OpenAI) via standard environment variables.
 
+### 5.12 Household Timezone Support & Dynamic Temporal Resolution
+*   **FR42:** Users can configure and view their household's IANA timezone via `/timezone` and `/settimezone <IANA_TZ>` (e.g., `America/Argentina/Buenos_Aires`, `UTC`, `Europe/Madrid`), validating against standard timezone databases.
+*   **FR43:** System dynamically resolves natural language relative date queries (*"today"*, *"yesterday"*, *"last week"*, *"this month"*, *"el lunes pasado"*) and scheduled bill due dates strictly in the family's configured timezone before database UTC projection.
+
+### 5.13 Compound Batch Extraction & Atomic Multi-Transaction Rollback
+*   **FR44:** System extracts multiple discrete transactions (expenses or incomes) from a single compound voice note or text message, returning a validated `BatchTransactionExtractionResult` schema.
+*   **FR45:** System tracks transaction batches via `BatchTracker` and rolls back all transactions within the caller's most recent batch when `/undo` is triggered.
+
+### 5.14 Merchant of Record (Lemon Squeezy) Billing Engine (SaaS Mode)
+*   **FR46:** When running with `ENABLE_SUBSCRIPTIONS=true`, the system generates dynamic Lemon Squeezy hosted checkout URLs pre-seeded with custom passthrough metadata (`family_id`, `chat_id`).
+*   **FR47:** System verifies HMAC-SHA256 signatures (`x-signature`) on inbound Lemon Squeezy webhooks and synchronizes family subscription state across `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_paused`, `subscription_resumed`, and `subscription_expired` events.
+*   **FR48:** System generates customer billing portal URLs via the Lemon Squeezy API for subscribed families to manage payments, download VAT invoices, or update payment methods.
+
+### 5.15 Universal AI & Speech-to-Text Resilience
+*   **FR49:** System supports multiple Speech-to-Text backends via `WhisperProvider` (`local` Faster-Whisper, `groq` Whisper Large v3, and `openai` Whisper-1) with automatic audio validation and secure temporary file lifecycle.
+*   **FR50:** System supports structured OpenAI-compatible LLM providers (Groq, OpenAI, Google Gemini) featuring static prompt caching optimizations and exponential backoff retry with jitter on upstream 429/5xx errors.
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance
@@ -185,11 +215,14 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 ### 6.2 Security & Privacy
 *   **Encryption:** 100% of transaction descriptions, amounts, and scheduled obligations encrypted at rest using AES-256 (Fernet).
 *   **Local-First / Private Processing:** Zero persistent storage of raw audio or unencrypted financial data on third-party infrastructure.
-*   **Secrets:** All integration tokens (Notion/Bot/Groq) stored in encrypted environment variables.
+*   **Secrets:** All integration tokens (Notion/Bot/Groq/LemonSqueezy) stored in encrypted environment variables.
 *   **NFR9 (Multi-Currency Segregation):** Summaries and aggregations must cleanly segregate distinct currencies to prevent corrupt exchange-rate mixing.
 *   **NFR10 (Prompt Boundary Defense):** Untrusted user inputs must be stripped of markdown delimiters and fenced inside boundary tags.
 *   **NFR11 (Transactional Concurrency):** Rapid sequential mutations (`/undo`, corrections, rapid logs) must execute with deterministic ordering.
 *   **NFR12 (Origin Verification):** All webhook requests must prove origin authenticity before any payload processing occurs.
+*   **NFR14 (Timezone Boundary Consistency):** All financial boundary queries (start-of-day, start-of-month) must resolve against the household's configured timezone before database UTC projection to prevent time-shift errors.
+*   **NFR15 (Cryptographic Webhook Verification):** 100% of external billing webhooks must verify HMAC-SHA256 signatures before reading or acting upon request payloads.
+*   **NFR16 (Prompt Caching Invariance):** System prompts and tool definitions must maintain prefix stability to optimize upstream LLM prompt cache hit rates and reduce latency/cost.
 
 ### 6.3 Reliability & Quality
 *   **Persistence:** Transactional DB writes to ensure zero data loss on system failure.
@@ -197,3 +230,4 @@ Sofía tracks household obligations with Clanomy. At the beginning of the month,
 *   **Consistency:** Retry mechanisms for Notion mirroring (eventual consistency).
 *   **NFR13 (Zero-Downtime Fallback):** Offline regex extraction must achieve 100% fallback reliability for standard financial formats during AI outages.
 *   **Quality Gate:** Codebase must maintain ≥85% automated test coverage verified via CI.
+

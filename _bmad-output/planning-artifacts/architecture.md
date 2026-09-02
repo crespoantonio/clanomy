@@ -699,63 +699,140 @@ flowchart TD
         BaseLLM[BaseLLMProvider]
         Ollama[OllamaProvider]
         OpenAI[OpenAICompatibleProvider]
-        LLMFactory --> BaseLLM
-        BaseLLM --> Ollama
-        BaseLLM --> OpenAI
-    end
-
-    subgraph Transport ["API & Ingress"]
-        WebhookRoute[Telegram Webhook Router<br>src/api/routes/telegram.py]
-        Whisper[Decoupled WhisperService<br>Audio Bytes & Stream Ingestion]
-    end
-
-    subgraph Orchestration ["Coordination Layer"]
-        Orchestrator[AIOrchestrator<br>src/services/ai_orchestrator.py<br>Coordinates flow, delegates logic]
-    end
-
-    subgraph Handlers ["Domain Handlers (src/services/handlers/)"]
+       subgraph Handlers ["Domain Handlers (src/services/handlers/)"]
         TxHandler[transaction_handler.py<br>Undo, Edit, Target Lookup, Cash Flow]
+        BatchTracker[batch_tracker.py<br>Compound Batch IDs & Atomic Rollback]
         BillHandler[bill_handler.py<br>Settlement, NLP Payment Claim, Alerts]
         NotionHandler[notion_handler.py<br>Mirror, Update, Archive Tasks]
         CmdHandler[command_handler.py<br>Fastpath /commands]
-        FamilyHandler[family_handler.py<br>Family Group Lifecycle]
+        FamilyHandler[family_handler.py<br>Family Group Lifecycle & Timezones]
     end
 
-    subgraph Billing ["Billing Domain (src/services/billing/)"]
-        BillingService[TelegramBillingService<br>Stars Invoices, Pre-Checkout, Upgrades]
+    subgraph QueryEngine ["Query & Temporal Resolution (src/services/query/)"]
+        DateResolver[date_resolver.py<br>Timezone-Aware Bounds & NLP Dates]
+        Formatters[formatters.py<br>Multi-Currency Formatted Outputs]
+        QuerySvc[service.py<br>Aggregations & Filtered Queries]
+    end
+
+    subgraph Billing ["Billing Domain (src/services/billing/ & src/api/routes/)"]
+        LemonSqueezyRoute[lemonsqueezy.py<br>HMAC-SHA256 Signed Webhooks]
+        BillingService[LemonSqueezyBillingService<br>Hosted Checkout, Portal, Webhook Events]
     end
 
     WebhookRoute --> Orchestrator
-    WebhookRoute --> BillingService
+    WebhookRoute --> CmdHandler
+    LemonSqueezyRoute --> BillingService
     Orchestrator --> LLMFactory
     Orchestrator --> Whisper
     Orchestrator --> TxHandler
+    Orchestrator --> BatchTracker
     Orchestrator --> BillHandler
     Orchestrator --> NotionHandler
     CmdHandler --> TxHandler
+    CmdHandler --> DateResolver
+    CmdHandler --> Formatters
+    QuerySvc --> DateResolver
 ```
 
 1. **Unified LLM Provider Abstraction (`src/core/llm/`):**
    - **`BaseLLMProvider`**: Core abstract interface enforcing `generate()` and `extract_structured()`.
    - **`OllamaProvider`**: Native implementation for local, offline inference connecting to Ollama HTTP API (`/api/generate` and `/api/chat`).
-   - **`OpenAICompatibleProvider`**: Connects to OpenAI-compliant APIs (e.g. Groq Cloud, OpenAI, Together AI) supporting JSON-mode and structured schema enforcement.
+   - **`OpenAICompatibleProvider`**: Connects to OpenAI-compliant APIs (e.g. Groq Cloud, OpenAI, Together AI, Google Gemini) supporting JSON-mode and structured schema enforcement.
    - **`get_llm_provider()` Factory**: Dynamically instantiates the appropriate provider based on environment variables (`AI_API_KEY`, `OLLAMA_BASE_URL`, `AI_MODEL`), enabling zero-code transitions between self-hosted hardware and cloud infrastructure.
 
 2. **Domain Handlers Decomposition (`src/services/handlers/`):**
    - **`transaction_handler.py`**: Encapsulates targeted undo, field corrections (`amount`, `concept`, `category`, `type`), coupled currency exchange reversals, and multi-currency monthly cash-flow snapshots.
+   - **`batch_tracker.py`**: In-memory and session tracking of compound transaction batches, enabling atomic multi-item rollback when a user issues an `/undo`.
    - **`bill_handler.py`**: Encapsulates scheduled bill settlement when an expense is logged, zero-amount conversational payment claims (*"Pagué la tarjeta"*), and overdue bill reminder blocks.
    - **`notion_handler.py`**: Decouples asynchronous background mirroring, page property updates, and archival tasks from the request lifecycle.
-   - **`command_handler.py`**: Dedicated handling of fast-path slash commands with zero quota consumption.
-   - **`family_handler.py`**: Manages family creation, member invitation links, and tenant boundaries.
+   - **`command_handler.py`**: Dedicated handling of fast-path slash commands with zero quota consumption and <40ms execution.
+   - **`family_handler.py`**: Manages family creation, member invitation links, timezone configuration (`/timezone`), and tenant boundaries.
 
 3. **Decoupled Billing & Payment Domain (`src/services/billing/`):**
-   - **`TelegramBillingService`**: Isolates Telegram Stars invoice generation (`send_subscription_invoice`), pre-checkout query verification (`answer_pre_checkout_query`), and payment charge webhooks (`handle_successful_payment`).
-   - **`telegram_messages.py`**: Dedicated catalog of localized billing templates, tier descriptions, and payment receipts.
-   - **PR Guardrail Protection**: `.github/workflows/pr-guardrail.yml` strictly guards `src/services/billing/` to prevent unauthorized billing alterations from pull requests.
+   - **`LemonSqueezyBillingService`**: Isolates Merchant of Record (MoR) hosted checkout generation (`create_checkout_url`), HMAC-SHA256 signature verification (`verify_webhook_signature`), webhook event processing (`handle_webhook`), and customer billing portal URL generation (`get_customer_portal_url`).
+   - **`telegram_messages.py`**: Dedicated catalog of localized billing templates, tier descriptions, and upgrade prompt announcements.
+   - **PR Guardrail Protection**: `.github/workflows/pr-guardrail.yml` strictly guards `src/services/billing/` and billing configurations to prevent unauthorized billing alterations from pull requests.
 
 4. **Self-Hosted vs. Multi-Tenant SaaS Parity:**
    - **Identical Core Codebase:** Both operating models execute identical business logic across the same domain handlers.
-   - **Self-Hosted Mode (`ENABLE_SUBSCRIPTIONS=false`):** Bypasses all quota checks (`can_log_transaction` and `has_unlimited_access` return `True`), suppresses Stars billing invoices, and enables `ALLOWED_TELEGRAM_USERS` pre-inference allowlisting.
-   - **Multi-Tenant SaaS Mode (`ENABLE_SUBSCRIPTIONS=true`):** Enforces family monthly quotas, AES-256 field encryption, tenant isolation, and automated trial expiration lifecycles.
+   - **Self-Hosted Mode (`ENABLE_SUBSCRIPTIONS=false`):** Bypasses all quota checks (`can_log_transaction` and `has_unlimited_access` return `True`), suppresses all billing invoices/buttons, and enables `ALLOWED_TELEGRAM_USERS` pre-inference allowlisting.
+   - **Multi-Tenant SaaS Mode (`ENABLE_SUBSCRIPTIONS=true`):** Enforces family monthly quotas, AES-256 field encryption, tenant isolation, Lemon Squeezy subscription lifecycles, and automated trial expiration lifecycles.
 
+---
 
+### 10. Household Timezone Resolution Architecture (Epic 15)
+
+To ensure financial data integrity across global households without timezone bleeding:
+- **Database Schema (Migration `0008_add_timezone_support.py`):** Adds `timezone` (VARCHAR, default `"UTC"`) to the `family` table.
+- **Timezone Validation (`src/services/handlers/command_handler.py`):** Users configure household timezones via `/timezone <IANA_TZ>` (e.g., `America/Argentina/Buenos_Aires`, `Europe/Madrid`, `America/New_York`). The system validates against `zoneinfo.available_timezones()` with graceful error reporting.
+- **Dynamic Date Resolver (`src/services/query/date_resolver.py`):**
+  - Converts natural language temporal terms (*"today"*, *"yesterday"*, *"this week"*, *"this month"*, *"el lunes pasado"*, *"hace 3 días"*) into localized `datetime` windows based on `Family.timezone`.
+  - Computes localized day boundaries (`00:00:00` to `23:59:59.999999` in the family's timezone) and then projects those windows into UTC timestamps before passing them to SQL queries. This guarantees that transactions logged late at night are attributed to the correct calendar day regardless of server clock offsets.
+
+---
+
+### 11. Compound Batch Extraction & Atomic Rollback Architecture (Epic 16)
+
+Users frequently log multiple financial events in a single conversational message (*"Gasté 18500 en súper y 8000 en farmacia"*). To process compound inputs without asking the user to send multiple messages:
+- **Pydantic Extraction Models (`src/services/extraction/models.py`):**
+  - `TransactionExtractionResult`: Single transaction representation (`type`, `amount`, `currency`, `category`, `concept`, `date`).
+  - `BatchTransactionExtractionResult`: Compound container schema holding a list of `TransactionExtractionResult` objects.
+- **LLM Prompt Engineering (`src/services/extraction/prompts.py`):** Instructions guide the LLM to detect multiple transaction clauses, split them cleanly, and populate `BatchTransactionExtractionResult`.
+- **Atomic Batch Tracker (`src/services/handlers/batch_tracker.py`):**
+  - Records the list of generated `transaction_id` UUIDs for each incoming message batch.
+  - When the user runs `/undo` or asks to undo the last entry, `TransactionHandler` checks `BatchTracker`: if the latest event was a compound batch, all transactions belonging to that batch are rolled back atomically in a single database transaction, reporting the multi-item cancellation back to the user.
+
+---
+
+### 12. Merchant of Record (Lemon Squeezy) & Payout Architecture (Epic 17)
+
+For the hosted SaaS deployment (`ENABLE_SUBSCRIPTIONS=true`), Clanomy operates on a **Merchant of Record (MoR)** pipeline via Lemon Squeezy:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Telegram User
+    participant Bot as Clanomy API
+    participant LS as Lemon Squeezy (MoR)
+    participant DB as PostgreSQL
+    participant Bank as DolarApp ACH (Lead Bank)
+
+    User->>Bot: /upgrade
+    Bot->>LS: POST /v1/checkouts (custom: {family_id, chat_id})
+    LS-->>Bot: Checkout URL
+    Bot-->>User: Inline Button [💳 Upgrade to Pro]
+    User->>LS: Pays via Apple Pay / Credit Card
+    Note over LS: LS collects global VAT & issues customer invoice
+    LS->>Bot: POST /api/webhooks/lemonsqueezy (HMAC-SHA256 signature)
+    Bot->>Bot: Verify X-Signature with LEMONSQUEEZY_WEBHOOK_SECRET
+    Bot->>DB: UPDATE family SET plan_type='family_pro', subscription_status='active'
+    Bot->>User: Confirmation Message & Features Unlocked!
+    Note over LS,Bank: Payout Cycle: Domestic US ACH (0% fee) -> Lead Bank -> 100% USDc
+```
+
+- **Database Model (Migration `0009_add_lemonsqueezy_fields.py`):**
+  - `Family.lemonsqueezy_customer_id`: Lemon Squeezy customer reference.
+  - `Family.lemonsqueezy_subscription_id`: Active subscription identifier.
+  - `Family.lemonsqueezy_variant_id`: Plan tier variant (`solo_pro` vs `family_pro`).
+- **Webhook Processing (`src/api/routes/lemonsqueezy.py`):**
+  - Verifies HMAC-SHA256 signature on the raw request body using `LEMONSQUEEZY_WEBHOOK_SECRET`.
+  - Dispatches events to `LemonSqueezyBillingService`:
+    - `subscription_created`: Activates subscription plan and saves subscription identifiers.
+    - `subscription_updated`: Synchronizes status changes, upgrades/downgrades.
+    - `subscription_cancelled`: Marks status as cancelled while honoring paid period.
+    - `subscription_resumed`, `subscription_paused`, `subscription_expired`.
+- **Customer Self-Service Portal:** Generates direct billing portal URLs via the Lemon Squeezy API, empowering customers to download tax receipts or cancel subscriptions without administrative support.
+- **Payout Sovereignty:** Lemon Squeezy executes domestic US ACH payouts directly to Tony's DolarApp US Lead Bank account, crediting in **USDc** with 0% payout fee, avoiding local banking intermediaries and forced currency pesification.
+
+---
+
+### 13. Universal AI Inference & Speech-to-Text Resilience (Epic 18)
+
+- **Decoupled Whisper Engine (`src/services/whisper_service.py`):**
+  - `WhisperProvider` enum supports `local` (Faster-Whisper), `groq` (`whisper-large-v3`), and `openai` (`whisper-1`).
+  - Automatic validation of audio length and payload size (<25MB limit).
+  - Secure temporary audio file lifecycle ensuring zero orphaned `.ogg` or `.wav` files.
+- **Unified LLM Provider with Static Prompt Caching (`src/core/llm/providers/openai_provider.py`):**
+  - Single provider class supporting Groq Cloud, OpenAI, Together AI, and Google Gemini via OpenAI-compatible endpoints.
+  - **Static Prompt Caching Optimization:** System prompts and structured tool schemas maintain byte-level prefix invariance. This enables upstream LLM providers (e.g. Groq prompt cache, OpenAI cache) to hit existing prefix caches, slashing latency to <250ms and cutting operational token costs by up to 50%.
+  - **Exponential Backoff with Jitter:** Robust retry decorator intercepts HTTP 429 (Rate Limit) and 5xx upstream transient errors, applying jittered exponential backoff before failing over to the deterministic regex engine.

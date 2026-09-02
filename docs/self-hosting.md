@@ -62,6 +62,16 @@ TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN_FROM_BOTFATHER
 # Create a strong secret for Telegram to authenticate webhooks
 MESSAGING_WEBHOOK_SECRET=a_very_long_secure_random_string
 
+# Household defaults
+DEFAULT_CURRENCY=USD
+DEFAULT_TIMEZONE=UTC
+
+# Speech-to-Text backend: local (Faster-Whisper), groq, or openai
+WHISPER_PROVIDER=local
+
+# Guarantee 100% unlocked self-hosted instance (never requires payment or license key)
+ENABLE_SUBSCRIPTIONS=false
+
 # (Optional) Origin Shielding token if placing behind Cloudflare proxy/tunnel
 CLOUDFLARE_ORIGIN_SECRET=
 
@@ -73,21 +83,26 @@ ENABLE_DOCS=false
 
 Clanomy features a unified modular LLM provider layer (`src/core/llm/`). You can choose between **100% Local Inference** or **Lightweight Cloud Inference**:
 
-#### Option A: 100% Local Inference (Ollama)
-- Keeps all text processing completely on your own machine.
-- Requires ~8GB RAM for running LLaMA3 locally.
+#### Option A: 100% Local Inference (Ollama + Local Whisper)
+- Keeps all audio and text processing completely on your own hardware.
+- Requires ~8GB RAM for running LLaMA3 and Whisper locally.
 - Configuration in `.env`:
   ```env
+  WHISPER_PROVIDER=local
   OLLAMA_BASE_URL=http://ollama:11434
   AI_MODEL=llama3
   ```
 
-#### Option B: Lightweight Cloud Inference (Groq Cloud / OpenAI)
-- Extremely low memory footprint (<500MB RAM total), perfect for cheap $3–$5/month cloud VPS (e.g., Hetzner, DigitalOcean, Linode).
+#### Option B: Lightweight Cloud Inference (Groq Cloud / OpenAI / Gemini)
+- Extremely low memory footprint (<500MB RAM total), perfect for cheap $3–$5/month cloud VPS (e.g., Hetzner, DigitalOcean, Linode) or free tiers (Render).
 - Sub-second inference (<300ms) with zero GPU overhead.
+- Leverages upstream prompt caching and retry with jitter.
 - Configuration in `.env`:
   ```env
-  # Example using free Groq Cloud API (GROQ_API_KEY or AI_API_KEY)
+  # Fast cloud speech-to-text (Groq Whisper Large v3 or OpenAI Whisper-1)
+  WHISPER_PROVIDER=groq
+
+  # Unified OpenAI-compatible cloud LLM (Groq, OpenAI, Google Gemini)
   AI_API_KEY=gsk_your_groq_api_key_here
   AI_BASE_URL=https://api.groq.com/openai/v1
   AI_MODEL=llama-3.3-70b-versatile
@@ -98,7 +113,7 @@ Clanomy features a unified modular LLM provider layer (`src/core/llm/`). You can
 ### 5. Start the Stack
 Spin up the containers in detached mode:
 ```bash
-# If using Podman
+# If using Podman (Recommended)
 podman compose up -d --build
 
 # If using Docker
@@ -121,11 +136,13 @@ curl -F "url=https://YOUR_DOMAIN.COM/api/v1/telegram/webhook" \
 
 ### 7. Zero Limits Out-of-the-Box
 In self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`, default), Clanomy runs completely unrestricted:
-- **Unlimited transaction logging** (voice & text)
+- **Unlimited transaction logging** (voice & text, including compound batches)
+- **Instant fast-path slash commands** (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/timezone`) with <40ms response time
 - **Unlimited multi-member family workspaces**
 - **Notion real-time ledger synchronization**
-- **Natural language conversational cash-flow queries & exports**
-- **No subscription paywalls, trial timeouts, or Stars billing**
+- **Natural language conversational cash-flow queries & exports (CSV/JSON)**
+- **Zero subscription paywalls, artificial quotas, or trial timeouts**
+
 
 ### 8. Hardening Your Bot & User Allowlisting (Recommended)
 By default in Telegram, any bot created via BotFather is globally searchable. If a stranger searches for your bot handle, they could send messages or voice notes to it.

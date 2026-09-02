@@ -547,7 +547,101 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 5. Verify DB state (Optional):
    - Connect to PostgreSQL (`podman exec -it clanomy-db psql -U clanomy_user -d clanomy_db`).
    - Run: `SELECT plan_type, subscription_status FROM family;`
-   - Should yield `lifetime_pro` and `active`.
+---
+
+### 🧪 Test 16: Household Timezone Configuration & Dynamic Dates
+
+1. **View Current Household Timezone:**
+   - In your Telegram bot chat, send:
+     ```text
+     /timezone
+     ```
+   - **Expected Output:**
+     > `🕒 Household Timezone: UTC`
+     > `Current local time: 2026-09-02 20:30:00`
+2. **Update Household Timezone:**
+   - Send:
+     ```text
+     /timezone America/Argentina/Buenos_Aires
+     ```
+   - **Expected Output:**
+     > `✅ Timezone updated to America/Argentina/Buenos_Aires!`
+     > `Your transactions and daily summaries will now align with local midnight.`
+3. **Verify Invalid Timezone Rejection:**
+   - Send:
+     ```text
+     /timezone Atlantis/LostCity
+     ```
+   - **Expected Output:**
+     > `❌ Invalid timezone: Atlantis/LostCity. Please use a valid IANA timezone name (e.g. America/Argentina/Buenos_Aires, Europe/Madrid, America/New_York).`
+4. **Test Timezone-Aware Queries:**
+   - Log an expense late at night (e.g. 11:30 PM local time).
+   - Send:
+     ```text
+     /today
+     ```
+   - Verify the expense is included in today's local summary rather than being shifted to tomorrow due to UTC offset.
+
+---
+
+### 🧪 Test 17: Compound Batch Transaction Logging & Rollback
+
+1. **Log Multiple Transactions in a Single Message:**
+   - Send text or voice note:
+     ```text
+     Gasté 18500 en el supermercado y 8000 en la farmacia
+     ```
+   - **Expected Output:**
+     The bot extracts both items and responds with a compound confirmation:
+     > `✅ Recorded 2 transactions:`
+     > `• 18,500.00 ARS for 'Supermercado' (Groceries)`
+     > `• 8,000.00 ARS for 'Farmacia' (Health/Pharmacy)`
+2. **Atomic Batch Undo:**
+   - Send:
+     ```text
+     /undo
+     ```
+   - **Expected Output:**
+     The bot detects the batch linkage and rolls back both transactions together:
+     > `↩️ Undo successful: Rolled back 2 transactions from your last batch (Supermercado, Farmacia).`
+3. **Verify Single-Item Undo Behavior:**
+   - Log a single expense: `500 cafe`
+   - Send `/undo`
+   - **Expected Output:**
+     Reverts just the 500 cafe transaction.
+
+---
+
+### 🧪 Test 18: Instant Fast-Path Commands (`/month`, `/me`, `/bills`, `/balance`)
+
+1. **Test Household Overview (`/month`):**
+   - Send:
+     ```text
+     /month
+     ```
+   - **Expected Output:**
+     Instant response (<40ms) showing household income, expenses, net balance, and `👥 Member Breakdown` attributing earnings and expenses to each family member without AI token usage.
+2. **Test Prior Month Overview (`/month last`):**
+   - Send:
+     ```text
+     /month last
+     ```
+   - **Expected Output:**
+     Full breakdown for the previous calendar month.
+3. **Test Personal Isolation (`/me`):**
+   - Send:
+     ```text
+     /me
+     ```
+   - **Expected Output:**
+     Displays strictly your personal financial overview, net savings, and top 4 expense categories, isolating your personal metrics even within a large family workspace.
+4. **Test Net Cash Flow (`/balance`):**
+   - Send:
+     ```text
+     /balance
+     ```
+   - **Expected Output:**
+     Clear cash flow overview: Total Earned, Total Spent, and Net Savings percentage.
 
 ---
 

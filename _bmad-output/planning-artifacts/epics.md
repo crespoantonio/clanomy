@@ -53,6 +53,21 @@ FR32: In-memory query decryption bounds record size to prevent resource exhausti
 FR33: Cloudflare Origin Shield and security headers protect webhook ingress.
 FR34: System supports hybrid AI inference (local Ollama/Whisper + Groq cloud inference).
 FR35: Deterministic regex fallback provides zero-downtime classification and extraction when AI inference is unavailable.
+FR36: Pre-built deterministic slash commands execute purely in Python/SQL in <50ms with zero AI token consumption.
+FR37: `/month` generates household overview with member-by-member segregation and multi-currency isolation.
+FR38: `/me` isolates caller's personal income, expenses, net savings, and category distribution.
+FR39: Free tier enforces 20 monthly AI operations for natural text, while pre-built commands remain 100% free and unlimited.
+FR40: Functional and architectural parity between self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`) and SaaS mode (`ENABLE_SUBSCRIPTIONS=true`).
+FR41: Unified pluggable LLM provider abstraction (`BaseLLMProvider`) enabling instant switching between offline and cloud inference.
+FR42: Users can configure and view household timezone via `/timezone` and `/settimezone <IANA_TZ>`.
+FR43: Dynamic timezone-aware relative date query resolution and scheduled bill due dates strictly in family's local timezone.
+FR44: Compound batch extraction parsing multiple discrete transactions from single conversational inputs into `BatchTransactionExtractionResult`.
+FR45: Compound transaction rollback via `BatchTracker` enabling atomic multi-item `/undo`.
+FR46: Lemon Squeezy Merchant of Record hosted checkout generation with custom passthrough metadata (`family_id`, `chat_id`).
+FR47: Lemon Squeezy HMAC-SHA256 signed webhook processing for real-time subscription lifecycle management.
+FR48: Self-service customer billing portal URL generation for subscription management and invoice downloads.
+FR49: Universal Speech-to-Text multi-provider engine supporting local Faster-Whisper, Groq Whisper API, and OpenAI Whisper.
+FR50: Multi-provider LLM inference (Groq, OpenAI, Google Gemini, Ollama) featuring static prompt caching and exponential backoff retry with jitter.
 
 ### NonFunctional Requirements
 
@@ -69,6 +84,9 @@ NFR10: Untrusted user inputs stripped of markdown fences and isolated in boundar
 NFR11: Sequential mutations per user execute with deterministic serial ordering. (Transactional Concurrency)
 NFR12: Ingress webhooks verify origin authenticity before payload processing. (Origin Verification)
 NFR13: Offline regex engine achieves 100% fallback reliability during AI outages. (Zero-Downtime Fallback)
+NFR14: Financial boundary aggregations resolve against configured household timezone before UTC query projection. (Timezone Boundary Consistency)
+NFR15: Inbound billing webhooks cryptographically verify HMAC-SHA256 signatures before processing payloads. (Cryptographic Webhook Verification)
+NFR16: System prompts and tool definitions maintain prefix invariance to maximize upstream LLM prompt caching. (Prompt Caching Invariance)
 
 ### Additional Requirements
 
@@ -120,6 +138,21 @@ FR32: Epic 11 - In-memory query decryption bounds record size to prevent resourc
 FR33: Epic 11 - Cloudflare Origin Shield and security headers protect webhook ingress.
 FR34: Epic 12 - System supports hybrid AI inference (local Ollama/Whisper + Groq cloud inference).
 FR35: Epic 12 - Deterministic regex fallback provides zero-downtime classification and extraction.
+FR36: Epic 14 - Pre-built deterministic slash commands execute purely in Python/SQL in <50ms with zero AI token consumption.
+FR37: Epic 14 - `/month` generates household overview with member-by-member segregation and multi-currency isolation.
+FR38: Epic 14 - `/me` isolates caller's personal income, expenses, net savings, and category distribution.
+FR39: Epic 14 - Free tier enforces 20 monthly AI operations for natural text, while pre-built commands remain 100% free and unlimited.
+FR40: Epic 14 - Functional and architectural parity between self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`) and SaaS mode (`ENABLE_SUBSCRIPTIONS=true`).
+FR41: Epic 14 - Unified pluggable LLM provider abstraction (`BaseLLMProvider`) enabling instant switching between offline and cloud inference.
+FR42: Epic 15 - Users can configure and view household timezone via `/timezone` and `/settimezone <IANA_TZ>`.
+FR43: Epic 15 - Dynamic timezone-aware relative date query resolution and scheduled bill due dates strictly in family's local timezone.
+FR44: Epic 16 - Compound batch extraction parsing multiple discrete transactions from single conversational inputs into `BatchTransactionExtractionResult`.
+FR45: Epic 16 - Compound transaction rollback via `BatchTracker` enabling atomic multi-item `/undo`.
+FR46: Epic 17 - Lemon Squeezy Merchant of Record hosted checkout generation with custom passthrough metadata (`family_id`, `chat_id`).
+FR47: Epic 17 - Lemon Squeezy HMAC-SHA256 signed webhook processing for real-time subscription lifecycle management.
+FR48: Epic 17 - Self-service customer billing portal URL generation for subscription management and invoice downloads.
+FR49: Epic 18 - Universal Speech-to-Text multi-provider engine supporting local Faster-Whisper, Groq Whisper API, and OpenAI Whisper.
+FR50: Epic 18 - Multi-provider LLM inference (Groq, OpenAI, Google Gemini, Ollama) featuring static prompt caching and exponential backoff retry with jitter.
 
 ## Epic List
 
@@ -147,8 +180,8 @@ Enable multi-user collaboration. Families can create shared groups to track coll
 Integrate with external tools. Premium users can sync their local ledger to their Notion databases.
 **FRs covered:** FR12, FR13, NFR8.
 
-### Epic 7: Monetization & Subscriptions
-Enable in-app subscriptions using Telegram Stars. Free users can upgrade to Solo Pro or Family Pro to unlock unlimited transactions and premium features.
+### Epic 7: Monetization & Subscriptions (Historical Prototype)
+Initial subscription prototype using Telegram Stars (`XTR`). (Subsequently migrated to Lemon Squeezy Merchant of Record in Epic 17).
 **FRs covered:** FR1, FR10, FR12 (Monetization gating for features).
 
 ### Epic 8: Family Income & Net Cash Flow Tracking
@@ -174,6 +207,27 @@ Decompose monolithic services into decoupled domain packages (`extraction/`, `qu
 ### Epic 13: CI/CD Quality Automation & Open-Source Readiness
 Automate quality gates with GitHub Actions, PR guardrails, 85%+ code coverage enforcement, startup Alembic migrations, and community self-hosting and funding frameworks.
 **FRs covered:** NFR6, NFR12, Quality Gates.
+
+### Epic 14: Pre-Built Fast-Path Commands & Hybrid Quota Model
+Provide instant (<40ms) deterministic slash commands (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/help`) running directly in Python/SQL with zero AI token cost, full multi-currency segregation, member-by-member family transparency, personal cash-flow isolation, and a 20-operation/month Free Tier AI quota model.
+**FRs covered:** FR36, FR37, FR38, FR39, FR40, FR41, NFR1, NFR9.
+
+### Epic 15: Household Timezone Support & Dynamic Temporal Resolution
+Enable per-family IANA timezone configuration (`/timezone`), database migration `0008`, and dynamic localized date resolution for relative natural language queries and scheduled obligations.
+**FRs covered:** FR42, FR43, NFR14.
+
+### Epic 16: Compound Batch Transaction Extraction & Multi-Item Undo
+Support extracting multiple discrete transactions from single conversational voice/text messages, validating via `BatchTransactionExtractionResult`, and rolling back entire batches atomically with `BatchTracker`.
+**FRs covered:** FR44, FR45, NFR1, NFR11.
+
+### Epic 17: Merchant of Record (Lemon Squeezy) Subscription Engine & Cloud Billing Integration
+Replace prototype Telegram Stars with Lemon Squeezy MoR hosted checkout, HMAC-SHA256 signed webhook processing, customer portal URLs, database migration `0009`, and domestic US ACH payouts direct to DolarApp USDc accounts.
+**FRs covered:** FR46, FR47, FR48, NFR15.
+
+### Epic 18: Multi-Provider AI Inference Resilience, Prompt Caching & Speech-to-Text Fallbacks
+Support unified multi-provider STT (`WhisperService` across Faster-Whisper, Groq Whisper API, and OpenAI Whisper) and LLM inference (Groq, OpenAI, Google Gemini, Ollama) with static prompt caching and exponential backoff retry with jitter.
+**FRs covered:** FR49, FR50, NFR1, NFR2, NFR16.
+
 
 ---
 
@@ -1025,4 +1079,160 @@ So that I can maximize my usage and upgrade to Pro when my household volume grow
   - Free: *💡 Pro-tip: Type /month or /me anytime for an instant response that doesn't use your monthly AI quota!*
   - Pro: *💡 Pro-tip: Type /month or /me anytime for an instant response!*
 **And** when the 20-operation limit is reached, natural text logging is paused with an upgrade notice, but all slash commands (`/month`, `/me`, `/bills`, etc.) remain 100% operational.
+
+---
+
+## Epic 15: Household Timezone Support & Dynamic Temporal Resolution
+
+Enable per-family IANA timezone configuration, database migration `0008`, and dynamic localized date resolution for relative natural language queries and scheduled obligations.
+
+### Story 15.1: Database Schema & Migration for Family Timezone
+As a System Architect,
+I want the `family` table to persist each household's IANA timezone,
+So that queries and scheduled obligations reflect the family's geographic reality.
+
+**Acceptance Criteria:**
+**Given** Alembic migration `0008_add_timezone_support.py`
+**When** the migration runs on boot
+**Then** it adds a `timezone` VARCHAR column to `family` with a default value of `"UTC"`.
+**And** verifies backwards compatibility with existing workspaces.
+
+### Story 15.2: Household Timezone Configuration & Chat Command
+As a Household Admin,
+I want to view and update our household timezone using `/timezone`,
+So that our daily and monthly logs reset at our local midnight rather than UTC midnight.
+
+**Acceptance Criteria:**
+**Given** a user running `/timezone` or `/settimezone <IANA_TZ>` (e.g. `/timezone America/Argentina/Buenos_Aires`)
+**When** processed by `CommandHandler`
+**Then** the system validates the string against `zoneinfo.available_timezones()`.
+**And** updates `Family.timezone` and returns localized confirmation.
+**And** rejects invalid timezone strings with helpful examples.
+
+### Story 15.3: Timezone-Aware Date Resolution & Aggregations
+As a User,
+I want natural language queries like *"¿Cuánto gastamos hoy?"* or *"How much did we spend yesterday?"* to evaluate according to my local clock,
+So that evening transactions are never incorrectly counted towards the next day.
+
+**Acceptance Criteria:**
+**Given** a family configured with a non-UTC timezone (e.g. UTC-3)
+**When** a relative date query is processed by `DateResolver`
+**Then** the system converts local day/month boundaries into UTC timestamp query windows.
+**And** database aggregation queries return exact transactions matching the user's localized calendar window.
+
+---
+
+## Epic 16: Compound Batch Transaction Extraction & Multi-Item Undo
+
+Support extracting multiple discrete transactions from single conversational voice or text messages, validating via `BatchTransactionExtractionResult`, and rolling back entire batches atomically with `BatchTracker`.
+
+### Story 16.1: Compound Batch Transaction Pydantic Models & Prompts
+As an AI Engineer,
+I want the extraction service to recognize and parse multiple financial transactions from a single sentence or audio note,
+So that users do not need to send multiple messages when reporting errands.
+
+**Acceptance Criteria:**
+**Given** a user message describing multiple transactions (e.g. *"Gasté 18500 en súper y 8000 en farmacia"*)
+**When** processed by `ExtractionService`
+**Then** the LLM formats the response adhering to `BatchTransactionExtractionResult`.
+**And** validates each sub-transaction with amount, type, concept, category, and currency.
+
+### Story 16.2: Batch Tracker & Multi-Item Undo Orchestration
+As a User,
+I want to type `/undo` after logging multiple items in a single message and have all of them rolled back together,
+So that my ledger is restored to its exact previous state without needing repeated undo commands.
+
+**Acceptance Criteria:**
+**Given** a compound batch transaction logged via `AIOrchestrator`
+**When** `BatchTracker` records the batch transaction IDs
+**Then** a subsequent `/undo` command rolls back all transactions in that batch in a single database transaction.
+**And** responds to the user confirming the total count and concepts rolled back.
+
+---
+
+## Epic 17: Merchant of Record (Lemon Squeezy) Subscription Engine & Cloud Billing Integration
+
+Replace prototype Telegram Stars with Lemon Squeezy Merchant of Record (MoR) hosted checkout, HMAC-SHA256 signed webhook processing, customer portal URLs, database migration `0009`, and domestic US ACH payouts direct to DolarApp USDc accounts.
+
+### Story 17.1: Database Schema & Migration for Lemon Squeezy
+As a Developer,
+I want the database to store Lemon Squeezy customer and subscription identifiers,
+So that subscription lifecycles can be matched and managed deterministically.
+
+**Acceptance Criteria:**
+**Given** Alembic migration `0009_add_lemonsqueezy_fields.py`
+**When** applied to the database
+**Then** it adds `lemonsqueezy_customer_id`, `lemonsqueezy_subscription_id`, and `lemonsqueezy_variant_id` to the `family` table.
+
+### Story 17.2: Lemon Squeezy Billing Service & Checkout Generation
+As a SaaS User,
+I want to type `/upgrade` and receive a dynamic hosted checkout link with Apple Pay / Credit Card,
+So that I can upgrade without entering cryptocurrency tokens or navigating complex checkout flows.
+
+**Acceptance Criteria:**
+**Given** a user executing `/upgrade` in SaaS mode (`ENABLE_SUBSCRIPTIONS=true`)
+**When** `LemonSqueezyBillingService.create_checkout_url()` is called
+**Then** it requests a checkout from Lemon Squeezy with custom metadata (`family_id`, `chat_id`).
+**And** returns an inline button with the secure payment URL.
+
+### Story 17.3: Lemon Squeezy Webhook Verification & Subscription Lifecycle
+As a System Administrator,
+I want inbound webhooks from Lemon Squeezy to verify HMAC-SHA256 signatures and synchronize subscription states in real time,
+So that user accounts are automatically activated, renewed, or cancelled securely.
+
+**Acceptance Criteria:**
+**Given** an inbound HTTP POST to `/api/webhooks/lemonsqueezy`
+**When** `LemonSqueezyBillingService.verify_webhook_signature()` validates the `x-signature` header
+**Then** events (`subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_resumed`, `subscription_expired`) update the target family's `plan_type` and `subscription_status`.
+**And** unauthorized requests without valid HMAC signatures are rejected with HTTP 401.
+
+### Story 17.4: Customer Billing Portal & Tier Quota Management
+As a Subscribed Customer,
+I want a direct link to manage my billing, download VAT invoices, or cancel my subscription,
+So that I have full self-service control over my billing relationship.
+
+**Acceptance Criteria:**
+**Given** an active subscriber running `/billing` or requesting subscription management
+**When** `LemonSqueezyBillingService.get_customer_portal_url()` is invoked
+**Then** it fetches the authenticated Lemon Squeezy Customer Portal URL.
+**And** delivers it to the chat with privacy precautions.
+
+---
+
+## Epic 18: Multi-Provider AI Inference Resilience, Prompt Caching & Speech-to-Text Fallbacks
+
+Support unified multi-provider Speech-to-Text (`WhisperService` across Faster-Whisper, Groq Whisper API, and OpenAI Whisper) and LLM inference (Groq, OpenAI, Google Gemini, Ollama) featuring static prompt caching and exponential backoff retry with jitter.
+
+### Story 18.1: Multi-Provider Whisper Speech-to-Text Engine
+As a User,
+I want voice notes transcribed reliably whether running locally on personal hardware or in lightweight cloud environments,
+So that voice logging works seamlessly across all deployment targets.
+
+**Acceptance Criteria:**
+**Given** an incoming audio voice note
+**When** processed by `WhisperService`
+**Then** it routes transcription according to `WHISPER_PROVIDER` (`local`, `groq`, `openai`).
+**And** enforces audio payload validation (<25MB) and securely deletes temporary files.
+
+### Story 18.2: OpenAI-Compatible Provider & Gemini Support
+As an AI Engineer,
+I want a unified provider capable of interfacing with Groq Cloud, OpenAI, Together AI, and Google Gemini,
+So that the application can switch cloud LLM providers via simple environment variables without code modifications.
+
+**Acceptance Criteria:**
+**Given** configuration with `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL`
+**When** `get_llm_provider()` is initialized
+**Then** it instantiates `OpenAICompatibleProvider`.
+**And** supports structured Pydantic schema extraction and natural language query completion.
+
+### Story 18.3: Static Prompt Caching & Exponential Backoff Resilience
+As a Platform Operator,
+I want LLM requests to leverage upstream prefix prompt caching and handle transient rate limits gracefully,
+So that operating costs are minimized and transient provider outages do not disrupt user operations.
+
+**Acceptance Criteria:**
+**Given** repetitive system prompt templates for extraction and query generation
+**When** messages are sent to OpenAI-compatible endpoints
+**Then** static system prompt prefixes maintain byte invariance to maximize prompt cache hits.
+**And** upstream HTTP 429 and 5xx errors trigger jittered exponential backoff retries before falling back to deterministic regex extraction.
 

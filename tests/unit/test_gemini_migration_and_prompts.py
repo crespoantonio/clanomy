@@ -63,8 +63,8 @@ def test_settings_gemini_provider_defaults():
     )
     assert s.effective_ai_provider == "gemini"
     assert s.AI_BASE_URL == "https://generativelanguage.googleapis.com/v1beta/openai"
-    assert s.AI_MODEL == "gemini-2.0-flash"
-    assert s.AI_WHISPER_MODEL == "gemini-2.0-flash"
+    assert s.AI_MODEL == "gemini-2.5-flash-lite"
+    assert s.AI_WHISPER_MODEL == "gemini-2.5-flash-lite"
 
 
 def test_settings_groq_provider_defaults():
@@ -151,3 +151,38 @@ async def test_whisper_service_gemini_transcription():
          patch.object(Settings, "effective_ai_provider", "gemini"):
         text, lang = await service.transcribe(audio_bytes=b"fake_audio_bytes_data")
         assert text == "Almuerzo 15 dólares"
+
+
+def test_settings_gemini_auto_migrates_legacy_2_0_model():
+    s = Settings(
+        ENCRYPTION_KEY=TEST_ENCRYPTION_KEY,
+        TELEGRAM_BOT_TOKEN="mock_token",
+        MESSAGING_WEBHOOK_SECRET="mock_secret",
+        DATABASE_URL="postgresql+psycopg://user:pass@localhost/db",
+        AI_PROVIDER="gemini",
+        AI_API_KEY="AIzaSyMockKey",
+        AI_MODEL="gemini-2.0-flash",
+        AI_WHISPER_MODEL="gemini-2.0-flash"
+    )
+    assert s.AI_MODEL == "gemini-2.5-flash-lite"
+    assert s.AI_WHISPER_MODEL == "gemini-2.5-flash-lite"
+
+
+def test_openai_provider_cache_hit_logging(caplog):
+    import logging
+    from src.core.llm.providers.openai_provider import _log_token_usage
+
+    mock_usage_data = {
+        "usage": {
+            "prompt_tokens": 4876,
+            "completion_tokens": 64,
+            "total_tokens": 4940,
+            "prompt_tokens_details": {
+                "cached_tokens": 4876
+            }
+        }
+    }
+    with caplog.at_level(logging.INFO):
+        _log_token_usage(mock_usage_data, "gemini-2.5-flash-lite")
+    assert "[Prompt Cache HIT]" in caplog.text
+    assert "4876/4876 input tokens read from cache for gemini-2.5-flash-lite" in caplog.text

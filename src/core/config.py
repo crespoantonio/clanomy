@@ -83,10 +83,10 @@ class Settings(BaseSettings):
         if prov in ("gemini", "google"):
             if is_default_or_unset_base_url:
                 self.AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
-            if not self.AI_MODEL or self.AI_MODEL == "llama-3.3-70b-versatile":
-                self.AI_MODEL = "gemini-2.0-flash"
-            if not self.AI_WHISPER_MODEL or self.AI_WHISPER_MODEL == "whisper-large-v3-turbo":
-                self.AI_WHISPER_MODEL = "gemini-2.0-flash"
+            if not self.AI_MODEL or self.AI_MODEL in ("llama-3.3-70b-versatile", "gemini-2.0-flash"):
+                self.AI_MODEL = "gemini-2.5-flash-lite"
+            if not self.AI_WHISPER_MODEL or self.AI_WHISPER_MODEL in ("whisper-large-v3-turbo", "gemini-2.0-flash"):
+                self.AI_WHISPER_MODEL = "gemini-2.5-flash-lite"
         elif prov in ("openai", "chatgpt"):
             if is_default_or_unset_base_url:
                 self.AI_BASE_URL = "https://api.openai.com/v1"

@@ -31,6 +31,28 @@ def is_retryable_provider_error(exception: BaseException) -> bool:
     return False
 
 
+def _log_token_usage(data: dict, model: str) -> None:
+    """Logs token consumption and reports prompt cache hits when available."""
+    usage = data.get("usage")
+    if not isinstance(usage, dict):
+        return
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    prompt_details = usage.get("prompt_tokens_details")
+    cached_tokens = 0
+    if isinstance(prompt_details, dict):
+        cached_tokens = prompt_details.get("cached_tokens", 0)
+
+    if cached_tokens > 0:
+        logger.info(
+            f"[Prompt Cache HIT] {cached_tokens}/{prompt_tokens} input tokens read from cache for {model}"
+        )
+    elif prompt_tokens > 0:
+        logger.debug(
+            f"[Token Usage] {prompt_tokens} input, {completion_tokens} output for {model}"
+        )
+
+
 class OpenAIRateLimitWait(wait_base):
     """
     Dynamic wait strategy that inspects Retry-After or rate-limit reset headers
@@ -132,6 +154,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         )
         response.raise_for_status()
         data = response.json()
+        _log_token_usage(data, self.model)
         choice = data["choices"][0]
         if choice.get("finish_reason") == "length":
             raise PayloadTruncatedError("AI output exceeded token budget and was truncated.")
@@ -179,5 +202,6 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         )
         response.raise_for_status()
         data = response.json()
+        _log_token_usage(data, self.model)
         content = data["choices"][0]["message"]["content"]
         return content.strip() if content else ""

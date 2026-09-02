@@ -87,7 +87,7 @@ def check_and_reset_monthly_quota(family: Family, current_date: Optional[datetim
         return True
     return False
 
-def can_log_transaction(family: Family, limit: int = 30, current_date: Optional[datetime] = None) -> bool:
+def can_log_transaction(family: Family, limit: int = FREE_TIER_MONTHLY_LIMIT, current_date: Optional[datetime] = None) -> bool:
     """
     Determines if a family is allowed to log a new transaction.
     Performs lazy monthly counter reset if month has changed.

@@ -172,5 +172,33 @@ async def test_answer_pre_checkout_query_failure(telegram_service):
             mock_logger.assert_called_once()
             assert "Failed to answer pre-checkout query" in mock_logger.call_args[0][0]
 
+@pytest.mark.anyio
+async def test_post_with_retry_502_retry_success(telegram_service):
+    resp_502 = MagicMock()
+    resp_502.status_code = 502
+
+    resp_200 = MagicMock()
+    resp_200.status_code = 200
+    resp_200.raise_for_status.return_value = None
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.side_effect = [resp_502, resp_200]
+        resp = await telegram_service._post_with_retry("sendMessage", json={"chat_id": 123, "text": "hello"})
+        assert resp == resp_200
+        assert mock_post.call_count == 2
+
+@pytest.mark.anyio
+async def test_post_with_retry_502_exhaustion(telegram_service):
+    resp_502 = MagicMock()
+    resp_502.status_code = 502
+    resp_502.raise_for_status.side_effect = httpx.HTTPStatusError("502 Bad Gateway", request=MagicMock(), response=resp_502)
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = resp_502
+        with pytest.raises(httpx.HTTPStatusError):
+            await telegram_service._post_with_retry("sendMessage", max_attempts=3, json={"chat_id": 123, "text": "hello"})
+        assert mock_post.call_count == 3
+
+
 
 

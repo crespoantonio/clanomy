@@ -1,4 +1,5 @@
 import sys
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Response, Request, status
@@ -20,6 +21,13 @@ logger = logging.getLogger("clanomy")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Startup validation: Fail fast if SaaS mode is configured without Cloud AI credentials in non-test environments
+    if settings.ENABLE_SUBSCRIPTIONS and not (settings.AI_API_KEY and settings.AI_API_KEY.strip()):
+        import os
+        if not os.environ.get("PYTEST_CURRENT_TEST") and not settings.DATABASE_URL.startswith("sqlite"):
+            logger.critical("Startup aborted: Commercial SaaS mode (ENABLE_SUBSCRIPTIONS=true) requires AI_API_KEY for cloud inference.")
+            raise RuntimeError("Startup aborted: Missing AI_API_KEY for Groq Cloud deployment.")
+
     # Initialize database & run pending migrations
     try:
         run_migrations()
@@ -41,14 +49,26 @@ async def lifespan(app: FastAPI):
 
     yield
     
-    # Stop notification scheduler
+    # Graceful shutdown sequence for Render rolling deployments
+    logger.info("Shutdown signal received. Initiating graceful task draining...")
     try:
         await stop_notification_scheduler()
     except Exception as e:
         logger.warning(f"Error stopping notification scheduler: {e}", exc_info=True)
 
+    # Allow in-flight Groq inference & Telegram background webhook tasks to complete
+    await asyncio.sleep(3.0)
+
     # Close HTTP client pool
     await HTTPClientManager().close()
+
+    # Cleanly dispose database engine connection pool
+    try:
+        from src.db.session import engine
+        engine.dispose()
+        logger.info("PostgreSQL connection pool disposed cleanly.")
+    except Exception as e:
+        logger.warning(f"Error disposing database engine: {e}")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

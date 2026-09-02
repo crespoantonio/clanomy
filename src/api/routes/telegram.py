@@ -22,6 +22,7 @@ from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
 from src.services.billing.telegram_billing import TelegramBillingService
 from src.services.handlers.command_handler import CommandHandler
+from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 from src.services.subscription_service import (
     can_log_transaction,
     check_and_reset_monthly_quota,
@@ -240,14 +241,14 @@ async def telegram_webhook(
             is_admin = FamilyService().is_family_admin(family.id, user.id)
             if is_admin:
                 quota_msg = (
-                    "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
-                    "Your family has reached the limit of 20 free transaction logs for this month. "
+                    f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
+                    f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
                     "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
                 )
             else:
                 quota_msg = (
-                    "⛔ <b>Monthly Free Limit Reached (20/20 logs)</b>\n\n"
-                    "Your family has reached the limit of 20 free transaction logs for this month. "
+                    f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
+                    f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
                     "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
                 )
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
@@ -339,7 +340,7 @@ async def handle_failure(
             telegram_service = TelegramService()
             failure_msg = (
                 "⚠️ <b>Subscription Expired/Failed:</b> Your workspace payment failed or expired. "
-                "Your workspace has transitioned to the Free tier (30 logs/month). "
+                f"Your workspace has transitioned to the Free tier ({FREE_TIER_MONTHLY_LIMIT} logs/month). "
                 "All your historical data, past entries, and Notion sync remain 100% safe."
             )
             background_tasks.add_task(telegram_service.send_message, chat_id=admin_user.telegram_id, text=failure_msg)

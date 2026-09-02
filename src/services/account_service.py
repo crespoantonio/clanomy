@@ -52,7 +52,9 @@ class AccountService:
                 logger.info(f"[3s Audit] Account deletion completed in {duration:.2f}s for user_id={user_id}")
                 return True
         except Exception as e:
-            logger.error(f"Failed to delete account for user_id={user_id}. (Exception details omitted for security)")
+            from src.core.security import sanitize_exception_message
+            sanitized_err = sanitize_exception_message(e)
+            logger.error(f"Failed to delete account for user_id={user_id}: {sanitized_err}", exc_info=True)
             return False
 
     async def delete_account(self, user_id: UUID) -> bool:

@@ -7,6 +7,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from src.core.config import settings
 from src.db.models import Family, User
+from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 
 UNAUTHORIZED_ACCESS_MESSAGE = (
     "🔒 <b>Private Instance</b>\n\n"
@@ -53,7 +54,7 @@ SOLO_PRO_MEMBER_NOTICE = (
 
 REFUND_PROCESSED_MESSAGE = (
     "ℹ️ <b>Subscription Update:</b> Your payment was refunded. "
-    "Your workspace has transitioned to the Free tier (30 logs/month). "
+    f"Your workspace has transitioned to the Free tier ({FREE_TIER_MONTHLY_LIMIT} logs/month). "
     "All your historical data, past entries, and Notion sync remain 100% safe."
 )
 

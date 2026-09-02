@@ -127,28 +127,42 @@ async def test_openai_provider_enforces_max_tokens_payload():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.anyio
-async def test_whisper_service_falls_back_to_local_on_cloud_failure():
+async def test_whisper_service_cloud_failure_avoids_oom_on_cloud():
     service = WhisperService()
 
-    # Mock Cloud Whisper returning 429
+    # Mock Cloud Whisper returning 429 across retries
     mock_client = AsyncMock()
     req = httpx.Request("POST", "https://api.groq.com/openai/v1/audio/transcriptions")
     resp_429 = httpx.Response(429, request=req)
     mock_client.post.side_effect = httpx.HTTPStatusError("Rate limited", request=req, response=resp_429)
 
+    with patch("src.services.whisper_service.get_http_client", return_value=mock_client), \
+         patch("src.services.whisper_service.settings.AI_API_KEY", "gsk_valid_key"), \
+         patch.object(service, "get_model") as mock_get_model:
+
+        from src.services.whisper_service import InferenceError
+        with pytest.raises(InferenceError, match="Audio transcription service is momentarily busy"):
+            await service.transcribe(audio_bytes=b"fake_audio_bytes", language="en")
+        # Assert local model was NOT instantiated, preventing Render OOM
+        mock_get_model.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_whisper_service_uses_local_model_when_no_cloud_api_key():
+    service = WhisperService()
+
     mock_segment = MagicMock()
-    mock_segment.text = "fallback text"
+    mock_segment.text = "local fallback text"
     mock_info = MagicMock()
     mock_info.language = "en"
     mock_model = MagicMock()
     mock_model.transcribe.return_value = ([mock_segment], mock_info)
 
-    with patch("src.services.whisper_service.get_http_client", return_value=mock_client), \
-         patch("src.services.whisper_service.settings.AI_API_KEY", "gsk_valid_key"), \
+    with patch("src.services.whisper_service.settings.AI_API_KEY", None), \
          patch.object(service, "get_model", return_value=mock_model) as mock_get_model:
 
         text, lang = await service.transcribe(audio_bytes=b"fake_audio_bytes", language="en")
-        assert text == "fallback text"
+        assert text == "local fallback text"
         assert lang == "en"
         assert mock_get_model.called
         assert mock_model.transcribe.called

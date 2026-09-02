@@ -915,7 +915,9 @@ class AIOrchestrator:
                 response_text = "No message or audio was provided."
                 
         except Exception as e:
-            logger.error(f"Unexpected error in orchestrator for user {user_id}. (Exception details omitted for security)")
+            from src.core.security import sanitize_exception_message
+            sanitized_err = sanitize_exception_message(e)
+            logger.error(f"Unexpected error in orchestrator for user {user_id}: {sanitized_err}", exc_info=True)
             status = "error"
             response_text = "An unexpected error occurred while processing your request."
             

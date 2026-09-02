@@ -60,16 +60,16 @@ def test_has_unlimited_access_pro_and_trial():
     assert has_unlimited_access(f_expired) is False
 
 def test_can_log_transaction_free_tier_limits():
-    # Free tier under 30
+    # Free tier under 20
     f_free = Family(plan_type="free", monthly_tx_count=10, last_reset_month=datetime.now(timezone.utc).strftime("%Y-%m"))
     assert can_log_transaction(f_free) is True
 
-    # Free tier at limit 30
-    f_free_max = Family(plan_type="free", monthly_tx_count=30, last_reset_month=datetime.now(timezone.utc).strftime("%Y-%m"))
+    # Free tier at limit 20
+    f_free_max = Family(plan_type="free", monthly_tx_count=20, last_reset_month=datetime.now(timezone.utc).strftime("%Y-%m"))
     assert can_log_transaction(f_free_max) is False
 
     # Free tier beyond limit
-    f_free_over = Family(plan_type="free", monthly_tx_count=35, last_reset_month=datetime.now(timezone.utc).strftime("%Y-%m"))
+    f_free_over = Family(plan_type="free", monthly_tx_count=25, last_reset_month=datetime.now(timezone.utc).strftime("%Y-%m"))
     assert can_log_transaction(f_free_over) is False
 
 def test_can_log_transaction_lazy_monthly_reset():

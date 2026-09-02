@@ -114,45 +114,68 @@ class WhisperService:
             if not audio_bytes or len(audio_bytes) == 0:
                 raise InferenceError(f"Downloaded audio from {audio_url} is empty")
 
-        # 3. Cloud Whisper Inference (if AI_API_KEY is configured)
+        # 3. Cloud Whisper Inference (Primary for Render / Cloud deployments)
         if settings.AI_API_KEY and settings.AI_API_KEY.strip():
-            try:
-                inference_start_time = time.perf_counter()
-                client = get_http_client()
-                headers = {"Authorization": f"Bearer {settings.AI_API_KEY}"}
-                files = {"file": ("audio.ogg", audio_bytes, "audio/ogg")}
-                data = {
-                    "model": settings.AI_WHISPER_MODEL,
-                    "response_format": "json",
-                    "temperature": "0.0"
-                }
-                if language:
-                    data["language"] = language
-                
-                resp = await client.post(
-                    f"{settings.AI_BASE_URL}/audio/transcriptions",
-                    headers=headers,
-                    files=files,
-                    data=data,
-                    timeout=30.0
-                )
-                resp.raise_for_status()
-                result_data = resp.json()
-                text = (result_data.get("text") or "").strip()
-                detected_lang = language or "en"
-                inference_duration = time.perf_counter() - inference_start_time
-                total_duration = time.perf_counter() - total_start_time
-                logger.info(
-                    f"[3s Audit] Cloud Whisper transcription took {inference_duration:.4f} seconds "
-                    f"| Total transaction took {total_duration:.4f} seconds (model: {settings.AI_WHISPER_MODEL})"
-                )
-                return text, detected_lang
-            except Exception as e:
-                sanitized_err = sanitize_exception_message(e)
-                logger.warning(
-                    f"[Cloud Whisper] Transcription failed: {sanitized_err}. "
-                    "Falling back to local Faster-Whisper."
-                )
+            client = get_http_client()
+            headers = {"Authorization": f"Bearer {settings.AI_API_KEY}"}
+            files = {"file": ("audio.ogg", audio_bytes, "audio/ogg")}
+            data = {
+                "model": settings.AI_WHISPER_MODEL,
+                "response_format": "json",
+                "temperature": "0.0"
+            }
+            if language:
+                data["language"] = language
+
+            # Resilient retry loop for Groq Cloud Audio API (avoids fatal Render OOM on local fallback)
+            max_whisper_attempts = 3
+            for attempt in range(1, max_whisper_attempts + 1):
+                try:
+                    inference_start_time = time.perf_counter()
+                    resp = await client.post(
+                        f"{settings.AI_BASE_URL}/audio/transcriptions",
+                        headers=headers,
+                        files=files,
+                        data=data,
+                        timeout=30.0
+                    )
+                    if resp.status_code == 429 and attempt < max_whisper_attempts:
+                        retry_after = 1.5
+                        try:
+                            retry_after = float(resp.headers.get("retry-after", 1.5))
+                        except (ValueError, TypeError):
+                            pass
+                        logger.warning(
+                            f"[Groq Whisper 429] Rate limited on /audio/transcriptions. Retrying in {retry_after:.2f}s "
+                            f"(attempt {attempt}/{max_whisper_attempts})..."
+                        )
+                        await asyncio.sleep(retry_after)
+                        continue
+
+                    resp.raise_for_status()
+                    result_data = resp.json()
+                    text = (result_data.get("text") or "").strip()
+                    detected_lang = language or "en"
+                    inference_duration = time.perf_counter() - inference_start_time
+                    total_duration = time.perf_counter() - total_start_time
+                    logger.info(
+                        f"[3s Audit] Cloud Whisper transcription took {inference_duration:.4f} seconds "
+                        f"| Total transaction took {total_duration:.4f} seconds (model: {settings.AI_WHISPER_MODEL})"
+                    )
+                    return text, detected_lang
+                except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.ConnectError) as e:
+                    sanitized_err = sanitize_exception_message(e)
+                    if attempt == max_whisper_attempts:
+                        logger.error(f"[Cloud Whisper] All {max_whisper_attempts} attempts failed: {sanitized_err}")
+                        # On cloud deployments, raise InferenceError instead of triggering fatal OOM in CTranslate2
+                        raise InferenceError("Audio transcription service is momentarily busy. Please try again or send as text.") from e
+                    backoff = 1.0 * attempt
+                    logger.warning(f"[Cloud Whisper Retry] Attempt {attempt}/{max_whisper_attempts} failed: {sanitized_err}. Retrying in {backoff:.2f}s...")
+                    await asyncio.sleep(backoff)
+                except Exception as e:
+                    sanitized_err = sanitize_exception_message(e)
+                    logger.error(f"[Cloud Whisper] Unexpected error: {sanitized_err}")
+                    raise InferenceError("Audio transcription encountered an unexpected error. Please try again or send as text.") from e
 
         # 4. Local faster-whisper Fallback (Write audio to temporary file)
         # On Windows, we must close the file before passing the path to WhisperModel

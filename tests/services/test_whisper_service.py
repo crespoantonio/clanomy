@@ -220,3 +220,46 @@ async def test_transcribe_via_cloud_whisper(monkeypatch):
         assert text == "Coffee for four dollars"
         assert lang == "en"
 
+@pytest.mark.anyio
+async def test_transcribe_cloud_whisper_429_retry_success(monkeypatch):
+    monkeypatch.setattr(settings, "AI_API_KEY", "gsk_test_groq_key")
+    WhisperService._instance = None
+    service = WhisperService()
+
+    resp_429 = MagicMock()
+    resp_429.status_code = 429
+    resp_429.headers = {"retry-after": "0.01"}
+
+    resp_200 = MagicMock()
+    resp_200.status_code = 200
+    resp_200.json.return_value = {"text": "Lunch for twelve euros"}
+
+    with patch("src.core.http_client.HTTPClientManager.client") as mock_client, \
+         patch.object(service, "get_model") as mock_get_model:
+        mock_client.post = AsyncMock(side_effect=[resp_429, resp_200])
+        text, lang = await service.transcribe(audio_bytes=b"fake_audio_stream")
+        assert text == "Lunch for twelve euros"
+        assert lang == "en"
+        assert mock_client.post.call_count == 2
+        mock_get_model.assert_not_called()
+
+@pytest.mark.anyio
+async def test_transcribe_cloud_whisper_exhaustion_raises_inference_error_no_local_fallback(monkeypatch):
+    monkeypatch.setattr(settings, "AI_API_KEY", "gsk_test_groq_key")
+    WhisperService._instance = None
+    service = WhisperService()
+
+    resp_429 = MagicMock()
+    resp_429.status_code = 429
+    resp_429.headers = {"retry-after": "0.01"}
+    resp_429.raise_for_status.side_effect = httpx.HTTPStatusError("429 Rate Limit", request=MagicMock(), response=resp_429)
+
+    with patch("src.core.http_client.HTTPClientManager.client") as mock_client, \
+         patch.object(service, "get_model") as mock_get_model:
+        mock_client.post = AsyncMock(return_value=resp_429)
+        with pytest.raises(InferenceError, match="Audio transcription service is momentarily busy"):
+            await service.transcribe(audio_bytes=b"fake_audio_stream")
+        assert mock_client.post.call_count == 3
+        mock_get_model.assert_not_called()
+
+

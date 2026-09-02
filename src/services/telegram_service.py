@@ -33,6 +33,15 @@ class TelegramService:
                     if attempt < max_attempts:
                         await asyncio.sleep(retry_after)
                         continue
+                if response.status_code in (500, 502, 503, 504):
+                    if attempt < max_attempts:
+                        backoff = 0.5 * (2 ** (attempt - 1))
+                        logger.warning(
+                            f"[Telegram {response.status_code}] Transient server error on /{endpoint}. "
+                            f"Retrying in {backoff:.2f}s (attempt {attempt}/{max_attempts})..."
+                        )
+                        await asyncio.sleep(backoff)
+                        continue
                 response.raise_for_status()
                 return response
             except (httpx.TimeoutException, httpx.ConnectError, ConnectionError, OSError) as net_err:

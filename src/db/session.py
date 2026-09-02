@@ -8,8 +8,21 @@ from src.db.models import Family, User, Transaction, FamilyInvite  # Ensure mode
 
 logger = logging.getLogger(__name__)
 
-# Create engine
-engine = create_engine(settings.DATABASE_URL, echo=False)
+# Create engine with resilient cloud connection pooling
+engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+}
+
+if not settings.DATABASE_URL.startswith("sqlite"):
+    engine_kwargs.update({
+        "pool_recycle": 1800,
+        "pool_size": 10,
+        "max_overflow": 5,
+        "pool_timeout": 30.0,
+    })
+
+engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
 
 def run_migrations():
     """

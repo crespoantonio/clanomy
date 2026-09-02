@@ -163,7 +163,7 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 3. **Register the Webhook with Telegram:**
    Run the following `curl` command to link Telegram to your ngrok URL. Make sure to replace `<YOUR_BOT_TOKEN>`, `<YOUR_NGROK_URL>`, and `<YOUR_SECRET_TOKEN>`:
    ```powershell
-   curl.exe -F "url=https://b2aa-181-105-82-108.ngrok-free.app/api/v1/telegram/webhook" -F "secret_token=your_messaging_secret_token_here" https://api.telegram.org/bot8635507855:AAGC-sD9ZB_ar_1JExEu2oLAGE9fJFTeoJc/setWebhook
+   curl.exe -F "url=https://<YOUR_NGROK_URL>/api/v1/telegram/webhook" -F "secret_token=your_messaging_secret_token_here" https://api.telegram.org/botYOUR_TELEGRAM_BOT_TOKEN_HERE/setWebhook
    ```
    _Note: `YOUR_SECRET_TOKEN` must perfectly match the `MESSAGING_WEBHOOK_SECRET` in your `.env` file._
 

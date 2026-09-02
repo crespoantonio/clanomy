@@ -189,7 +189,7 @@ class CommandHandler:
         active_tz = self._resolve_active_timezone(user, family)
 
         ref_time = datetime.now(timezone.utc)
-        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz, future_inclusive=True)
 
         bills = await asyncio.to_thread(
             self.query_service._fetch_and_decrypt_scheduled_bills,

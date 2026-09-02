@@ -121,6 +121,20 @@ def test_date_resolver_branches():
     si, ei = resolve_date_range("custom", "invalid-date", "bad-date", reference_time=ref_time)
     assert si is None and ei is None
 
+    # Future inclusive this_month
+    sf, ef = resolve_date_range("this_month", reference_time=ref_time, future_inclusive=True)
+    assert sf.day == 1
+    assert ef.day == 31 and ef.month == 1
+
+    # Next month and next week
+    snm, enm = resolve_date_range("next_month", reference_time=ref_time)
+    assert snm.month == 2 and snm.day == 1
+    assert enm.month == 2 and enm.day == 28
+
+    snw, enw = resolve_date_range("next_week", reference_time=ref_time)
+    assert snw is not None and enw is not None
+    assert enw > snw
+
     # Comparison timeframe in January
     prev_tf, prev_s, prev_e = _resolve_comparison_timeframe("this_month", reference_time=ref_time)
     assert prev_tf == "last_month"

@@ -76,8 +76,8 @@ class QueryService:
         elif provider is not None:
             self.provider = provider
 
-    def _resolve_date_range(self, timeframe: str, start_date_str: Optional[str], end_date_str: Optional[str], reference_time: Optional[datetime] = None, tz_name: Optional[str] = None) -> tuple[Optional[datetime], Optional[datetime]]:
-        return resolve_date_range(timeframe, start_date_str, end_date_str, reference_time, tz_name)
+    def _resolve_date_range(self, timeframe: str, start_date_str: Optional[str], end_date_str: Optional[str], reference_time: Optional[datetime] = None, tz_name: Optional[str] = None, future_inclusive: bool = False) -> tuple[Optional[datetime], Optional[datetime]]:
+        return resolve_date_range(timeframe, start_date_str, end_date_str, reference_time, tz_name, future_inclusive=future_inclusive)
 
     def _decrypt_transaction(self, tx: Transaction, user_name: Optional[str] = None, user_handle: Optional[str] = None) -> Optional[DecryptedTransaction]:
         amount_str = self.encryption_service.decrypt(tx.amount)

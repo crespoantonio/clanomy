@@ -432,12 +432,17 @@ def format_bills_summary(
         lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
+    totals_by_curr: dict[str, float] = {}
     for b in bills:
+        totals_by_curr[b.currency] = totals_by_curr.get(b.currency, 0.0) + b.amount
         date_str = b.due_date.strftime("%b %d") if hasattr(b.due_date, "strftime") else str(b.due_date)
         u_str = f" • by {b.user_name}" if b.user_name else ""
         lines.append(f"🗓️ <b>{date_str}</b>: {b.amount:,.2f} {b.currency} — {b.concept} (<i>{b.category}</i>){u_str}")
         
     lines.append("")
+    total_parts = [f"{amt:,.2f} {curr}" for curr, amt in totals_by_curr.items()]
+    total_str = " + ".join(total_parts)
+    lines.append(f"📌 <b>Total Pending:</b> {total_str}")
     lines.append(f"📋 <i>{len(bills)} pending commitment(s)</i>")
     lines.append("")
     lines.append(format_timezone_footer(tz_name))

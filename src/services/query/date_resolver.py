@@ -192,7 +192,8 @@ def resolve_date_range(
     start_date_str: Optional[str] = None,
     end_date_str: Optional[str] = None,
     reference_time: Optional[datetime] = None,
-    tz_name: Optional[str] = None
+    tz_name: Optional[str] = None,
+    future_inclusive: bool = False
 ) -> tuple[Optional[datetime], Optional[datetime]]:
     tz = _get_zone_info(tz_name, reference_time)
     if reference_time:
@@ -233,6 +234,12 @@ def resolve_date_range(
         end_local = (start_local + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
         return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
+    elif tf_str in ["next_week", "la_proxima_semana", "proxima_semana", "próxima_semana"]:
+        days_to_next_mon = 7 - ref_local.weekday()
+        start_local = (ref_local + timedelta(days=days_to_next_mon)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end_local = (start_local + timedelta(days=6)).replace(hour=23, minute=59, second=59, microsecond=999999)
+        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
     elif tf_str in ["last_week", "la_semana_pasada", "semana_pasada"]:
         start_of_this_week = (ref_local - timedelta(days=ref_local.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
         start_local = start_of_this_week - timedelta(days=7)
@@ -241,9 +248,28 @@ def resolve_date_range(
 
     elif tf_str in ["this_month", "este_mes"]:
         start_local = ref_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_local = ref_local.replace(hour=23, minute=59, second=59, microsecond=999999)
+        if future_inclusive:
+            if ref_local.month == 12:
+                next_month_start = ref_local.replace(year=ref_local.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                next_month_start = ref_local.replace(month=ref_local.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_local = next_month_start - timedelta(microseconds=1)
+        else:
+            end_local = ref_local.replace(hour=23, minute=59, second=59, microsecond=999999)
         return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
+    elif tf_str in ["next_month", "el_proximo_mes", "proximo_mes", "siguiente_mes", "próximo_mes"]:
+        if ref_local.month == 12:
+            start_local = ref_local.replace(year=ref_local.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_month_start = start_local.replace(month=2, day=1)
+        elif ref_local.month == 11:
+            start_local = ref_local.replace(month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_month_start = ref_local.replace(year=ref_local.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start_local = ref_local.replace(month=ref_local.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_month_start = ref_local.replace(month=ref_local.month + 2, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_local = end_month_start - timedelta(microseconds=1)
+        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
     elif tf_str in ["last_month", "el_mes_pasado", "mes_pasado"]:
         first_of_this_month = ref_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

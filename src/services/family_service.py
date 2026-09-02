@@ -12,6 +12,11 @@ from sqlalchemy import Engine
 from src.db.session import engine as default_engine
 from src.db.models import Family, User, FamilyInvite, Transaction
 from src.core.config import settings
+from src.templates.telegram_messages import (
+    LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED,
+    format_leave_family_admin_prompt,
+    format_leave_family_member_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -381,10 +386,75 @@ class FamilyService:
             logger.error(f"Failed to remove member {target_identifier} by admin {admin_user_id}: {e}")
             return False, f"An error occurred while removing the member: {e}", None, None
 
+    def get_leave_family_preview(self, user_id: UUID) -> Dict[str, Any]:
+        """
+        Evaluates the user's role and workspace status to provide a role-aware explanation
+        or block the leave action before execution.
+        """
+        with Session(self.engine) as session:
+            user = session.get(User, user_id)
+            if not user or not user.family_id:
+                return {"allowed": False, "reason": "not_in_family", "message": "User not found or not in a family."}
+
+            current_family = session.get(Family, user.family_id)
+            if not current_family:
+                return {"allowed": False, "reason": "family_not_found", "message": "Family workspace not found."}
+
+            members = session.exec(
+                select(User).where(User.family_id == current_family.id).order_by(User.created_at.asc())
+            ).all()
+
+            if len(members) <= 1:
+                return {
+                    "allowed": False,
+                    "reason": "already_solo",
+                    "message": "ℹ️ You are already in your own personal workspace. There is no family group to leave."
+                }
+
+            is_admin = self.is_family_admin(current_family.id, user.id)
+            is_active_pro = (
+                current_family.subscription_status in ("active", "on_trial")
+                and current_family.plan_type in ("family_pro", "solo_pro")
+            )
+
+            if is_admin and is_active_pro:
+                return {
+                    "allowed": False,
+                    "reason": "active_pro_admin",
+                    "message": LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED
+                }
+
+            if is_admin:
+                remaining = [m for m in members if m.id != user.id]
+                new_admin = remaining[0] if remaining else None
+                new_admin_name = f"@{new_admin.username}" if (new_admin and new_admin.username) else ((new_admin.full_name or "Member") if new_admin else "Next Member")
+                prompt = format_leave_family_admin_prompt(current_family.name, new_admin_name)
+                return {
+                    "allowed": True,
+                    "requires_confirmation": True,
+                    "role": "admin",
+                    "prompt": prompt,
+                    "new_admin_name": new_admin_name
+                }
+
+            # Non-admin member
+            admin_user = next((m for m in members if self.is_family_admin(current_family.id, m.id)), members[0])
+            admin_name = f"@{admin_user.username}" if (admin_user and admin_user.username) else (admin_user.full_name or "Admin")
+            prompt = format_leave_family_member_prompt(current_family.name, admin_name)
+            return {
+                "allowed": True,
+                "requires_confirmation": True,
+                "role": "member",
+                "prompt": prompt,
+                "admin_name": admin_name
+            }
+
     def leave_family(self, user_id: UUID) -> Tuple[bool, str, Optional[Family]]:
         """
         Allows any member to leave their current family workspace with full personal transaction portability
         into a new personal workspace.
+        Admins of active Pro plans are blocked and directed to /billing.
+        Admins of Free plans transfer admin rights to the oldest remaining member.
         """
         start_time = time.time()
         try:
@@ -399,10 +469,28 @@ class FamilyService:
                     self._log_3s_audit("leave_family", start_time)
                     return False, "Family workspace not found.", None
 
-                members = session.exec(select(User).where(User.family_id == current_family.id)).all()
+                members = session.exec(select(User).where(User.family_id == current_family.id).order_by(User.created_at.asc())).all()
                 if len(members) <= 1:
                     self._log_3s_audit("leave_family", start_time)
                     return False, "You are already in your own personal workspace.", current_family
+
+                was_admin = self.is_family_admin(current_family.id, user.id)
+                is_active_pro = (
+                    current_family.subscription_status in ("active", "on_trial")
+                    and current_family.plan_type in ("family_pro", "solo_pro")
+                )
+
+                if was_admin and is_active_pro:
+                    self._log_3s_audit("leave_family", start_time)
+                    return False, LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED, None
+
+                # If leaving user was admin of a Free family, transfer leadership to the oldest remaining member
+                if was_admin:
+                    remaining_members = [m for m in members if m.id != user.id]
+                    if remaining_members:
+                        new_admin = remaining_members[0]
+                        new_admin.is_admin = True
+                        session.add(new_admin)
 
                 # Create a fresh isolated personal workspace
                 had_trial = user.has_used_trial
@@ -424,7 +512,6 @@ class FamilyService:
                 user.is_admin = True
                 session.add(user)
 
-
                 from sqlalchemy import update
                 session.exec(
                     update(Transaction)
@@ -443,6 +530,116 @@ class FamilyService:
         except Exception as e:
             logger.error(f"Failed to leave family for user_id={user_id}: {e}")
             return False, f"An error occurred while leaving the family: {e}", None
+
+    def split_family_on_downgrade(self, family_id: UUID) -> Tuple[Optional[Family], list]:
+        """
+        Splits a family workspace when the admin downgrades from Family Pro to Solo Pro.
+        The Admin retains family_id on Solo Pro (max 1 user).
+        All non-admin members are clustered into a new shared Family workspace on the Free tier,
+        with the oldest non-admin appointed as the new Admin.
+        All non-admin personal transactions are migrated to the new workspace.
+        """
+        start_time = time.time()
+        try:
+            with Session(self.engine, expire_on_commit=False) as session:
+                family = session.get(Family, family_id)
+                if not family:
+                    return None, []
+
+                members = session.exec(
+                    select(User).where(User.family_id == family_id).order_by(User.created_at.asc())
+                ).all()
+
+                admin_user = next((u for u in members if self.is_family_admin(family_id, u.id)), members[0] if members else None)
+                if not admin_user:
+                    return None, []
+
+                non_admins = [u for u in members if u.id != admin_user.id]
+                if not non_admins:
+                    return None, []
+
+                new_admin = non_admins[0]  # oldest non-admin
+                new_family_name = f"{new_admin.full_name or new_admin.username or 'Family'}'s Group"
+
+                new_family = Family(
+                    name=new_family_name,
+                    plan_type="free",
+                    default_currency=family.default_currency or "USD",
+                    monthly_tx_count=0
+                )
+                session.add(new_family)
+                session.flush()
+
+                non_admin_ids = []
+                for member in non_admins:
+                    member.family_id = new_family.id
+                    if member.id == new_admin.id:
+                        member.is_admin = True
+                    else:
+                        member.is_admin = False
+                    session.add(member)
+                    non_admin_ids.append(member.id)
+
+                from sqlalchemy import update
+                session.exec(
+                    update(Transaction)
+                    .where(Transaction.user_id.in_(non_admin_ids))
+                    .values(family_id=new_family.id)
+                )
+
+                session.commit()
+                session.refresh(new_family)
+                self._log_3s_audit("split_family_on_downgrade", start_time)
+                return new_family, non_admins
+        except Exception as e:
+            logger.error(f"Failed to split family {family_id} on downgrade: {e}")
+            return None, []
+
+    def graduate_member_to_new_workspace(self, user_id: UUID, target_plan: str = "solo_pro") -> Family:
+        """
+        Graduates an existing family member (usually non-admin) into their own sovereign workspace
+        when they upgrade to Solo Pro or Family Pro.
+        Migrates ONLY this user's personal transactions to the new workspace.
+        The host family remains completely intact.
+        """
+        start_time = time.time()
+        try:
+            with Session(self.engine, expire_on_commit=False) as session:
+                user = session.get(User, user_id)
+                if not user:
+                    raise ValueError(f"User {user_id} not found")
+
+                old_family = session.get(Family, user.family_id) if user.family_id else None
+                default_currency = (old_family.default_currency if old_family else None) or "USD"
+
+                new_family_name = f"{user.full_name or user.username or 'User'}'s Workspace"
+                new_family = Family(
+                    name=new_family_name,
+                    plan_type=target_plan,
+                    default_currency=default_currency,
+                    monthly_tx_count=0
+                )
+                session.add(new_family)
+                session.flush()
+
+                user.family_id = new_family.id
+                user.is_admin = True
+                session.add(user)
+
+                from sqlalchemy import update
+                session.exec(
+                    update(Transaction)
+                    .where(Transaction.user_id == user.id)
+                    .values(family_id=new_family.id)
+                )
+
+                session.commit()
+                session.refresh(new_family)
+                self._log_3s_audit("graduate_member_to_new_workspace", start_time)
+                return new_family
+        except Exception as e:
+            logger.error(f"Failed to graduate member {user_id} to new workspace: {e}")
+            raise
 
     def get_family_default_currency(self, family_id: UUID) -> str:
         """

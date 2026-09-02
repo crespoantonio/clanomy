@@ -52,9 +52,29 @@ async def handle_family_info(user_uuid: UUID) -> str:
         f"<b>Active Invites:</b> {info['active_invites_count']}"
     )
 
-async def handle_leave_family(user_uuid: UUID) -> str:
-    family_service = FamilyService()
-    success, msg, _ = await asyncio.to_thread(family_service.leave_family, user_uuid)
+async def handle_leave_family(
+    user_uuid: UUID,
+    raw_text: str = "",
+    family_service: Optional[FamilyService] = None
+) -> str:
+    fam_service = family_service or FamilyService()
+    
+    # Check for explicit confirmation
+    text_clean = (raw_text or "").strip().upper()
+    is_confirmed = (
+        text_clean in ("CONFIRM LEAVE", "CONFIRMAR SALIR", "/LEAVEFAMILY CONFIRM", "/LEAVEFAMILY CONFIRMAR")
+        or text_clean.endswith(" CONFIRM")
+        or text_clean.endswith(" CONFIRMAR")
+    )
+    
+    if not is_confirmed:
+        preview = await asyncio.to_thread(fam_service.get_leave_family_preview, user_uuid)
+        if not preview.get("allowed", True):
+            return preview.get("message", "Cannot leave family workspace.")
+        if preview.get("requires_confirmation", False):
+            return preview.get("prompt", "Please confirm if you wish to leave the family workspace.")
+
+    success, msg, _ = await asyncio.to_thread(fam_service.leave_family, user_uuid)
     return msg
 
 async def handle_remove_member(user_uuid: UUID, target_member: Optional[str]) -> str:

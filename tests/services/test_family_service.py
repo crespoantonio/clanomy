@@ -2,12 +2,18 @@ import pytest
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from sqlmodel import Session, create_engine, SQLModel
-from src.db.models import User, Family, FamilyInvite
+from src.db.models import User, Family, FamilyInvite, Transaction
 from src.services.family_service import FamilyService
+
+from sqlalchemy.pool import StaticPool
 
 @pytest.fixture(name="session")
 def session_fixture():
-    engine = create_engine("sqlite://")
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
+    )
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
@@ -430,5 +436,178 @@ def test_family_default_currency_get_and_set(session: Session, family_service: F
     # Invalid currency code raises ValueError
     with pytest.raises(ValueError, match="Invalid currency code"):
         family_service.set_family_default_currency(family.id, "INVALID_CODE")
+
+
+def test_leave_family_blocked_for_active_pro_admin(session: Session, family_service: FamilyService):
+    from src.templates.telegram_messages import LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED
+
+    family = Family(name="Pro Family", plan_type="family_pro", subscription_status="active")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=8001, username="pro_admin", family_id=family.id, is_admin=True)
+    member = User(telegram_id=8002, username="pro_member", family_id=family.id, is_admin=False)
+    session.add_all([admin, member])
+    session.commit()
+
+    # Preview should report blocked
+    preview = family_service.get_leave_family_preview(admin.id)
+    assert preview["allowed"] is False
+    assert preview["reason"] == "active_pro_admin"
+    assert preview["message"] == LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED
+
+    # Direct leave should be blocked
+    success, msg, _ = family_service.leave_family(admin.id)
+    assert success is False
+    assert msg == LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED
+
+
+def test_leave_family_admin_free_transfers_to_oldest(session: Session, family_service: FamilyService):
+    family = Family(name="Free Family", plan_type="free")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=9001, username="free_admin", family_id=family.id, is_admin=True)
+    member1 = User(telegram_id=9002, username="member_older", family_id=family.id, is_admin=False)
+    member2 = User(telegram_id=9003, username="member_younger", family_id=family.id, is_admin=False)
+    session.add_all([admin, member1, member2])
+    session.commit()
+
+    # Add transaction for admin
+    tx = Transaction(user_id=admin.id, family_id=family.id, amount=50.0, category="food", concept="lunch")
+    session.add(tx)
+    session.commit()
+
+    # Preview explains transfer to member_older
+    preview = family_service.get_leave_family_preview(admin.id)
+    assert preview["allowed"] is True
+    assert preview["requires_confirmation"] is True
+    assert "@member_older" in preview["prompt"]
+
+    # Admin confirms leave
+    success, msg, new_family = family_service.leave_family(admin.id)
+    assert success is True
+    assert new_family is not None
+    session.refresh(admin)
+    assert admin.family_id == new_family.id
+
+    # member1 should now be the new admin of the original family
+    session.refresh(member1)
+    assert member1.is_admin is True
+
+    # Admin's transaction moved to new_family
+    session.refresh(tx)
+    assert tx.family_id == new_family.id
+
+
+@pytest.mark.anyio
+async def test_handle_leave_family_two_step_confirmation(session: Session, family_service: FamilyService):
+    from src.services.handlers.family_handler import handle_leave_family
+
+    family = Family(name="Confirm Fam", plan_type="free")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=9101, username="admin_c", family_id=family.id, is_admin=True)
+    member = User(telegram_id=9102, username="member_c", family_id=family.id, is_admin=False)
+    session.add_all([admin, member])
+    session.commit()
+
+    # Step 1: Member calls without confirmation -> receives prompt
+    prompt_resp = await handle_leave_family(member.id, raw_text="/leavefamily", family_service=family_service)
+    assert "Confirm Leaving Family" in prompt_resp
+    assert "CONFIRM LEAVE" in prompt_resp
+
+    # Verify member is still in the family
+    session.refresh(member)
+    assert member.family_id == family.id
+
+    # Step 2: Member replies CONFIRM LEAVE -> executes leave
+    exec_resp = await handle_leave_family(member.id, raw_text="CONFIRM LEAVE", family_service=family_service)
+    assert "left the family group" in exec_resp.lower()
+
+    # Member is now in new family
+    session.refresh(member)
+    assert member.family_id != family.id
+
+
+def test_split_family_on_downgrade(session: Session, family_service: FamilyService):
+    family = Family(name="Big Family", plan_type="family_pro")
+    session.add(family)
+    session.commit()
+
+    admin = User(telegram_id=9201, username="admin_downgrade", family_id=family.id, is_admin=True)
+    m1 = User(telegram_id=9202, username="m1_senior", family_id=family.id, is_admin=False)
+    m2 = User(telegram_id=9203, username="m2_junior", family_id=family.id, is_admin=False)
+    session.add_all([admin, m1, m2])
+    session.commit()
+
+    tx_admin = Transaction(user_id=admin.id, family_id=family.id, amount=100.0, category="rent", concept="rent")
+    tx_m1 = Transaction(user_id=m1.id, family_id=family.id, amount=20.0, category="food", concept="food")
+    tx_m2 = Transaction(user_id=m2.id, family_id=family.id, amount=15.0, category="coffee", concept="coffee")
+    session.add_all([tx_admin, tx_m1, tx_m2])
+    session.commit()
+
+    # Execute split
+    new_fam, non_admins = family_service.split_family_on_downgrade(family.id)
+    assert new_fam is not None
+    assert len(non_admins) == 2
+    assert new_fam.plan_type == "free"
+
+    # Admin stays in original family
+    session.refresh(admin)
+    assert admin.family_id == family.id
+
+    # Non-admins moved to new family; m1 is the new admin
+    session.refresh(m1)
+    session.refresh(m2)
+    assert m1.family_id == new_fam.id
+    assert m1.is_admin is True
+    assert m2.family_id == new_fam.id
+    assert m2.is_admin is False
+
+    # Transactions correctly partitioned
+    session.refresh(tx_admin)
+    session.refresh(tx_m1)
+    session.refresh(tx_m2)
+    assert tx_admin.family_id == family.id
+    assert tx_m1.family_id == new_fam.id
+    assert tx_m2.family_id == new_fam.id
+
+
+def test_graduate_member_to_new_workspace(session: Session, family_service: FamilyService):
+    host_fam = Family(name="Host Fam", plan_type="family_pro")
+    session.add(host_fam)
+    session.commit()
+
+    admin = User(telegram_id=9301, username="host_admin", family_id=host_fam.id, is_admin=True)
+    grad_user = User(telegram_id=9302, username="graduating_user", family_id=host_fam.id, is_admin=False)
+    session.add_all([admin, grad_user])
+    session.commit()
+
+    tx_host = Transaction(user_id=admin.id, family_id=host_fam.id, amount=200.0, category="bills", concept="power")
+    tx_grad = Transaction(user_id=grad_user.id, family_id=host_fam.id, amount=30.0, category="books", concept="textbook")
+    session.add_all([tx_host, tx_grad])
+    session.commit()
+
+    # Graduate to Family Pro
+    new_fam = family_service.graduate_member_to_new_workspace(grad_user.id, target_plan="family_pro")
+    assert new_fam.plan_type == "family_pro"
+
+    # grad_user is admin in new workspace
+    session.refresh(grad_user)
+    assert grad_user.family_id == new_fam.id
+    assert grad_user.is_admin is True
+
+    # Host family is unchanged with admin
+    session.refresh(admin)
+    assert admin.family_id == host_fam.id
+
+    # Personal transactions cleanly migrated
+    session.refresh(tx_host)
+    session.refresh(tx_grad)
+    assert tx_host.family_id == host_fam.id
+    assert tx_grad.family_id == new_fam.id
+
 
 

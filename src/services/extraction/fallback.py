@@ -112,7 +112,7 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
     effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
 
     # 1. Query / Account / Family / Settings heuristics
-    if "delete account" in text_lower or "confirm delete" in text_lower or "create family" in text_lower or "family info" in text_lower or "my family" in text_lower or "invite" in text_lower or "leave family" in text_lower or "remove member" in text_lower:
+    if "delete account" in text_lower or "confirm delete" in text_lower or "create family" in text_lower or "family info" in text_lower or "my family" in text_lower or "invite" in text_lower or "leave family" in text_lower or "confirm leave" in text_lower or "confirmar salir" in text_lower or "remove member" in text_lower:
         return UnifiedResult(action="query")
 
     query_words = ["how much", "what did", "cuánto", "cuanto", "resumen", "summary", "breakdown", "export", "exportar", "balance", "cash flow", "flujo de caja", "familia", "family", "notion", "moneda", "currency"]

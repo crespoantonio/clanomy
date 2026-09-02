@@ -182,3 +182,69 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
         "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
         "Type /help anytime for Notion sync, family invites, and data export."
     )
+
+
+LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED = (
+    "⚠️ <b>Active Subscription Notice</b>\n\n"
+    "You are the billing administrator of this <b>Clanomy Pro</b> workspace, and your payment method is actively tied to this family.\n\n"
+    "To prevent accidental recurring charges for a workspace you no longer use, <b>you cannot leave while your subscription is active</b>.\n\n"
+    "<b>What to do:</b>\n"
+    "1. Use /billing to open the customer portal and cancel your subscription (or downgrade to Solo Pro).\n"
+    "2. Once your subscription is cancelled or converted, you can leave or manage your family."
+)
+
+
+def format_leave_family_admin_prompt(family_name: str, new_admin_name: str) -> str:
+    return (
+        f"⚠️ <b>Confirm Leaving as Family Admin</b>\n\n"
+        f"You are currently the Admin of <b>{family_name}</b>.\n\n"
+        "If you leave:\n"
+        f"• Leadership will automatically transfer to <b>{new_admin_name}</b> (the oldest member).\n"
+        "• The remaining members will continue sharing this family workspace.\n"
+        "• You will be moved to your own new personal workspace.\n"
+        "• <b>All your personal logged expenses & transactions will be safely transferred with you.</b>\n\n"
+        "To confirm leaving and transferring admin rights, please reply with:\n"
+        "<b>CONFIRM LEAVE</b> <i>(or /leavefamily confirm)</i>"
+    )
+
+
+def format_leave_family_member_prompt(family_name: str, admin_name: str) -> str:
+    return (
+        f"⚠️ <b>Confirm Leaving Family</b>\n\n"
+        f"You are currently a member of <b>{family_name}</b> (managed by {admin_name}).\n\n"
+        "If you leave:\n"
+        "• You will exit this shared family workspace.\n"
+        "• You will be placed in your own private personal workspace on the Free tier.\n"
+        "• <b>All your personal logged expenses & transactions will be safely transferred with you.</b>\n"
+        "• Other family members will no longer see your newly logged expenses.\n\n"
+        "To confirm leaving, please reply with:\n"
+        "<b>CONFIRM LEAVE</b> <i>(or /leavefamily confirm)</i>"
+    )
+
+
+def format_non_admin_upgrade_intro(family_name: str, admin_name: str) -> str:
+    return (
+        f"⭐️ <b>Upgrade to Your Own Sovereign Workspace</b>\n\n"
+        f"You are currently a member of <b>{family_name}</b> (managed by {admin_name}).\n\n"
+        "Upgrading will create your own independent workspace and <b>migrate all your personal transaction history with you</b>, without disrupting the current family group:\n\n"
+        "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging & private Notion sync.\n\n"
+        "2️⃣ <b>Family Pro ($9.99 / mo)</b> — Start your own family! Unlimited AI logging, shared ledger, and invite up to 4 members.\n\n"
+        "<i>Tap a button below to choose your plan and launch your new workspace:</i>"
+    )
+
+
+def format_family_split_notice(new_admin_name: str) -> str:
+    return (
+        "ℹ️ <b>Family Workspace Update</b>\n\n"
+        "The workspace admin has switched to a personal Solo Pro plan. You and the remaining family members have been placed into a new shared family workspace on the Free tier.\n\n"
+        f"👑 <b>{new_admin_name}</b> is your new workspace admin.\n\n"
+        "Type /family to view your group, or /upgrade to unlock Family Pro anytime!"
+    )
+
+
+def format_member_graduated_notice(member_name: str, plan_name: str) -> str:
+    return (
+        "ℹ️ <b>Family Member Graduated</b>\n\n"
+        f"<b>{member_name}</b> has upgraded to their own <b>{plan_name}</b> plan and transitioned to their own sovereign workspace. Their personal transactions have moved with them."
+    )
+

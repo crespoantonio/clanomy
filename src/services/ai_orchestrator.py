@@ -358,7 +358,7 @@ class AIOrchestrator:
             return await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
 
         elif intent_str == IntentType.LEAVE_FAMILY or intent_str == "leave_family":
-            return await handle_leave_family(user_uuid)
+            return await handle_leave_family(user_uuid, raw_text)
 
         elif intent_str == IntentType.REMOVE_MEMBER or intent_str == "remove_member":
             return await handle_remove_member(user_uuid, parsed_query.target_member)
@@ -540,7 +540,10 @@ class AIOrchestrator:
                     elif raw_lower.startswith("/createfamily") or raw_lower.startswith("create family"):
                         name = raw_text[13:].strip() if raw_lower.startswith("/createfamily") else raw_text[13:].strip()
                         deterministic_intent = ParsedQueryIntent(intent="create_family", family_name=name)
-                    elif raw_text == "/leavefamily" or raw_lower in ["leave family", "leave the family", "leave group"]:
+                    elif raw_text in ("/leavefamily", "/leavefamily confirm", "/leavefamily confirmar") or raw_lower in [
+                        "leave family", "leave the family", "leave group", "confirm leave", "confirmar salir",
+                        "leave family confirm", "leave family confirmar"
+                    ]:
                         deterministic_intent = ParsedQueryIntent(intent="leave_family")
                     elif raw_lower.startswith("/removemember") or raw_lower.startswith("remove member"):
                         target = raw_text[13:].strip() if raw_lower.startswith("/removemember") else raw_text[13:].strip()

@@ -80,7 +80,7 @@ def _is_query_or_command(text: Optional[str]) -> bool:
     t = text.strip().lower()
     if t.startswith("/"):
         return True
-    if "confirm delete" in t or "delete account" in t:
+    if "confirm delete" in t or "delete account" in t or "confirm leave" in t or "confirmar salir" in t:
         return True
     if t.startswith(("export", "notion", "invite", "create family", "leave family", "remove member", "family info", "my family", "upgrade")):
         return True

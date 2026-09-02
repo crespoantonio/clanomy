@@ -35,6 +35,9 @@ from src.templates.telegram_messages import (
     BILLING_PORTAL_MESSAGE,
     SUBSCRIPTION_CANCELLED_MESSAGE,
     SUBSCRIPTION_PAYMENT_FAILED_MESSAGE,
+    format_non_admin_upgrade_intro,
+    format_family_split_notice,
+    format_member_graduated_notice,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,7 +93,9 @@ class LemonSqueezyBillingService:
         self,
         family_id: str,
         chat_id: int,
-        plan_code: str
+        plan_code: str,
+        user_id: Optional[str] = None,
+        is_graduation: bool = False
     ) -> str:
         """
         Generates a hosted checkout session URL via Lemon Squeezy API,
@@ -127,13 +132,18 @@ class LemonSqueezyBillingService:
             "Content-Type": "application/vnd.api+json",
         }
 
+        custom_payload: Dict[str, Any] = {
+            "family_id": str(family_id).strip(),
+            "chat_id": str(chat_id),
+            "plan_type": tier.code,
+        }
+        if is_graduation and user_id:
+            custom_payload["is_graduation"] = "true"
+            custom_payload["user_id"] = str(user_id)
+
         attributes: Dict[str, Any] = {
             "checkout_data": {
-                "custom": {
-                    "family_id": str(family_id).strip(),
-                    "chat_id": str(chat_id),
-                    "plan_type": tier.code,
-                }
+                "custom": custom_payload
             }
         }
         if redirect_url:
@@ -253,7 +263,8 @@ class LemonSqueezyBillingService:
                 session=session,
                 family=target_family,
                 attributes=attributes,
-                customer_portal_url=customer_portal_url
+                customer_portal_url=customer_portal_url,
+                background_tasks=background_tasks
             )
 
         elif event_name == "subscription_cancelled":
@@ -318,6 +329,30 @@ class LemonSqueezyBillingService:
             except Exception:
                 renews_at = None
 
+        # Handle non-admin graduation into a new sovereign workspace
+        is_graduation = custom_data.get("is_graduation") == "true"
+        user_id_str = custom_data.get("user_id")
+        if is_graduation and user_id_str:
+            try:
+                graduating_uuid = uuid.UUID(user_id_str)
+                fam_service = FamilyService()
+                old_family_id = family.id
+                family = fam_service.graduate_member_to_new_workspace(graduating_uuid, target_plan)
+
+                # Notify previous family admin
+                old_members = session.exec(select(User).where(User.family_id == old_family_id)).all()
+                old_admin = next((u for u in old_members if fam_service.is_family_admin(old_family_id, u.id)), None)
+                if old_admin and old_admin.telegram_id and old_admin.id != graduating_uuid:
+                    graduating_user = session.get(User, graduating_uuid)
+                    member_name = f"@{graduating_user.username}" if (graduating_user and graduating_user.username) else ((graduating_user.full_name or "A member") if graduating_user else "A member")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=old_admin.telegram_id,
+                        text=format_member_graduated_notice(member_name, tier.name)
+                    )
+            except Exception as e:
+                logger.error(f"Error during member graduation in webhook: {e}")
+
         existing_members = session.exec(
             select(User).where(User.family_id == family.id)
         ).all()
@@ -369,7 +404,8 @@ class LemonSqueezyBillingService:
         session: Session,
         family: Family,
         attributes: dict,
-        customer_portal_url: Optional[str]
+        customer_portal_url: Optional[str],
+        background_tasks: Optional[BackgroundTasks] = None
     ) -> dict:
         status = attributes.get("status")
         if status in ("active", "on_trial"):
@@ -377,12 +413,30 @@ class LemonSqueezyBillingService:
         elif status in ("past_due", "unpaid", "paused", "cancelled", "expired"):
             family.subscription_status = status
 
+        was_family_pro = (family.plan_type == "family_pro")
+
         # Update tier plan and capacity if customer upgraded/downgraded in portal
         variant_id = attributes.get("variant_id")
         tier = self._resolve_tier(variant_id, custom_data=None)
         if tier:
             family.plan_type = tier.internal_plan
             family.max_members = tier.max_members
+
+            # If downgraded from family_pro to solo_pro, split remaining non-admins into a new Free family
+            if was_family_pro and tier.internal_plan == "solo_pro":
+                fam_service = FamilyService()
+                new_family, non_admins = fam_service.split_family_on_downgrade(family.id)
+                if new_family and non_admins and background_tasks:
+                    new_admin = non_admins[0]
+                    new_admin_name = f"@{new_admin.username}" if new_admin.username else (new_admin.full_name or "New Admin")
+                    split_notice = format_family_split_notice(new_admin_name)
+                    for member in non_admins:
+                        if member.telegram_id:
+                            background_tasks.add_task(
+                                self.telegram_service.send_message,
+                                chat_id=member.telegram_id,
+                                text=split_notice
+                            )
 
         renews_at_raw = attributes.get("renews_at") or attributes.get("ends_at")
         if renews_at_raw:
@@ -494,9 +548,26 @@ class LemonSqueezyBillingService:
         arg = "_".join(parts[1:]).lower() if len(parts) > 1 else ""
         family_id_str = str(family.id) if family else (str(user.family_id) if user and user.family_id else "")
 
+        fam_service = FamilyService()
+        is_admin = getattr(user, "is_admin", False)
+        if not is_admin and family and user and getattr(user, "id", None):
+            try:
+                is_admin = fam_service.is_family_admin(family.id, user.id)
+            except Exception:
+                is_admin = True
+        elif not user or not family:
+            is_admin = True
+
+        is_graduation = bool(family and not is_admin)
+        user_id_str = str(user.id) if (user and getattr(user, "id", None)) else None
+
         if arg in ("annual", "yearly", "annually"):
-            solo_annual_url = await self.create_checkout_url(family_id_str, chat_id, "solo_pro_annual")
-            fam_annual_url = await self.create_checkout_url(family_id_str, chat_id, "family_pro_annual")
+            solo_annual_url = await self.create_checkout_url(
+                family_id_str, chat_id, "solo_pro_annual", user_id=user_id_str, is_graduation=is_graduation
+            )
+            fam_annual_url = await self.create_checkout_url(
+                family_id_str, chat_id, "family_pro_annual", user_id=user_id_str, is_graduation=is_graduation
+            )
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": "💳 Solo Pro Annual ($49.99/yr)", "url": solo_annual_url}],
@@ -512,48 +583,88 @@ class LemonSqueezyBillingService:
             return {"status": "ok"}
 
         elif arg in ("solo", "solo_pro", "single"):
-            solo_url = await self.create_checkout_url(family_id_str, chat_id, "solo_pro")
+            solo_url = await self.create_checkout_url(
+                family_id_str, chat_id, "solo_pro", user_id=user_id_str, is_graduation=is_graduation
+            )
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": "💳 Upgrade to Solo Pro ($4.99/mo)", "url": solo_url}]
                 ]
             }
+            if is_graduation:
+                intro = (
+                    "⭐️ <b>Upgrade to Your Own Solo Pro Workspace</b>\n\n"
+                    "Upgrading will create your own personal workspace and migrate all your personal transactions with you.\n\n"
+                    "Tap below to complete your checkout with Card, Apple Pay, or Google Pay:"
+                )
+            else:
+                intro = "⭐️ <b>Upgrade to Clanomy Solo Pro</b>\n\nTap below to complete your upgrade with Card, Apple Pay, or Google Pay:"
+
             background_tasks.add_task(
                 self.telegram_service.send_message,
                 chat_id=chat_id,
-                text="⭐️ <b>Upgrade to Clanomy Solo Pro</b>\n\nTap below to complete your upgrade with Card, Apple Pay, or Google Pay:",
+                text=intro,
                 reply_markup=reply_markup
             )
             return {"status": "ok"}
 
         elif arg in ("family", "family_pro", "fam"):
-            fam_url = await self.create_checkout_url(family_id_str, chat_id, "family_pro")
+            fam_url = await self.create_checkout_url(
+                family_id_str, chat_id, "family_pro", user_id=user_id_str, is_graduation=is_graduation
+            )
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": "💳 Upgrade to Family Pro ($9.99/mo)", "url": fam_url}]
                 ]
             }
+            if is_graduation:
+                intro = (
+                    "👨‍👩‍👧‍👦 <b>Start Your Own Family Pro Workspace</b>\n\n"
+                    "Upgrading will create your own family workspace as Admin and migrate all your personal transactions.\n\n"
+                    "Tap below to complete your upgrade for up to 5 family members:"
+                )
+            else:
+                intro = "👨‍👩‍👧‍👦 <b>Upgrade to Clanomy Family Pro</b>\n\nTap below to complete your upgrade for up to 5 family members:"
+
             background_tasks.add_task(
                 self.telegram_service.send_message,
                 chat_id=chat_id,
-                text="👨‍👩‍👧‍👦 <b>Upgrade to Clanomy Family Pro</b>\n\nTap below to complete your upgrade for up to 5 family members:",
+                text=intro,
                 reply_markup=reply_markup
             )
             return {"status": "ok"}
 
         else:
-            solo_url = await self.create_checkout_url(family_id_str, chat_id, "solo_pro")
-            fam_url = await self.create_checkout_url(family_id_str, chat_id, "family_pro")
+            solo_url = await self.create_checkout_url(
+                family_id_str, chat_id, "solo_pro", user_id=user_id_str, is_graduation=is_graduation
+            )
+            fam_url = await self.create_checkout_url(
+                family_id_str, chat_id, "family_pro", user_id=user_id_str, is_graduation=is_graduation
+            )
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": "💳 Solo Pro ($4.99 / mo)", "url": solo_url}],
                     [{"text": "💳 Family Pro ($9.99 / mo)", "url": fam_url}]
                 ]
             }
+            if is_graduation and family:
+                admin_name = "your Admin"
+                try:
+                    with Session(fam_service.engine) as s:
+                        members = s.exec(select(User).where(User.family_id == family.id)).all()
+                        admin_user = next((u for u in members if fam_service.is_family_admin(family.id, u.id)), None)
+                        if admin_user:
+                            admin_name = f"@{admin_user.username}" if admin_user.username else (admin_user.full_name or "Admin")
+                except Exception:
+                    pass
+                intro_text = format_non_admin_upgrade_intro(family.name, admin_name)
+            else:
+                intro_text = UPGRADE_MENU_INTRO
+
             background_tasks.add_task(
                 self.telegram_service.send_message,
                 chat_id=chat_id,
-                text=UPGRADE_MENU_INTRO,
+                text=intro_text,
                 reply_markup=reply_markup
             )
             return {"status": "ok"}

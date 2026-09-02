@@ -385,3 +385,164 @@ def test_has_unlimited_access_expired_beyond_grace_period(monkeypatch):
     family.current_period_end = recent_end
     assert has_unlimited_access(family, now=now) is True
 
+
+@pytest.mark.anyio
+async def test_non_admin_upgrade_generates_graduation_checkout(monkeypatch, mock_db):
+    from src.services.family_service import FamilyService
+    from sqlalchemy.pool import StaticPool
+
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+    fam_service = FamilyService()
+    fam_service.engine = mock_db.bind
+
+    host_family = Family(name="Host Fam", plan_type="free")
+    mock_db.add(host_family)
+    mock_db.commit()
+
+    admin = User(telegram_id=1101, username="fam_admin", family_id=host_family.id, is_admin=True)
+    member = User(telegram_id=1102, username="fam_member", family_id=host_family.id, is_admin=False)
+    mock_db.add_all([admin, member])
+    mock_db.commit()
+
+    mock_tg = MockTelegramService()
+    service = LemonSqueezyBillingService(telegram_service=mock_tg)
+
+    bg_tasks = BackgroundTasks()
+    res = await service.handle_upgrade_command(bg_tasks, "/upgrade", member, host_family, 1102)
+    assert res["status"] == "ok"
+
+    for task in bg_tasks.tasks:
+        await task.func(*task.args, **task.kwargs)
+
+    assert len(mock_tg.sent_messages) == 1
+    sent = mock_tg.sent_messages[0]
+    assert "Sovereign Workspace" in sent["text"]
+    assert "migrate all your personal transaction history" in sent["text"]
+
+
+def test_webhook_subscription_created_graduates_member(monkeypatch, mock_db):
+    from src.services.family_service import FamilyService
+    from src.db.models import Transaction
+
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+    fam_service = FamilyService()
+    fam_service.engine = mock_db.bind
+
+    host_fam = Family(name="Host Fam", plan_type="free")
+    mock_db.add(host_fam)
+    mock_db.commit()
+
+    admin = User(telegram_id=1201, username="h_admin", family_id=host_fam.id, is_admin=True)
+    member = User(telegram_id=1202, username="h_member", family_id=host_fam.id, is_admin=False)
+    mock_db.add_all([admin, member])
+    mock_db.commit()
+
+    tx = Transaction(user_id=member.id, family_id=host_fam.id, amount=40.0, category="food", concept="groceries")
+    mock_db.add(tx)
+    mock_db.commit()
+
+    mock_tg = MockTelegramService()
+    service = LemonSqueezyBillingService(telegram_service=mock_tg)
+
+    payload = {
+        "meta": {
+            "event_name": "subscription_created",
+            "custom_data": {
+                "family_id": str(host_fam.id),
+                "plan_type": "solo_pro",
+                "is_graduation": "true",
+                "user_id": str(member.id),
+                "chat_id": "1202"
+            }
+        },
+        "data": {
+            "id": "sub_grad_123",
+            "attributes": {
+                "status": "active",
+                "customer_id": "cus_grad_456"
+            }
+        }
+    }
+
+    bg_tasks = BackgroundTasks()
+    res = service.handle_webhook_event(mock_db, "subscription_created", payload, bg_tasks)
+    assert res["status"] == "upgraded"
+
+    # Member is now in their own new family on solo_pro
+    mock_db.refresh(member)
+    assert member.family_id != host_fam.id
+    new_fam = mock_db.get(Family, member.family_id)
+    assert new_fam.plan_type == "solo_pro"
+    assert new_fam.subscription_status == "active"
+
+    # Transaction migrated to new_fam
+    mock_db.refresh(tx)
+    assert tx.family_id == new_fam.id
+
+    # Host family is still free and intact with admin
+    mock_db.refresh(host_fam)
+    assert host_fam.plan_type == "free"
+
+
+def test_webhook_subscription_updated_splits_family_on_downgrade(monkeypatch, mock_db):
+    from src.services.family_service import FamilyService
+    from src.db.models import Transaction
+
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+    fam_service = FamilyService()
+    fam_service.engine = mock_db.bind
+
+    fam = Family(name="Downgrade Fam", plan_type="family_pro", subscription_status="active")
+    mock_db.add(fam)
+    mock_db.commit()
+
+    admin = User(telegram_id=1301, username="d_admin", family_id=fam.id, is_admin=True)
+    m1 = User(telegram_id=1302, username="d_older", family_id=fam.id, is_admin=False)
+    m2 = User(telegram_id=1303, username="d_younger", family_id=fam.id, is_admin=False)
+    mock_db.add_all([admin, m1, m2])
+    mock_db.commit()
+
+    mock_tg = MockTelegramService()
+    service = LemonSqueezyBillingService(telegram_service=mock_tg)
+
+    # Variant for solo_pro
+    monkeypatch.setattr(settings, "LEMON_SQUEEZY_SOLO_PRO_VARIANT_ID", "var_solo_999")
+
+    payload = {
+        "meta": {
+            "event_name": "subscription_updated"
+        },
+        "data": {
+            "id": "sub_down_123",
+            "attributes": {
+                "status": "active",
+                "variant_id": "var_solo_999"
+            }
+        }
+    }
+    # Link subscription to family
+    fam.lemonsqueezy_subscription_id = "sub_down_123"
+    mock_db.add(fam)
+    mock_db.commit()
+
+    bg_tasks = BackgroundTasks()
+    res = service.handle_webhook_event(mock_db, "subscription_updated", payload, bg_tasks)
+    assert res["status"] == "updated"
+
+    # Original family is now solo_pro with only admin
+    mock_db.refresh(fam)
+    assert fam.plan_type == "solo_pro"
+    mock_db.refresh(admin)
+    assert admin.family_id == fam.id
+
+    # Non-admins moved to a new Free family with m1 as admin
+    mock_db.refresh(m1)
+    mock_db.refresh(m2)
+    assert m1.family_id != fam.id
+    assert m1.family_id == m2.family_id
+    split_fam = mock_db.get(Family, m1.family_id)
+    assert split_fam.plan_type == "free"
+    assert m1.is_admin is True
+    assert m2.is_admin is False
+
+

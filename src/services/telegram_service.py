@@ -1,6 +1,6 @@
+import asyncio
 import httpx
 import logging
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from src.core.config import settings
 from src.core.http_client import get_http_client
 
@@ -13,18 +13,34 @@ class TelegramService:
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.api_url = f"https://api.telegram.org/bot{self.bot_token}"
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5, max=4.0),
-        retry=retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError, ConnectionError, OSError)),
-        reraise=True
-    )
-    async def _post_with_retry(self, endpoint: str, **kwargs) -> httpx.Response:
-        """Low-level POST with automatic retry on transient network errors."""
+    async def _post_with_retry(self, endpoint: str, max_attempts: int = 3, **kwargs) -> httpx.Response:
+        """Low-level POST with automatic retry on transient network errors and Telegram 429s."""
         client = get_http_client()
-        response = await client.post(f"{self.api_url}/{endpoint}", **kwargs)
-        response.raise_for_status()
-        return response
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = await client.post(f"{self.api_url}/{endpoint}", **kwargs)
+                if response.status_code == 429:
+                    retry_after = 1.5
+                    try:
+                        data = response.json()
+                        retry_after = float(data.get("parameters", {}).get("retry_after", 1.5))
+                    except Exception:
+                        pass
+                    logger.warning(
+                        f"[Telegram 429] Rate limited on /{endpoint}. Retrying in {retry_after:.2f}s "
+                        f"(attempt {attempt}/{max_attempts})"
+                    )
+                    if attempt < max_attempts:
+                        await asyncio.sleep(retry_after)
+                        continue
+                response.raise_for_status()
+                return response
+            except (httpx.TimeoutException, httpx.ConnectError, ConnectionError, OSError) as net_err:
+                if attempt == max_attempts:
+                    raise
+                backoff = 0.5 * (2 ** (attempt - 1))
+                logger.warning(f"[Telegram Network Err] {net_err}. Retrying in {backoff:.2f}s (attempt {attempt}/{max_attempts})...")
+                await asyncio.sleep(backoff)
 
     async def send_message(self, chat_id: int, text: str, parse_mode: Optional[str] = "HTML") -> None:
         """Sends a message back to the user via Telegram Bot API with retry on transient errors and fallback on parse errors."""

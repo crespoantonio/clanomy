@@ -9,6 +9,7 @@ import httpx
 from faster_whisper import WhisperModel
 from src.core.config import settings
 from src.core.http_client import get_http_client
+from src.core.security import sanitize_exception_message
 
 logger = logging.getLogger("clanomy.whisper")
 
@@ -147,10 +148,11 @@ class WhisperService:
                 )
                 return text, detected_lang
             except Exception as e:
-                logger.error(f"Cloud Whisper transcription failed: {e}", exc_info=True)
-                if not isinstance(e, InferenceError):
-                    raise InferenceError(f"Cloud Whisper transcription failed: {e}")
-                raise
+                sanitized_err = sanitize_exception_message(e)
+                logger.warning(
+                    f"[Cloud Whisper] Transcription failed: {sanitized_err}. "
+                    "Falling back to local Faster-Whisper."
+                )
 
         # 4. Local faster-whisper Fallback (Write audio to temporary file)
         # On Windows, we must close the file before passing the path to WhisperModel

@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, AliasChoices, field_validator
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -39,8 +39,14 @@ class Settings(BaseSettings):
     
     # AI Engine Configuration (Unified Provider / OpenAI-Compatible Standard)
     AI_PROVIDER: Optional[str] = None
-    AI_API_KEY: Optional[str] = None
-    AI_BASE_URL: str = "https://api.groq.com/openai/v1"
+    AI_API_KEY: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("AI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY")
+    )
+    AI_BASE_URL: str = Field(
+        default="https://api.groq.com/openai/v1",
+        validation_alias=AliasChoices("AI_BASE_URL", "AI_API_BASE_URL", "GROQ_BASE_URL")
+    )
     AI_MODEL: str = "llama-3.3-70b-versatile"
     AI_WHISPER_MODEL: str = "whisper-large-v3-turbo"
     AI_MAX_RETRIES: int = 3

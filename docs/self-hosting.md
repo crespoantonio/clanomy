@@ -87,9 +87,9 @@ Clanomy features a unified modular LLM provider layer (`src/core/llm/`). You can
 - Sub-second inference (<300ms) with zero GPU overhead.
 - Configuration in `.env`:
   ```env
-  # Example using free Groq Cloud API
+  # Example using free Groq Cloud API (GROQ_API_KEY or AI_API_KEY)
   AI_API_KEY=gsk_your_groq_api_key_here
-  AI_API_BASE_URL=https://api.groq.com/openai/v1
+  AI_BASE_URL=https://api.groq.com/openai/v1
   AI_MODEL=llama-3.3-70b-versatile
   ```
 

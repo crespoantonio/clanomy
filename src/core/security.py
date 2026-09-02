@@ -38,9 +38,26 @@ def mask_database_url(url: Optional[str]) -> str:
         import re
         return re.sub(r":([^@/:\s]+)@", r":***@", url)
 
+def sanitize_auth_tokens(error_or_text: object) -> str:
+    """
+    Redacts Bearer tokens, gsk_* Groq keys, OpenAI keys, and Telegram bot tokens from text/error strings.
+    """
+    import re
+    text = str(error_or_text)
+    # Redact Bearer tokens
+    text = re.sub(r"Bearer\s+[A-Za-z0-9_\-\.]+", "Bearer [REDACTED]", text, flags=re.IGNORECASE)
+    # Redact Groq keys (gsk_...)
+    text = re.sub(r"gsk_[A-Za-z0-9]{20,}", "gsk_[REDACTED]", text)
+    # Redact OpenAI keys (sk-...)
+    text = re.sub(r"sk-[A-Za-z0-9]{20,}", "sk-[REDACTED]", text)
+    # Redact Telegram Bot tokens: \d{8,10}:[A-Za-z0-9_-]{30,40}
+    text = re.sub(r"\b\d{8,10}:[A-Za-z0-9_-]{30,40}\b", "[TELEGRAM_TOKEN_REDACTED]", text)
+    return text
+
+
 def sanitize_exception_message(error_or_text: object, raw_url: Optional[str] = None) -> str:
     """
-    Replaces raw database credentials and connection strings in error messages with masked equivalents.
+    Replaces raw database credentials, auth tokens, and connection strings in error messages with masked equivalents.
     """
     import re
     text = str(error_or_text)
@@ -50,5 +67,5 @@ def sanitize_exception_message(error_or_text: object, raw_url: Optional[str] = N
         text = text.replace(target_url, masked)
         text = text.replace(target_url.replace("%", "%%"), masked)
     text = re.sub(r":([^@/:\s]{2,})@", r":***@", text)
-    return text
+    return sanitize_auth_tokens(text)
 

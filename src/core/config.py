@@ -27,8 +27,15 @@ class Settings(BaseSettings):
     MAX_TEXT_LENGTH: int = 350  # Maximum allowable text message length in characters before fast-fail rejection
     FAMILY_INVITE_TTL_HOURS: int = 1  # Family invite link expiration window in hours
 
-    # Monetization & Subscription Settings
+    # Monetization & Subscription Settings (Lemon Squeezy Merchant of Record)
     ENABLE_SUBSCRIPTIONS: bool = False
+    LEMON_SQUEEZY_API_KEY: Optional[str] = None
+    LEMON_SQUEEZY_STORE_ID: Optional[str] = None
+    LEMON_SQUEEZY_WEBHOOK_SECRET: Optional[str] = None
+    LEMON_SQUEEZY_SOLO_PRO_VARIANT_ID: Optional[str] = None
+    LEMON_SQUEEZY_FAMILY_PRO_VARIANT_ID: Optional[str] = None
+    LEMON_SQUEEZY_SOLO_PRO_ANNUAL_VARIANT_ID: Optional[str] = None
+    LEMON_SQUEEZY_FAMILY_PRO_ANNUAL_VARIANT_ID: Optional[str] = None
     
     # Whisper settings
     WHISPER_MODEL_SIZE: str = "base"

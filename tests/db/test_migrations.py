@@ -38,7 +38,7 @@ def test_run_migrations_sqlite_isolated(tmp_path):
     with Session(test_engine) as session:
         # Check alembic_version table
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0008_add_timezone_support"
+        assert version_result[0] == "0009_add_lemonsqueezy_fields"
         
         # Check family table
         family_cols = session.exec(text("PRAGMA table_info(family)")).all()
@@ -55,6 +55,9 @@ def test_run_migrations_sqlite_isolated(tmp_path):
         assert "notion_database_id" in col_names
         assert "default_currency" in col_names
         assert "timezone" in col_names
+        assert "lemonsqueezy_customer_id" in col_names
+        assert "lemonsqueezy_subscription_id" in col_names
+        assert "customer_portal_url" in col_names
         
         # Check user table
         user_cols = session.exec(text("PRAGMA table_info(user)")).all()
@@ -86,7 +89,7 @@ def test_run_migrations_helper_isolated(monkeypatch, tmp_path):
     test_engine = create_engine(test_db_url)
     with Session(test_engine) as session:
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0008_add_timezone_support"
+        assert version_result[0] == "0009_add_lemonsqueezy_fields"
 
 def test_run_migrations_with_percent_encoded_url(monkeypatch, tmp_path):
     """Verify run_migrations() handles database URLs with % encoding (e.g. passwords)."""
@@ -101,6 +104,6 @@ def test_run_migrations_with_percent_encoded_url(monkeypatch, tmp_path):
     test_engine = create_engine(test_db_url)
     with Session(test_engine) as session:
         version_result = session.exec(text("SELECT version_num FROM alembic_version")).one()
-        assert version_result[0] == "0008_add_timezone_support"
+        assert version_result[0] == "0009_add_lemonsqueezy_fields"
 
 

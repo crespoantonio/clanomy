@@ -10,6 +10,7 @@ from src.core.config import settings
 from src.core.http_client import HTTPClientManager
 from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
+from src.api.routes.lemonsqueezy import router as lemonsqueezy_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,8 +86,8 @@ async def security_and_origin_middleware(request: Request, call_next):
     logger.info(f"Incoming HTTP {request.method} {request.url.path} from {client_ip}")
 
     # 1. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
-    # Allows /health probe and /api/v1/telegram/webhook pass-through (webhook is authenticated by secret token)
-    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in ("/health", "/api/v1/telegram/webhook"):
+    # Allows /health probe, Telegram webhook, and Lemon Squeezy webhook pass-through
+    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in ("/health", "/api/v1/telegram/webhook", "/api/webhooks/lemonsqueezy"):
         origin_header = request.headers.get("X-Origin-Verify-Secret") or request.headers.get("X-Clanomy-Origin-Key")
         if not verify_origin_secret(origin_header):
             logger.warning(f"Direct origin access attempt blocked on {request.url.path} from {client_ip}")
@@ -111,6 +112,7 @@ async def security_and_origin_middleware(request: Request, call_next):
 
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
+app.include_router(lemonsqueezy_router)
 
 @app.get("/")
 async def root():

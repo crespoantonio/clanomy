@@ -27,6 +27,9 @@ class Family(SQLModel, table=True):
     trial_ends_at: Optional[datetime] = Field(default=None)
     current_period_end: Optional[datetime] = Field(default=None)
     telegram_payment_charge_id: Optional[str] = Field(default=None)
+    lemonsqueezy_customer_id: Optional[str] = Field(default=None, index=True)
+    lemonsqueezy_subscription_id: Optional[str] = Field(default=None, index=True)
+    customer_portal_url: Optional[str] = Field(default=None)
     notified_day_50: bool = Field(default=False)
     notified_day_60: bool = Field(default=False)
 

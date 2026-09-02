@@ -72,18 +72,18 @@ def format_day_50_message(family: Family, tx_count: int, days_remaining: int) ->
     Formats the Day 50 Nudge Message:
     - Summarizes value delivered (transactions tracked by family during the trial).
     - Warns that the 60-day trial will finish in dynamically calculated days.
-    - Presents available tiers (Family Pro 450 Stars/mo, Solo Pro 200 Stars/mo) and /upgrade CTA.
+    - Presents available tiers (Family Pro $9.99/mo, Solo Pro $4.99/mo) and /upgrade CTA.
     """
     tx_label = "1 transaction" if tx_count == 1 else f"{tx_count} transactions"
     return (
         f"⏳ <b>Your 60-Day Clanomy Trial is Ending in {days_remaining} Days!</b>\n\n"
         f"During your trial, your workspace has tracked <b>{tx_label}</b> and kept your finances organized!\n\n"
         "To keep enjoying unlimited AI voice & text logging, real-time Notion sync, and multi-member collaboration without interruption, choose a plan:\n\n"
-        "1️⃣ <b>Solo Pro (200 Stars / month)</b>\n"
+        "1️⃣ <b>Solo Pro ($4.99 / month)</b>\n"
         "• Unlimited text & voice expense & income logging\n"
         "• Real-time Notion database mirroring\n"
         "• 1 User\n\n"
-        "2️⃣ <b>Family Pro (450 Stars / month)</b>\n"
+        "2️⃣ <b>Family Pro ($9.99 / month)</b>\n"
         "• Everything in Solo Pro\n"
         "• Up to 5 Family Members with shared ledger & Notion sync\n\n"
         "Type /upgrade to choose your plan (or /upgrade annual to get 2 Months Free)!"
@@ -106,7 +106,7 @@ def format_day_60_message(family: Family) -> str:
         "• 30 free transaction logs per month shared across your workspace.\n"
         "• Full access to query and view all your historical records.\n\n"
         "Want to unlock unlimited logs and features?\n"
-        "Type /upgrade anytime to activate <b>Solo Pro</b> (200 Stars/mo) or <b>Family Pro</b> (450 Stars/mo)!"
+        "Type /upgrade anytime to activate <b>Solo Pro</b> ($4.99/mo) or <b>Family Pro</b> ($9.99/mo)!"
     )
 
 async def process_day_50_notifications(

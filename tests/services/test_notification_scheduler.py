@@ -182,9 +182,9 @@ def test_format_day_50_message_content():
     assert "42" in msg
     assert "10 Days" in msg
     assert "Family Pro" in msg
-    assert "450" in msg
+    assert "9.99" in msg
     assert "Solo Pro" in msg
-    assert "200" in msg
+    assert "4.99" in msg
     assert "/upgrade" in msg
 
     # Check with 0 transactions

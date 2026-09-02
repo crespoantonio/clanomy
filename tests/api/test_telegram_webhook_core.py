@@ -135,22 +135,25 @@ def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_pay
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
-    # Verify intro message + both invoices
-    assert len(mock_telegram.messages) == 3
+    # Verify intro message with interactive checkout buttons
+    assert len(mock_telegram.messages) == 1
     intro = mock_telegram.messages[0]["text"]
     assert "Upgrade to Clanomy Pro" in intro
-    assert "Solo Pro (200 Stars / month)" in intro
-    assert "Family Pro (450 Stars / month)" in intro
+    assert "Solo Pro ($4.99 / month)" in intro
+    assert "Family Pro ($9.99 / month)" in intro
 
-    invoices = [m for m in mock_telegram.messages if m.get("type") == "invoice"]
-    assert len(invoices) == 2
-    plans = {inv["plan_type"] for inv in invoices}
-    assert plans == {"solo_pro", "family_pro"}
-    for inv in invoices:
-        assert inv["payload"].startswith(f"sub_{inv['plan_type']}_")
+    reply_markup = mock_telegram.messages[0].get("reply_markup")
+    assert reply_markup is not None
+    buttons = reply_markup["inline_keyboard"]
+    assert len(buttons) == 2
+    assert "Solo Pro" in buttons[0][0]["text"]
+    assert "Family Pro" in buttons[1][0]["text"]
 
-def test_webhook_upgrade_command_solo_tier(app_client, mock_telegram, telegram_payload_factory):
-    """[P1] Webhook should handle '/upgrade solo' and dispatch Solo Pro invoice directly."""
+def test_webhook_upgrade_command_solo_tier(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P1] Webhook should handle '/upgrade solo' and dispatch Solo Pro checkout button directly."""
+    from src.core.config import settings
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+
     app_client.post(
         "/api/v1/telegram/webhook",
         json=telegram_payload_factory(text="/start", user_id=4442),
@@ -166,12 +169,16 @@ def test_webhook_upgrade_command_solo_tier(app_client, mock_telegram, telegram_p
     )
     assert response.status_code == 200
     assert len(mock_telegram.messages) == 1
-    assert mock_telegram.messages[0].get("type") == "invoice"
-    assert mock_telegram.messages[0]["plan_type"] == "solo_pro"
-    assert mock_telegram.messages[0]["payload"].startswith("sub_solo_pro_")
+    msg = mock_telegram.messages[0]
+    assert "Solo Pro" in msg["text"]
+    assert msg.get("reply_markup") is not None
+    assert "Solo Pro" in msg["reply_markup"]["inline_keyboard"][0][0]["text"]
 
-def test_webhook_upgrade_command_family_tier(app_client, mock_telegram, telegram_payload_factory):
-    """[P1] Webhook should handle '/upgrade family' and dispatch Family Pro invoice directly."""
+def test_webhook_upgrade_command_family_tier(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P1] Webhook should handle '/upgrade family' and dispatch Family Pro checkout button directly."""
+    from src.core.config import settings
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+
     app_client.post(
         "/api/v1/telegram/webhook",
         json=telegram_payload_factory(text="/start", user_id=4443),
@@ -187,9 +194,10 @@ def test_webhook_upgrade_command_family_tier(app_client, mock_telegram, telegram
     )
     assert response.status_code == 200
     assert len(mock_telegram.messages) == 1
-    assert mock_telegram.messages[0].get("type") == "invoice"
-    assert mock_telegram.messages[0]["plan_type"] == "family_pro"
-    assert mock_telegram.messages[0]["payload"].startswith("sub_family_pro_")
+    msg = mock_telegram.messages[0]
+    assert "Family Pro" in msg["text"]
+    assert msg.get("reply_markup") is not None
+    assert "Family Pro" in msg["reply_markup"]["inline_keyboard"][0][0]["text"]
 
 def test_webhook_solo_pro_invite_blocked(app_client, mock_telegram, telegram_payload_factory):
     """[P0] If a Solo Pro subscriber attempts /invite, inform them Family Pro is required."""
@@ -228,16 +236,14 @@ def test_webhook_solo_pro_invite_blocked(app_client, mock_telegram, telegram_pay
     assert "Family Pro" in resp_text
     assert "/upgrade" in resp_text
 
-def test_webhook_pre_checkout_query_valid(app_client, mock_telegram, telegram_payload_factory):
-    """[P0] Webhook answers pre_checkout_query with ok=True for valid paid plan."""
+def test_webhook_upgrade_command_saas(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P0] /upgrade command returns interactive tier buttons with Lemon Squeezy checkout URLs."""
+    from src.core.config import settings
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+
     payload = telegram_payload_factory(
-        pre_checkout_query={
-            "id": "query_valid_123",
-            "from": {"id": 9001, "first_name": "Tony", "username": "tony"},
-            "currency": "XTR",
-            "total_amount": 150,
-            "invoice_payload": "sub_solo_pro_123e4567-e89b-12d3-a456-426614174000"
-        }
+        text="/upgrade",
+        user_id=9001
     )
     response = app_client.post(
         "/api/v1/telegram/webhook",
@@ -245,45 +251,66 @@ def test_webhook_pre_checkout_query_valid(app_client, mock_telegram, telegram_pa
         headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-    
-    answers = [m for m in mock_telegram.messages if m.get("type") == "pre_checkout_answer"]
-    assert len(answers) == 1
-    assert answers[0]["pre_checkout_query_id"] == "query_valid_123"
-    assert answers[0]["ok"] is True
+    assert len(mock_telegram.messages) == 1
+    msg = mock_telegram.messages[0]
+    assert "Solo Pro" in msg["text"]
+    assert "Family Pro" in msg["text"]
+    assert msg.get("reply_markup") is not None
+    assert "inline_keyboard" in msg["reply_markup"]
 
-def test_webhook_pre_checkout_query_invalid(app_client, mock_telegram, telegram_payload_factory):
-    """[P0] Webhook answers pre_checkout_query with ok=False for invalid/unauthorized payload."""
-    payload = telegram_payload_factory(
-        pre_checkout_query={
-            "id": "query_invalid_456",
-            "from": {"id": 9002, "first_name": "Tony", "username": "tony"},
-            "currency": "XTR",
-            "total_amount": 150,
-            "invoice_payload": "sub_lifetime_pro"
-        }
-    )
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-    answers = [m for m in mock_telegram.messages if m.get("type") == "pre_checkout_answer"]
-    assert len(answers) == 1
-    assert answers[0]["pre_checkout_query_id"] == "query_invalid_456"
-    assert answers[0]["ok"] is False
-    assert "Invalid or unsupported subscription plan" in answers[0]["error_message"]
-
-def test_webhook_successful_payment_solo_pro(app_client, mock_telegram, telegram_payload_factory):
-    """[P0] Webhook processes successful_payment for Solo Pro and activates subscription."""
+def test_webhook_billing_command(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P0] /billing command returns customer portal link when configured."""
+    from src.core.config import settings
     from src.db.session import engine
     from sqlmodel import Session, select
     from src.db.models import Family, User
 
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+    user_id = 9005
+
+    # First register user
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # Attach portal URL
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
+        family = session.get(Family, user.family_id)
+        family.customer_portal_url = "https://app.lemonsqueezy.com/portal/test-cust-9005"
+        session.add(family)
+        session.commit()
+
+    # Send /billing command
+    payload = telegram_payload_factory(text="/billing", user_id=user_id)
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    msg = mock_telegram.messages[0]
+    assert "Manage Your Subscription" in msg["text"]
+    assert msg["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://app.lemonsqueezy.com/portal/test-cust-9005"
+
+def test_lemonsqueezy_webhook_subscription_created(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P0] Lemon Squeezy webhook provisions subscription and updates Family model."""
+    import hmac
+    import hashlib
+    import json
+    from src.core.config import settings
+    from src.db.session import engine
+    from sqlmodel import Session, select
+    from src.db.models import Family, User
+
+    secret = "test_webhook_secret_key"
+    monkeypatch.setattr(settings, "LEMON_SQUEEZY_WEBHOOK_SECRET", secret)
     user_id = 9101
+
     app_client.post(
         "/api/v1/telegram/webhook",
         json=telegram_payload_factory(text="/start", user_id=user_id),
@@ -295,23 +322,36 @@ def test_webhook_successful_payment_solo_pro(app_client, mock_telegram, telegram
         user = session.exec(select(User).where(User.telegram_id == user_id)).first()
         fam_id = str(user.family_id)
 
-    # Trigger successful payment
-    payload = telegram_payload_factory(
-        user_id=user_id,
-        successful_payment={
-            "currency": "XTR",
-            "total_amount": 150,
-            "invoice_payload": f"sub_solo_pro_{fam_id}",
-            "telegram_payment_charge_id": "charge_solo_123",
-            "provider_payment_charge_id": ""
+    payload_dict = {
+        "meta": {
+            "event_name": "subscription_created",
+            "custom_data": {
+                "family_id": fam_id,
+                "chat_id": user_id,
+                "plan_type": "solo_pro"
+            }
+        },
+        "data": {
+            "id": "sub_ls_999",
+            "attributes": {
+                "customer_id": 888,
+                "renews_at": "2026-10-01T00:00:00Z",
+                "urls": {
+                    "customer_portal": "https://app.lemonsqueezy.com/my-orders/portal-token-999"
+                }
+            }
         }
-    )
+    }
+    raw_body = json.dumps(payload_dict).encode("utf-8")
+    sig = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+
     response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        "/api/webhooks/lemonsqueezy",
+        content=raw_body,
+        headers={"X-Signature": sig, "Content-Type": "application/json"}
     )
     assert response.status_code == 200
+    assert response.json()["status"] == "ok"
 
     with Session(engine) as session:
         user = session.exec(select(User).where(User.telegram_id == user_id)).first()
@@ -319,126 +359,28 @@ def test_webhook_successful_payment_solo_pro(app_client, mock_telegram, telegram
         assert family.plan_type == "solo_pro"
         assert family.subscription_status == "active"
         assert family.max_members == 1
-        assert family.telegram_payment_charge_id == "charge_solo_123"
-        assert family.current_period_end is not None
+        assert family.lemonsqueezy_subscription_id == "sub_ls_999"
+        assert family.lemonsqueezy_customer_id == "888"
+        assert family.customer_portal_url == "https://app.lemonsqueezy.com/my-orders/portal-token-999"
 
     assert len(mock_telegram.messages) == 1
     welcome = mock_telegram.messages[0]["text"]
     assert "Welcome to Clanomy Solo Pro" in welcome
-    assert "unlocked unlimited voice and text" in welcome
 
-def test_webhook_successful_payment_family_pro(app_client, mock_telegram, telegram_payload_factory):
-    """[P0] Webhook processes successful_payment for Family Pro and updates max_members to 5."""
+def test_lemonsqueezy_webhook_protects_lifetime_pro(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P0] Lemon Squeezy webhook protects lifetime_pro workspaces from modification."""
+    import hmac
+    import hashlib
+    import json
+    from src.core.config import settings
     from src.db.session import engine
     from sqlmodel import Session, select
     from src.db.models import Family, User
 
-    user_id = 9102
-    app_client.post(
-        "/api/v1/telegram/webhook",
-        json=telegram_payload_factory(text="/start", user_id=user_id),
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-    mock_telegram.messages.clear()
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        fam_id = str(user.family_id)
-
-    payload = telegram_payload_factory(
-        user_id=user_id,
-        successful_payment={
-            "currency": "XTR",
-            "total_amount": 300,
-            "invoice_payload": f"sub_family_pro_{fam_id}",
-            "telegram_payment_charge_id": "charge_fam_456"
-        }
-    )
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-    assert response.status_code == 200
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        family = session.get(Family, user.family_id)
-        assert family.plan_type == "family_pro"
-        assert family.subscription_status == "active"
-        assert family.max_members == 5
-        assert family.telegram_payment_charge_id == "charge_fam_456"
-
-    assert len(mock_telegram.messages) == 1
-    welcome = mock_telegram.messages[0]["text"]
-    assert "Welcome to Clanomy Family Pro" in welcome
-    assert "shared family ledger for up to 5 members" in welcome
-
-def test_webhook_successful_payment_solo_pro_notifies_other_members(app_client, mock_telegram, telegram_payload_factory):
-    """[P1] When multi-member family switches to Solo Pro, notify non-admin members."""
-    from src.db.session import engine
-    from sqlmodel import Session, select
-    from src.db.models import Family, User
-
-    admin_id = 9201
-    member_id = 9202
-
-    # Register admin
-    app_client.post(
-        "/api/v1/telegram/webhook",
-        json=telegram_payload_factory(text="/start", user_id=admin_id),
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-
-    # Attach second member to same family
-    with Session(engine) as session:
-        admin_user = session.exec(select(User).where(User.telegram_id == admin_id)).first()
-        fam_id = admin_user.family_id
-        member_user = User(
-            telegram_id=member_id,
-            username="member_two",
-            full_name="Member Two",
-            family_id=fam_id
-        )
-        session.add(member_user)
-        session.commit()
-
-    mock_telegram.messages.clear()
-
-    # Admin purchases Solo Pro
-    payload = telegram_payload_factory(
-        user_id=admin_id,
-        successful_payment={
-            "currency": "XTR",
-            "total_amount": 150,
-            "invoice_payload": f"sub_solo_pro_{fam_id}",
-            "telegram_payment_charge_id": "charge_solo_multi"
-        }
-    )
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-    assert response.status_code == 200
-
-    # Admin receives welcome, Member receives plan update notification
-    assert len(mock_telegram.messages) == 2
-    admin_msg = next(m for m in mock_telegram.messages if m["chat_id"] == admin_id)
-    member_msg = next(m for m in mock_telegram.messages if m["chat_id"] == member_id)
-
-    assert "Welcome to Clanomy Solo Pro" in admin_msg["text"]
-    assert "Workspace Plan Update" in member_msg["text"]
-    assert "Solo Pro" in member_msg["text"]
-    assert "/leavefamily" in member_msg["text"]
-
-def test_webhook_successful_payment_protects_lifetime_pro(app_client, mock_telegram, telegram_payload_factory):
-    """[P0] External webhook cannot downgrade or overwrite lifetime_pro."""
-    from src.db.session import engine
-    from sqlmodel import Session, select
-    from src.db.models import Family, User
-
+    secret = "test_webhook_secret_key"
+    monkeypatch.setattr(settings, "LEMON_SQUEEZY_WEBHOOK_SECRET", secret)
     user_id = 9301
+
     app_client.post(
         "/api/v1/telegram/webhook",
         json=telegram_payload_factory(text="/start", user_id=user_id),
@@ -456,83 +398,48 @@ def test_webhook_successful_payment_protects_lifetime_pro(app_client, mock_teleg
 
     mock_telegram.messages.clear()
 
-    payload = telegram_payload_factory(
-        user_id=user_id,
-        successful_payment={
-            "currency": "XTR",
-            "total_amount": 150,
-            "invoice_payload": f"sub_solo_pro_{fam_id}",
-            "telegram_payment_charge_id": "charge_lifetime_safe"
+    payload_dict = {
+        "meta": {
+            "event_name": "subscription_created",
+            "custom_data": {
+                "family_id": fam_id,
+                "chat_id": user_id,
+                "plan_type": "solo_pro"
+            }
+        },
+        "data": {
+            "id": "sub_ls_lifetime_test",
+            "attributes": {"customer_id": 111}
         }
-    )
+    }
+    raw_body = json.dumps(payload_dict).encode("utf-8")
+    sig = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+
     response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        "/api/webhooks/lemonsqueezy",
+        content=raw_body,
+        headers={"X-Signature": sig, "Content-Type": "application/json"}
     )
     assert response.status_code == 200
+    assert response.json()["result"]["status"] == "ignored_lifetime"
 
     with Session(engine) as session:
         user = session.exec(select(User).where(User.telegram_id == user_id)).first()
         family = session.get(Family, user.family_id)
         assert family.plan_type == "lifetime_pro"
         assert family.subscription_status == "active"
-        assert family.telegram_payment_charge_id == "charge_lifetime_safe"
 
-    assert len(mock_telegram.messages) == 1
-    assert "Lifetime Pro Active" in mock_telegram.messages[0]["text"]
+    assert len(mock_telegram.messages) == 0
 
-def test_webhook_refunded_payment_transitions_to_free(app_client, mock_telegram, telegram_payload_factory):
-    """[P1] Refunded payment transitions family to free tier with data safety reassurance."""
-    from src.db.session import engine
-    from sqlmodel import Session, select
-    from src.db.models import Family, User
-
-    user_id = 9401
-    app_client.post(
-        "/api/v1/telegram/webhook",
-        json=telegram_payload_factory(text="/start", user_id=user_id),
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        family = session.get(Family, user.family_id)
-        family.plan_type = "family_pro"
-        family.subscription_status = "active"
-        session.add(family)
-        session.commit()
-        fam_id = str(family.id)
-
-    mock_telegram.messages.clear()
-
-    payload = telegram_payload_factory(
-        user_id=user_id,
-        refunded_payment={
-            "currency": "XTR",
-            "total_amount": 300,
-            "invoice_payload": f"sub_family_pro_{fam_id}",
-            "telegram_payment_charge_id": "charge_refunded_123"
-        }
-    )
+def test_lemonsqueezy_webhook_oversized_payload_rejected(app_client):
+    """[Security] Lemon Squeezy webhook rejects oversized payloads (>256KB) with HTTP 413."""
+    oversized_body = b"X" * 300000
     response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        "/api/webhooks/lemonsqueezy",
+        content=oversized_body,
+        headers={"X-Signature": "dummy", "Content-Type": "application/json", "Content-Length": str(len(oversized_body))}
     )
-    assert response.status_code == 200
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        family = session.get(Family, user.family_id)
-        assert family.plan_type == "free"
-        assert family.subscription_status == "expired"
-
-    assert len(mock_telegram.messages) == 1
-    refund_text = mock_telegram.messages[0]["text"]
-    assert "Subscription Update" in refund_text
-    assert "Free tier" in refund_text
-    assert "100% safe" in refund_text
+    assert response.status_code == 413
 
 def test_webhook_lifecycle_renewal(app_client):
     """[P0] Webhook processes renewal and extends current_period_end."""

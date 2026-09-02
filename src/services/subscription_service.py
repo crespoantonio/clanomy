@@ -13,7 +13,7 @@ from src.core.subscription_config import (
     get_tier_config
 )
 
-# Strict mapping of allowed Telegram Star invoice payloads to internal plan types
+# Strict mapping of allowed subscription payloads to internal plan types
 ALLOWED_PAID_PLANS: Dict[str, str] = {
     f"sub_{code}": tier.internal_plan
     for code, tier in SUBSCRIPTION_TIERS.items()
@@ -62,7 +62,14 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
     if family.subscription_status != "active":
         return False
 
-    if family.plan_type in ("solo_pro", "family_pro", "lifetime_pro"):
+    if family.plan_type == "lifetime_pro":
+        return True
+
+    if family.plan_type in ("solo_pro", "family_pro"):
+        # If current_period_end is tracked, enforce access with a 48h webhook delivery grace window
+        if family.current_period_end is not None:
+            grace_period_end = family.current_period_end + timedelta(hours=48)
+            return _compare_datetimes(grace_period_end, current_time)
         return True
 
     if family.plan_type == "trial":

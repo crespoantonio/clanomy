@@ -66,19 +66,48 @@ PLAN_EXPIRED_MESSAGE = (
 
 UPGRADE_MENU_INTRO = (
     "⭐️ <b>Upgrade to Clanomy Pro</b>\n\n"
-    "Choose the plan that fits your needs with seamless, auto-renewing Telegram Stars billing (Apple Pay / Google Pay / Card):\n\n"
-    "1️⃣ <b>Solo Pro (200 Stars / month)</b>\n"
+    "Choose the plan that fits your needs with secure billing (Apple Pay, Google Pay, or Credit/Debit Card):\n\n"
+    "1️⃣ <b>Solo Pro ($4.99 / month)</b>\n"
     "• Unlimited text & voice expense & income logging\n"
     "• Real-time Notion database mirroring\n"
     "• AI Natural language queries & cash flow insights\n"
     "• CSV & JSON financial exports\n"
     "• 1 User\n\n"
-    "2️⃣ <b>Family Pro (450 Stars / month)</b>\n"
+    "2️⃣ <b>Family Pro ($9.99 / month)</b>\n"
     "• Everything in Solo Pro\n"
     "• Up to 5 Family Members with shared ledger\n"
     "• Per-member spending attribution & budget visibility\n\n"
-    "🎁 <i>Annual Savings: Type <code>/upgrade annual</code> to get 2 Months Free on annual subscriptions (2,000 & 4,500 Stars)!</i>\n\n"
-    "<i>Invoices are attached below. Tap <b>Pay</b> on your chosen tier to activate immediately!</i>"
+    "🎁 <i>Annual Savings: Type <code>/upgrade annual</code> to get 2 Months Free on annual plans ($49.99 & $99.99/yr)!</i>\n\n"
+    "<i>Tap a button below to open secure checkout and activate immediately!</i>"
+)
+
+UPGRADE_MENU_ANNUAL_INTRO = (
+    "🎁 <b>Clanomy Pro Annual Plans (2 Months Free!)</b>\n\n"
+    "Get a full year of unlimited AI financial tracking and save 17%:\n\n"
+    "1️⃣ <b>Solo Pro Annual ($49.99 / year)</b> — ~$4.16/mo (Save $10)\n"
+    "• 1 User, Unlimited AI logging & Notion sync\n\n"
+    "2️⃣ <b>Family Pro Annual ($99.99 / year)</b> — ~$8.33/mo (Save $20)\n"
+    "• Up to 5 Members, Shared Ledger & Notion sync\n\n"
+    "<i>Tap a button below to activate your annual subscription!</i>"
+)
+
+BILLING_PORTAL_MESSAGE = (
+    "⚙️ <b>Manage Your Subscription</b>\n\n"
+    "You can update your payment method, view past receipts, or cancel your subscription anytime "
+    "through your secure customer billing portal.\n\n"
+    "<i>Tap the button below to open your billing portal:</i>"
+)
+
+SUBSCRIPTION_CANCELLED_MESSAGE = (
+    "ℹ️ <b>Subscription Cancelled</b>\n\n"
+    "Your subscription auto-renewal has been cancelled. "
+    "You will retain full Pro access until the end of your current billing period."
+)
+
+SUBSCRIPTION_PAYMENT_FAILED_MESSAGE = (
+    "⚠️ <b>Subscription Payment Failed</b>\n\n"
+    "We were unable to process your subscription renewal. "
+    "Please update your payment method in the billing portal to avoid service interruption."
 )
 
 

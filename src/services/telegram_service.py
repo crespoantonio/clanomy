@@ -51,17 +51,25 @@ class TelegramService:
                 logger.warning(f"[Telegram Network Err] {net_err}. Retrying in {backoff:.2f}s (attempt {attempt}/{max_attempts})...")
                 await asyncio.sleep(backoff)
 
-    async def send_message(self, chat_id: int, text: str, parse_mode: Optional[str] = "HTML") -> None:
-        """Sends a message back to the user via Telegram Bot API with retry on transient errors and fallback on parse errors."""
+    async def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        parse_mode: Optional[str] = "HTML",
+        reply_markup: Optional[dict] = None
+    ) -> None:
+        """Sends a message back to the user via Telegram Bot API with retry on transient errors, optional reply_markup, and fallback on parse errors."""
         try:
             payload = {"chat_id": chat_id, "text": text}
             if parse_mode:
                 payload["parse_mode"] = parse_mode
+            if reply_markup:
+                payload["reply_markup"] = reply_markup
             await self._post_with_retry("sendMessage", json=payload)
         except httpx.HTTPStatusError as e:
             if parse_mode and e.response.status_code == 400 and "can't parse entities" in e.response.text:
                 logger.warning(f"Telegram HTML parse error for chat {chat_id}. Retrying as plain text.")
-                await self.send_message(chat_id=chat_id, text=text, parse_mode=None)
+                await self.send_message(chat_id=chat_id, text=text, parse_mode=None, reply_markup=reply_markup)
             else:
                 logger.error(f"Failed to send telegram message to {chat_id}: {e}")
         except Exception as e:
@@ -162,77 +170,5 @@ class TelegramService:
             logger.error(f"Failed to fetch bot username via getMe: {e}")
             
         return "UnknownBot"
-
-    async def send_subscription_invoice(
-        self,
-        chat_id: int,
-        plan_type: str,
-        family_id: str | int
-    ) -> bool:
-        """
-        Sends an auto-renewing Telegram Stars subscription invoice via sendInvoice Bot API.
-        Currency: XTR (Telegram Stars).
-        Subscription period: 2592000 (30 days in seconds).
-        Payload identifier: sub_solo_pro_{family_id} or sub_family_pro_{family_id}.
-        """
-        from src.core.subscription_config import get_tier_config
-        config = get_tier_config(plan_type)
-
-        if not config:
-            raise ValueError(f"Invalid subscription plan type for invoice: {plan_type}")
-
-        try:
-            client = get_http_client()
-            body = {
-                "chat_id": chat_id,
-                "title": config.title,
-                "description": config.description,
-                "payload": f"sub_{config.code}_{family_id}",
-                "provider_token": "",
-                "currency": "XTR",
-                "prices": [{"label": config.title, "amount": config.stars}],
-                "subscription_period": config.subscription_period_seconds,
-                "start_parameter": f"sub_{config.code}"
-            }
-            response = await client.post(
-                f"{self.api_url}/sendInvoice",
-                json=body
-            )
-            response.raise_for_status()
-            data = response.json()
-            return bool(data.get("ok"))
-        except Exception as e:
-            logger.error(f"Failed to send subscription invoice for plan {plan_type} to chat {chat_id}: {e}")
-            raise
-
-    async def answer_pre_checkout_query(
-        self,
-        pre_checkout_query_id: str,
-        ok: bool = True,
-        error_message: str | None = None
-    ) -> bool:
-        """
-        Answers a pre-checkout query via Telegram Bot API answerPreCheckoutQuery.
-        Must respond within 10 seconds.
-        """
-        try:
-            client = get_http_client()
-            body = {
-                "pre_checkout_query_id": pre_checkout_query_id,
-                "ok": ok
-            }
-            if not ok and error_message:
-                body["error_message"] = error_message
-
-            response = await client.post(
-                f"{self.api_url}/answerPreCheckoutQuery",
-                json=body
-            )
-            response.raise_for_status()
-            data = response.json()
-            return bool(data.get("ok"))
-        except Exception as e:
-            logger.error(f"Failed to answer pre-checkout query {pre_checkout_query_id}: {e}")
-            return False
 
 

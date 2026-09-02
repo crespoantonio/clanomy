@@ -45,132 +45,32 @@ async def test_send_document_failure(telegram_service, tmp_path):
             assert "Failed to send telegram document" in mock_logger.call_args[0][0]
 
 @pytest.mark.anyio
-async def test_send_subscription_invoice_solo_pro_success(telegram_service):
+async def test_send_message_with_reply_markup(telegram_service):
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_response = MagicMock()
         mock_response.raise_for_status.return_value = None
+        mock_response.status_code = 200
         mock_response.json.return_value = {"ok": True, "result": {"message_id": 999}}
         mock_post.return_value = mock_response
 
-        res = await telegram_service.send_subscription_invoice(
+        reply_markup = {
+            "inline_keyboard": [
+                [{"text": "Upgrade", "url": "https://checkout.lemonsqueezy.com/buy/123"}]
+            ]
+        }
+        await telegram_service.send_message(
             chat_id=555,
-            plan_type="solo_pro",
-            family_id="fam-uuid-111"
+            text="Choose your plan",
+            reply_markup=reply_markup
         )
-        assert res is True
+
         mock_post.assert_called_once()
         args, kwargs = mock_post.call_args
-        assert args[0] == "https://api.telegram.org/bottest_token/sendInvoice"
+        assert "sendMessage" in args[0]
         json_body = kwargs["json"]
         assert json_body["chat_id"] == 555
-        assert json_body["title"] == "Clanomy Solo Pro"
-        assert json_body["payload"] == "sub_solo_pro_fam-uuid-111"
-        assert json_body["currency"] == "XTR"
-        assert json_body["subscription_period"] == 2592000
-        assert json_body["provider_token"] == ""
-        assert json_body["prices"] == [{"label": "Clanomy Solo Pro", "amount": 200}]
-
-@pytest.mark.anyio
-async def test_send_subscription_invoice_family_pro_success(telegram_service):
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_response = MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {"ok": True, "result": {"message_id": 1000}}
-        mock_post.return_value = mock_response
-
-        res = await telegram_service.send_subscription_invoice(
-            chat_id=777,
-            plan_type="family_pro",
-            family_id="fam-uuid-222"
-        )
-        assert res is True
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        assert args[0] == "https://api.telegram.org/bottest_token/sendInvoice"
-        json_body = kwargs["json"]
-        assert json_body["chat_id"] == 777
-        assert json_body["title"] == "Clanomy Family Pro"
-        assert json_body["payload"] == "sub_family_pro_fam-uuid-222"
-        assert json_body["currency"] == "XTR"
-        assert json_body["subscription_period"] == 2592000
-        assert json_body["provider_token"] == ""
-        assert json_body["prices"] == [{"label": "Clanomy Family Pro", "amount": 450}]
-
-@pytest.mark.anyio
-async def test_send_subscription_invoice_invalid_plan(telegram_service):
-    with pytest.raises(ValueError, match="Invalid subscription plan type"):
-        await telegram_service.send_subscription_invoice(
-            chat_id=123,
-            plan_type="invalid_plan",
-            family_id="fam-123"
-        )
-
-@pytest.mark.anyio
-async def test_send_subscription_invoice_http_error(telegram_service):
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.side_effect = httpx.HTTPError("Telegram API error")
-        with pytest.raises(httpx.HTTPError):
-            await telegram_service.send_subscription_invoice(
-                chat_id=123,
-                plan_type="solo_pro",
-                family_id="fam-123"
-            )
-
-@pytest.mark.anyio
-async def test_answer_pre_checkout_query_ok_true(telegram_service):
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_response = MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {"ok": True, "result": True}
-        mock_post.return_value = mock_response
-
-        res = await telegram_service.answer_pre_checkout_query(
-            pre_checkout_query_id="query_12345",
-            ok=True
-        )
-        assert res is True
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        assert args[0] == "https://api.telegram.org/bottest_token/answerPreCheckoutQuery"
-        json_body = kwargs["json"]
-        assert json_body["pre_checkout_query_id"] == "query_12345"
-        assert json_body["ok"] is True
-        assert "error_message" not in json_body
-
-@pytest.mark.anyio
-async def test_answer_pre_checkout_query_ok_false_with_error(telegram_service):
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_response = MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.json.return_value = {"ok": True, "result": True}
-        mock_post.return_value = mock_response
-
-        res = await telegram_service.answer_pre_checkout_query(
-            pre_checkout_query_id="query_67890",
-            ok=False,
-            error_message="Invalid plan or payment expired."
-        )
-        assert res is True
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        assert args[0] == "https://api.telegram.org/bottest_token/answerPreCheckoutQuery"
-        json_body = kwargs["json"]
-        assert json_body["pre_checkout_query_id"] == "query_67890"
-        assert json_body["ok"] is False
-        assert json_body["error_message"] == "Invalid plan or payment expired."
-
-@pytest.mark.anyio
-async def test_answer_pre_checkout_query_failure(telegram_service):
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-        mock_post.side_effect = httpx.HTTPError("Network failure")
-        with patch("src.services.telegram_service.logger.error") as mock_logger:
-            res = await telegram_service.answer_pre_checkout_query(
-                pre_checkout_query_id="query_fail",
-                ok=True
-            )
-            assert res is False
-            mock_logger.assert_called_once()
-            assert "Failed to answer pre-checkout query" in mock_logger.call_args[0][0]
+        assert json_body["text"] == "Choose your plan"
+        assert json_body["reply_markup"] == reply_markup
 
 @pytest.mark.anyio
 async def test_post_with_retry_502_retry_success(telegram_service):

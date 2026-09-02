@@ -136,33 +136,13 @@ def mock_telegram(monkeypatch):
             self.messages = []
             
         async def send_message(self, chat_id, text, **kwargs):
-            self.messages.append({"chat_id": chat_id, "text": text})
+            self.messages.append({"chat_id": chat_id, "text": text, **kwargs})
             return True
             
         async def send_document(self, chat_id, document=None, caption=None, **kwargs):
             self.messages.append({"chat_id": chat_id, "document": document, "caption": caption, **kwargs})
             return True
 
-        async def send_subscription_invoice(self, chat_id, plan_type, family_id, **kwargs):
-            self.messages.append({
-                "chat_id": chat_id,
-                "type": "invoice",
-                "plan_type": plan_type,
-                "family_id": family_id,
-                "payload": f"sub_{plan_type}_{family_id}",
-                "text": f"INVOICE: {plan_type}"
-            })
-            return True
-
-        async def answer_pre_checkout_query(self, pre_checkout_query_id, ok=True, error_message=None, **kwargs):
-            self.messages.append({
-                "type": "pre_checkout_answer",
-                "pre_checkout_query_id": pre_checkout_query_id,
-                "ok": ok,
-                "error_message": error_message
-            })
-            return True
-            
         async def get_bot_username(self) -> str:
             return "mock_bot"
             
@@ -175,6 +155,17 @@ def mock_telegram(monkeypatch):
     except AttributeError:
         pass
         
+    try:
+        monkeypatch.setattr("src.services.billing.lemonsqueezy_billing.TelegramService", lambda: mock_instance)
+    except AttributeError:
+        pass
+
+    try:
+        from src.api.routes import lemonsqueezy
+        lemonsqueezy.billing_service.telegram_service = mock_instance
+    except Exception:
+        pass
+
     try:
         monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", lambda: mock_instance)
     except AttributeError:

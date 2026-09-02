@@ -21,7 +21,7 @@ from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
-from src.services.billing.telegram_billing import TelegramBillingService
+from src.services.billing.lemonsqueezy_billing import LemonSqueezyBillingService
 from src.services.handlers.command_handler import CommandHandler
 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 from src.services.subscription_service import (
@@ -106,14 +106,7 @@ async def telegram_webhook(
 
     payload = await request.json()
     telegram_service = TelegramService()
-    billing_service = TelegramBillingService(telegram_service)
-
-    # 1. Handle pre_checkout_query for Telegram Stars
-    if "pre_checkout_query" in payload:
-        res = await billing_service.handle_pre_checkout_query(payload["pre_checkout_query"])
-        if res.get("status") == "error":
-            raise HTTPException(status_code=400, detail=res.get("message", "Pre-checkout error"))
-        return {"status": "ok"}
+    billing_service = LemonSqueezyBillingService(telegram_service)
 
     if "message" not in payload:
         logger.info(f"Ignoring non-message Telegram update (keys: {list(payload.keys())})")
@@ -157,13 +150,6 @@ async def telegram_webhook(
             "last_name": from_user.get("last_name"),
         }
         user, family = service.get_or_create_user_and_family(user_data)
-
-        # Handle successful / refunded payments
-        if "successful_payment" in message:
-            return billing_service.handle_successful_payment_event(session, background_tasks, message, family, chat_id)
-
-        if "refunded_payment" in message:
-            return billing_service.handle_refunded_payment_event(session, background_tasks, message, family, chat_id)
 
         # Handle native Telegram location pin for 1-tap timezone calibration
         if "location" in message and isinstance(message["location"], dict):
@@ -261,9 +247,13 @@ async def telegram_webhook(
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
                 return {"status": "ok"}
 
+        # Handle /billing /portal command
+        if text and text.strip().lower() in ("/billing", "/portal", "/cancel"):
+            return await billing_service.handle_billing_command(background_tasks, user, family, chat_id)
+
         # Handle /upgrade command
         if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
-            return billing_service.handle_upgrade_command(background_tasks, text, user, family, chat_id)
+            return await billing_service.handle_upgrade_command(background_tasks, text, user, family, chat_id)
 
         # Determine audio or text
         audio_file_id = voice.get("file_id") if voice else None

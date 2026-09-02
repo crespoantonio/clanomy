@@ -2,11 +2,12 @@ name: PR Integrity & Guardrail Check
 
 on:
   pull_request:
+    branches: [master, main]
     types: [opened, synchronize, reopened]
 
 jobs:
   guardrail:
-    name: Check Protected Paths
+    name: Check Protected Payment & Security Paths
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -26,28 +27,33 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          # Protected files/paths list:
-          # - README.md (project branding and donation links)
-          # - src/services/subscription_service.py (billing and tier logic)
-          # - src/core/subscription_config.py (pricing, tier parameters, and duration constants)
-          # - .github/workflows/** (CI and security actions)
+          # Protected files/paths list for payments, monetization, security, and branding:
+          # - Payment and billing services
+          # - Lemon Squeezy webhook routes and API endpoints
+          # - Subscription and tier configurations
+          # - Payment database migrations
+          # - Payment test suites
+          # - Monetization strategy documentation & licensing
+          # - GitHub workflows and CI security rules
           PROTECTED_PATTERNS=(
             "^README\.md$"
+            "^LICENSE$"
+            "^\.env\.example$"
             "^src/services/subscription_service\.py$"
             "^src/services/billing/"
+            "^src/api/routes/lemonsqueezy\.py$"
             "^src/core/subscription_config\.py$"
+            "^alembic/versions/.*lemonsqueezy.*"
+            "^docs/monetization-and-subscription-strategy\.md$"
+            "^tests/services/test_lemonsqueezy_billing\.py$"
+            "^tests/services/test_subscription_service\.py$"
             "^\.github/workflows/"
           )
 
           VIOLATIONS=()
           PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          REPO_OWNER="${{ github.repository_owner }}"
 
-          # If the PR author is the repo owner/maintainer, bypass check
-          if [ "$PR_AUTHOR" == "$REPO_OWNER" ]; then
-            echo "PR author is repository owner ($REPO_OWNER). Bypassing guardrail check."
-            exit 0
-          fi
+          echo "Evaluating PR submitted by: $PR_AUTHOR"
 
           while IFS= read -r file; do
             [ -z "$file" ] && continue
@@ -60,12 +66,12 @@ jobs:
           done <<< "$CHANGED_FILES"
 
           if [ ${#VIOLATIONS[@]} -gt 0 ]; then
-            echo "::error::PR touches protected files that are restricted to repository maintainers:"
+            echo "::error::PR touches protected payment, billing, or security files restricted from pull request modifications:"
             for v in "${VIOLATIONS[@]}"; do
               echo "  - $v"
             done
             echo ""
-            echo "Modifications to billing logic, payment flows, CI workflows, or core README branding are maintained exclusively by the core team. Please see CONTRIBUTING.md."
+            echo "Modifications to billing logic, payment webhooks, subscription tiers, payment migrations, CI workflows, or core licensing are strictly restricted. Please see CONTRIBUTING.md."
             exit 1
           fi
 

@@ -626,7 +626,37 @@ def test_webhook_rejects_excessive_voice_duration(app_client, mock_telegram, tel
     assert "Voice Note Too Long" in alert_msg
     assert "60 seconds" in alert_msg
 
+def test_webhook_rejects_excessive_voice_file_size(app_client, mock_telegram, telegram_payload_factory):
+    """[P0] Webhook fast-fails when voice file size exceeds MAX_AUDIO_SIZE_BYTES before download."""
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=9804),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    voice_payload = telegram_payload_factory(user_id=9804)
+    voice_payload["message"]["voice"] = {
+        "file_id": "huge_voice_file_id",
+        "duration": 30,  # 30s is under 60s limit
+        "file_size": 4 * 1024 * 1024,  # 4 MB > 3 MB limit
+        "mime_type": "audio/ogg"
+    }
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=voice_payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    alert_msg = mock_telegram.messages[0]["text"]
+    assert "Voice File Too Large" in alert_msg
+    assert "3.0 MB" in alert_msg
+
+
 def test_webhook_currency_command_get_and_set(app_client, mock_telegram, telegram_payload_factory):
+
     """[P1] Webhook processes /currency to view and /currency ARS to update default currency."""
     app_client.post(
         "/api/v1/telegram/webhook",

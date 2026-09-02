@@ -36,8 +36,10 @@ from src.templates.telegram_messages import (
     UNSUPPORTED_FORMAT_MESSAGE,
     format_message_too_long,
     format_voice_too_long,
+    format_voice_too_large,
     format_welcome_message
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +202,17 @@ async def telegram_webhook(
                 text=format_voice_too_long(settings.MAX_VOICE_DURATION_SECONDS, voice.get("duration", 0))
             )
             return {"status": "ok"}
+
+        if voice and voice.get("file_size", 0) > settings.MAX_AUDIO_SIZE_BYTES:
+            max_mb = settings.MAX_AUDIO_SIZE_BYTES / (1024 * 1024)
+            recv_mb = voice.get("file_size", 0) / (1024 * 1024)
+            background_tasks.add_task(
+                telegram_service.send_message,
+                chat_id=chat_id,
+                text=format_voice_too_large(max_mb, recv_mb)
+            )
+            return {"status": "ok"}
+
 
         # Handle /start command
         if text and text.startswith("/start"):

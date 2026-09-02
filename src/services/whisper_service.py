@@ -85,12 +85,16 @@ class WhisperService:
         if audio_url is not None and audio_bytes is not None:
             raise ValueError("Both audio_url and audio_bytes cannot be provided simultaneously")
 
+        max_size = getattr(settings, "MAX_AUDIO_SIZE_BYTES", 3 * 1024 * 1024)
+
         # Support raw binary stream/file-like objects
         if audio_bytes is not None:
             if hasattr(audio_bytes, "read"):
                 audio_bytes = audio_bytes.read()
             if len(audio_bytes) == 0:
                 raise ValueError("audio_bytes cannot be empty")
+            if len(audio_bytes) > max_size:
+                raise InferenceError(f"Audio file is too large ({len(audio_bytes)} bytes > {max_size} bytes limit)")
 
         # 2. Download audio if URL is provided
         if audio_url is not None:
@@ -100,19 +104,19 @@ class WhisperService:
                 response.raise_for_status()
                 
                 # Prevent DoS/OOM on huge files
-                MAX_AUDIO_SIZE = 20 * 1024 * 1024  # 20MB limit
                 content_length = response.headers.get("Content-Length")
-                if content_length and int(content_length) > MAX_AUDIO_SIZE:
-                    raise InferenceError(f"Audio file is too large ({content_length} bytes)")
+                if content_length and int(content_length) > max_size:
+                    raise InferenceError(f"Audio file is too large ({content_length} bytes > {max_size} bytes limit)")
                     
                 audio_bytes = response.content
-                if len(audio_bytes) > MAX_AUDIO_SIZE:
-                    raise InferenceError(f"Audio file is too large ({len(audio_bytes)} bytes)")
+                if len(audio_bytes) > max_size:
+                    raise InferenceError(f"Audio file is too large ({len(audio_bytes)} bytes > {max_size} bytes limit)")
             except Exception as e:
                 logger.error(f"Failed to download audio from {audio_url}: {e}", exc_info=True)
                 if not isinstance(e, InferenceError):
                     raise InferenceError(f"Failed to download audio from {audio_url}: {e}")
                 raise
+
 
             if not audio_bytes or len(audio_bytes) == 0:
                 raise InferenceError(f"Downloaded audio from {audio_url} is empty")

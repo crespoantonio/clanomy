@@ -103,7 +103,12 @@ class TelegramService:
         data = response.json()
         if not data.get("ok") or "result" not in data or "file_path" not in data["result"]:
             raise ValueError(f"Could not resolve Telegram file_id {file_id}")
-        file_path = data["result"]["file_path"]
+        result = data["result"]
+        file_size = result.get("file_size")
+        max_size = getattr(settings, "MAX_AUDIO_SIZE_BYTES", 3 * 1024 * 1024)
+        if file_size and file_size > max_size:
+            raise ValueError(f"Telegram file size ({file_size} bytes) exceeds limit ({max_size} bytes)")
+        file_path = result["file_path"]
         return f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
 
     async def download_file_bytes(self, file_id: str) -> bytes:
@@ -112,7 +117,12 @@ class TelegramService:
         client = get_http_client()
         response = await client.get(download_url)
         response.raise_for_status()
-        return response.content
+        content = response.content
+        max_size = getattr(settings, "MAX_AUDIO_SIZE_BYTES", 3 * 1024 * 1024)
+        if len(content) > max_size:
+            raise ValueError(f"Downloaded file size ({len(content)} bytes) exceeds limit ({max_size} bytes)")
+        return content
+
 
     async def send_document(self, chat_id: int, file_path: str, caption: str | None = None) -> None:
         """Sends a document back to the user via Telegram Bot API."""

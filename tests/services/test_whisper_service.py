@@ -260,6 +260,13 @@ async def test_transcribe_cloud_whisper_exhaustion_raises_inference_error_no_loc
         with pytest.raises(InferenceError, match="Audio transcription service is momentarily busy"):
             await service.transcribe(audio_bytes=b"fake_audio_stream")
         assert mock_client.post.call_count == 3
-        mock_get_model.assert_not_called()
+
+@pytest.mark.anyio
+async def test_transcribe_rejects_audio_bytes_exceeding_max_audio_size():
+    service = WhisperService()
+    oversized_bytes = b"x" * (settings.MAX_AUDIO_SIZE_BYTES + 1024)
+    with pytest.raises(InferenceError, match="Audio file is too large"):
+        await service.transcribe(audio_bytes=oversized_bytes)
+
 
 

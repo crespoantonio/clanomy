@@ -126,6 +126,15 @@ def format_voice_too_long(max_sec: int, received_sec: int) -> str:
     )
 
 
+def format_voice_too_large(max_mb: float, received_mb: float) -> str:
+    return (
+        f"📦 <b>Voice File Too Large</b>\n\n"
+        f"Please keep voice notes under {max_mb:.1f} MB "
+        f"(file was {received_mb:.1f} MB)."
+    )
+
+
+
 def format_free_tier_exceeded(monthly_tx_count: int) -> str:
     return (
         f"⚠️ <b>Monthly AI Quota Exceeded ({monthly_tx_count}/20)</b>\n\n"

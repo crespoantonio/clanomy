@@ -52,6 +52,11 @@ def sanitize_auth_tokens(error_or_text: object) -> str:
     text = re.sub(r"sk-[A-Za-z0-9]{20,}", "sk-[REDACTED]", text)
     # Redact Telegram Bot tokens: \d{8,10}:[A-Za-z0-9_-]{30,40}
     text = re.sub(r"\b\d{8,10}:[A-Za-z0-9_-]{30,40}\b", "[TELEGRAM_TOKEN_REDACTED]", text)
+    # Redact configured Lemon Squeezy secrets if present in text
+    if hasattr(settings, "LEMON_SQUEEZY_API_KEY") and settings.LEMON_SQUEEZY_API_KEY and len(settings.LEMON_SQUEEZY_API_KEY) > 8:
+        text = text.replace(settings.LEMON_SQUEEZY_API_KEY, "[LEMON_SQUEEZY_KEY_REDACTED]")
+    if hasattr(settings, "LEMON_SQUEEZY_WEBHOOK_SECRET") and settings.LEMON_SQUEEZY_WEBHOOK_SECRET and len(settings.LEMON_SQUEEZY_WEBHOOK_SECRET) > 8:
+        text = text.replace(settings.LEMON_SQUEEZY_WEBHOOK_SECRET, "[LEMON_SQUEEZY_SECRET_REDACTED]")
     return text
 
 

@@ -187,7 +187,7 @@ class LemonSqueezyBillingService:
         if settings.LEMON_SQUEEZY_STORE_ID and store_id:
             if str(store_id).strip() != str(settings.LEMON_SQUEEZY_STORE_ID).strip():
                 logger.warning(
-                    f"Security Alert: Webhook store_id '{store_id}' does not match configured store '{settings.LEMON_SQUEEZY_STORE_ID}'"
+                    f"Security Alert: Webhook store_id '{store_id}' does not match configured store"
                 )
                 return {"status": "ignored", "reason": "Mismatched store_id"}
 

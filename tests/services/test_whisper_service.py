@@ -19,7 +19,7 @@ def reset_whisper_service():
 
 @pytest.fixture
 def mock_whisper_model():
-    with patch("src.services.whisper_service.WhisperModel") as mock_model_class:
+    with patch("faster_whisper.WhisperModel") as mock_model_class:
         mock_model_instance = MagicMock()
         mock_model_class.return_value = mock_model_instance
         
@@ -191,7 +191,7 @@ async def test_transcribe_model_failure(mock_whisper_model):
 async def test_transcribe_model_failed_init_caching():
     service = WhisperService()
     
-    with patch("src.services.whisper_service.WhisperModel", side_effect=Exception("Failed to load weights")) as mock_class:
+    with patch("faster_whisper.WhisperModel", side_effect=Exception("Failed to load weights")) as mock_class:
         # First call fails
         with pytest.raises(InferenceError, match="Failed to load weights"):
             await service.transcribe(audio_bytes=b"fake-bytes")

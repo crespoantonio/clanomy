@@ -4,9 +4,10 @@ import os
 import tempfile
 import time
 import threading
-from typing import Optional, Tuple, Union, BinaryIO
+from typing import Optional, Tuple, Union, BinaryIO, TYPE_CHECKING, Any
 import httpx
-from faster_whisper import WhisperModel
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 from src.core.config import settings
 from src.core.http_client import get_http_client
 from src.core.security import sanitize_exception_message
@@ -19,7 +20,7 @@ class InferenceError(Exception):
 
 class WhisperService:
     _instance = None
-    _model: Optional[WhisperModel] = None
+    _model: Optional[Any] = None
     _lock = threading.Lock()
     _transcribe_lock = threading.Lock()
     _failed_init = False
@@ -31,7 +32,7 @@ class WhisperService:
                     cls._instance = super().__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def get_model(self) -> WhisperModel:
+    def get_model(self) -> Any:
         """
         Lazily loads and returns the WhisperModel instance in a thread-safe manner.
         """
@@ -48,6 +49,7 @@ class WhisperService:
                         f"device: {settings.WHISPER_DEVICE}, compute_type: {settings.WHISPER_COMPUTE_TYPE})"
                     )
                     try:
+                        from faster_whisper import WhisperModel
                         self._model = WhisperModel(
                             model_size_or_path=settings.WHISPER_MODEL_SIZE,
                             device=settings.WHISPER_DEVICE,

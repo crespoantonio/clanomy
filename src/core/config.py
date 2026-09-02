@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     HTTP_POOL_MAX_KEEPALIVE: int = 20
     HTTP_TIMEOUT: float = 30.0
     
+    # Database URL Normalization (Render / SQLAlchemy 2 with psycopg3)
+    @field_validator("DATABASE_URL", mode="before")
+    def normalize_database_url(cls, v: str) -> str:
+        if isinstance(v, str):
+            if v.startswith("postgres://"):
+                return v.replace("postgres://", "postgresql+psycopg://", 1)
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+psycopg://"):
+                return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
+
     # Callback (Removed n8n)    
     @field_validator("WHISPER_DEVICE")
     def validate_whisper_device(cls, v: str) -> str:

@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     # Project Info
     PROJECT_NAME: str = "Clanomy"
     DEFAULT_CURRENCY: str = "USD"
+    DEFAULT_TIMEZONE: str = "America/Argentina/Buenos_Aires"
     
     # Database
     DATABASE_URL: str

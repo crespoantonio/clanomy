@@ -763,6 +763,61 @@ def test_webhook_currency_command_get_and_set(app_client, mock_telegram, telegra
     assert "ARS" in mock_telegram.messages[0]["text"]
 
 
+def test_webhook_timezone_commands_and_location(app_client, mock_telegram, telegram_payload_factory):
+    """Test /timezone slash command and location pin automatic calibration."""
+    # 1. Register user
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=9820),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    # 2. Check current timezone
+    resp = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/timezone", user_id=9820),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert resp.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Timezone Settings" in mock_telegram.messages[0]["text"]
+    mock_telegram.messages.clear()
+
+    # 3. Update timezone via text
+    resp = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/timezone Madrid", user_id=9820),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert resp.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Personal Timezone Updated!" in mock_telegram.messages[0]["text"]
+    assert "Europe/Madrid" in mock_telegram.messages[0]["text"]
+    mock_telegram.messages.clear()
+
+    # 4. Update timezone via location pin (Buenos Aires coords)
+    location_payload = {
+        "update_id": 982001,
+        "message": {
+            "message_id": 501,
+            "date": 1725235200,
+            "chat": {"id": 9820, "type": "private"},
+            "from": {"id": 9820, "is_bot": False, "first_name": "Tony"},
+            "location": {"latitude": -34.6037, "longitude": -58.3816}
+        }
+    }
+    resp = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=location_payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert resp.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    assert "Location Detected & Calibrated!" in mock_telegram.messages[0]["text"]
+    assert "America/Argentina/Buenos_Aires" in mock_telegram.messages[0]["text"]
+
+
 
 
 

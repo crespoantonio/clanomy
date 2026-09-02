@@ -493,4 +493,60 @@ class FamilyService:
             self._log_3s_audit("set_family_default_currency", start_time)
             return normalized
 
+    def get_family_timezone(self, family_id: UUID) -> str:
+        """Fetches the default timezone for a family workspace."""
+        if not family_id:
+            return getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+        try:
+            with Session(self.engine) as session:
+                fam_uuid = family_id if isinstance(family_id, UUID) else UUID(str(family_id))
+                family = session.get(Family, fam_uuid)
+                if family and getattr(family, "timezone", None):
+                    return family.timezone
+        except Exception:
+            pass
+        return getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+
+    def set_family_timezone(self, family_id: UUID, tz_name: str) -> str:
+        """Updates the default timezone for a family workspace."""
+        from src.services.query.date_resolver import validate_and_normalize_timezone
+        norm = validate_and_normalize_timezone(tz_name)
+        if not norm:
+            raise ValueError(f"Invalid timezone '{tz_name}'. Try a city like 'Buenos Aires', 'Madrid', or an offset like '-3'.")
+        with Session(self.engine) as session:
+            fam_uuid = family_id if isinstance(family_id, UUID) else UUID(str(family_id))
+            family = session.get(Family, fam_uuid)
+            if not family:
+                raise ValueError("Family workspace not found.")
+            family.timezone = norm
+            session.add(family)
+            session.commit()
+            return norm
+
+    def get_user_timezone(self, user_id: UUID) -> Optional[str]:
+        """Fetches the personal timezone override for a user."""
+        try:
+            with Session(self.engine) as session:
+                u_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+                user = session.get(User, u_uuid)
+                return getattr(user, "timezone", None) if user else None
+        except Exception:
+            return None
+
+    def set_user_timezone(self, user_id: UUID, tz_name: str) -> str:
+        """Sets or updates the personal timezone override for a user."""
+        from src.services.query.date_resolver import validate_and_normalize_timezone
+        norm = validate_and_normalize_timezone(tz_name)
+        if not norm:
+            raise ValueError(f"Invalid timezone '{tz_name}'. Try a city like 'Buenos Aires', 'Madrid', or an offset like '-3'.")
+        with Session(self.engine) as session:
+            u_uuid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+            user = session.get(User, u_uuid)
+            if not user:
+                raise ValueError("User not found.")
+            user.timezone = norm
+            session.add(user)
+            session.commit()
+            return norm
+
 

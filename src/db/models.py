@@ -32,6 +32,7 @@ class Family(SQLModel, table=True):
 
     # Household Currency Configuration
     default_currency: str = Field(default="USD", sa_column_kwargs={"server_default": "USD"}, max_length=3)
+    timezone: str = Field(default="America/Argentina/Buenos_Aires", sa_column_kwargs={"server_default": "America/Argentina/Buenos_Aires"}, max_length=50)
 
     # Relationships
     users: List["User"] = Relationship(back_populates="family", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
@@ -50,6 +51,7 @@ class User(SQLModel, table=True):
     family_id: UUID = Field(foreign_key="family.id", index=True, ondelete="CASCADE")
     is_admin: bool = Field(default=False)
     has_used_trial: bool = Field(default=False)
+    timezone: Optional[str] = Field(default=None, max_length=50)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships

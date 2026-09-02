@@ -35,6 +35,9 @@ class CommandHandler:
     def __init__(self):
         self.query_service = QueryService()
 
+    def _resolve_active_timezone(self, user: User, family: Family) -> str:
+        return getattr(user, "timezone", None) or getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+
     async def handle_month(self, user: User, family: Family, args: str = "") -> str:
         """
         /month or /month last
@@ -42,9 +45,10 @@ class CommandHandler:
         """
         args_lower = (args or "").strip().lower()
         timeframe = "last_month" if any(w in args_lower for w in ["last", "pasado", "anterior"]) else "this_month"
+        active_tz = self._resolve_active_timezone(user, family)
         
         ref_time = datetime.now(timezone.utc)
-        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz)
         effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
 
         transactions = await asyncio.to_thread(
@@ -81,7 +85,7 @@ class CommandHandler:
         )
 
         month_label = start_time.strftime("%B %Y")
-        return format_month_summary(qr, family_name=family.name, timeframe_label=month_label)
+        return format_month_summary(qr, family_name=family.name, timeframe_label=month_label, tz_name=active_tz)
 
     async def handle_me(self, user: User, family: Family, args: str = "") -> str:
         """
@@ -90,9 +94,10 @@ class CommandHandler:
         """
         args_lower = (args or "").strip().lower()
         timeframe = "last_month" if any(w in args_lower for w in ["last", "pasado", "anterior"]) else "this_month"
+        active_tz = self._resolve_active_timezone(user, family)
         
         ref_time = datetime.now(timezone.utc)
-        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz)
         effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
 
         all_family_txs = await asyncio.to_thread(
@@ -131,15 +136,16 @@ class CommandHandler:
 
         user_display = user.full_name or user.username or "You"
         month_label = start_time.strftime("%B %Y")
-        return format_me_summary(qr, user_name=user_display, timeframe_label=month_label)
+        return format_me_summary(qr, user_name=user_display, timeframe_label=month_label, tz_name=active_tz)
 
     async def handle_today(self, user: User, family: Family, args: str = "") -> str:
         """
         /today or /today me
         Generates summary of transactions recorded today.
         """
+        active_tz = self._resolve_active_timezone(user, family)
         ref_time = datetime.now(timezone.utc)
-        start_time, end_time = self.query_service._resolve_date_range("today", None, None, ref_time)
+        start_time, end_time = self.query_service._resolve_date_range("today", None, None, ref_time, tz_name=active_tz)
         effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
 
         args_lower = (args or "").strip().lower()
@@ -171,7 +177,7 @@ class CommandHandler:
             aggregation=aggregation
         )
 
-        return format_today_summary(qr, is_family=(not only_me))
+        return format_today_summary(qr, is_family=(not only_me), tz_name=active_tz)
 
     async def handle_bills(self, user: User, family: Family, args: str = "") -> str:
         """
@@ -180,9 +186,10 @@ class CommandHandler:
         """
         args_lower = (args or "").strip().lower()
         timeframe = "next_month" if any(w in args_lower for w in ["next", "proximo", "siguiente"]) else "this_month"
+        active_tz = self._resolve_active_timezone(user, family)
 
         ref_time = datetime.now(timezone.utc)
-        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz)
 
         bills = await asyncio.to_thread(
             self.query_service._fetch_and_decrypt_scheduled_bills,
@@ -190,15 +197,16 @@ class CommandHandler:
         )
 
         tf_label = "Next Month" if timeframe == "next_month" else "This Month"
-        return format_bills_summary(bills, timeframe_label=tf_label)
+        return format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz)
 
     async def handle_balance(self, user: User, family: Family, args: str = "") -> str:
         """
         /balance
         Shows net cash flow, earnings vs spendings, and savings rate.
         """
+        active_tz = self._resolve_active_timezone(user, family)
         ref_time = datetime.now(timezone.utc)
-        start_time, end_time = self.query_service._resolve_date_range("this_month", None, None, ref_time)
+        start_time, end_time = self.query_service._resolve_date_range("this_month", None, None, ref_time, tz_name=active_tz)
         effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
 
         transactions = await asyncio.to_thread(
@@ -224,7 +232,77 @@ class CommandHandler:
             aggregation=aggregation
         )
 
-        return format_balance_summary(qr)
+        return format_balance_summary(qr, tz_name=active_tz)
+
+    async def handle_timezone(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /timezone or /timezone Madrid
+        Displays or updates the active timezone for the user or household.
+        """
+        from src.services.family_service import FamilyService
+        from src.services.query.date_resolver import validate_and_normalize_timezone
+        
+        args_clean = (args or "").strip()
+        family_service = FamilyService()
+
+        if not args_clean:
+            active_tz = self._resolve_active_timezone(user, family)
+            user_tz = getattr(user, "timezone", None)
+            fam_tz = getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+            user_note = f" (personal: <code>{user_tz}</code>)" if user_tz else " (using household default)"
+            
+            return (
+                f"🌐 <b>Timezone Settings</b>\n\n"
+                f"• Active Timezone: <b>{active_tz}</b>{user_note}\n"
+                f"• Household Default: <b>{fam_tz}</b>\n\n"
+                f"📍 <b>How to update:</b>\n"
+                f"• Send your location pin (📎 ➔ Location) to auto-detect.\n"
+                f"• Or type: <code>/timezone &lt;city, country, or offset&gt;</code>\n\n"
+                f"<i>Examples:</i>\n"
+                f"• <code>/timezone Buenos Aires</code>\n"
+                f"• <code>/timezone Madrid</code>\n"
+                f"• <code>/timezone -3</code>\n"
+                f"• <code>/timezone America/Argentina/Buenos_Aires</code>\n\n"
+                f"💡 <i>Tip: Household admins can update the family default with <code>/timezone --household &lt;zone&gt;</code>.</i>"
+            )
+
+        # Check if setting for household
+        is_household = False
+        tz_input = args_clean
+        if "--household" in tz_input.lower() or "-h" in tz_input.lower():
+            tz_input = tz_input.replace("--household", "").replace("-h", "").strip()
+            is_household = True
+
+        normalized = validate_and_normalize_timezone(tz_input)
+        if not normalized:
+            return (
+                f"❌ <b>Unrecognized timezone:</b> '{tz_input}'\n\n"
+                f"Please provide a known city, IANA name, or UTC offset:\n"
+                f"• <code>/timezone Buenos Aires</code>\n"
+                f"• <code>/timezone Madrid</code>\n"
+                f"• <code>/timezone -3</code>\n"
+                f"• <code>/timezone America/Argentina/Buenos_Aires</code>"
+            )
+
+        if is_household:
+            is_admin = family_service.is_family_admin(family.id, user.id)
+            if not is_admin:
+                return "⛔ Only household administrators can update the family-wide default timezone."
+            await asyncio.to_thread(family_service.set_family_timezone, family.id, normalized)
+            family.timezone = normalized
+            return (
+                f"✅ <b>Household Default Timezone Updated!</b>\n\n"
+                f"The family workspace is now set to <b>{normalized}</b>. "
+                f"All daily and monthly summaries will be aligned to this local time."
+            )
+        else:
+            await asyncio.to_thread(family_service.set_user_timezone, user.id, normalized)
+            user.timezone = normalized
+            return (
+                f"✅ <b>Personal Timezone Updated!</b>\n\n"
+                f"Your active timezone is now set to <b>{normalized}</b>. "
+                f"Your daily reports (/today, /me) are now calibrated to your local time."
+            )
 
     async def handle_undo(self, user: User, family: Family) -> str:
         """
@@ -248,6 +326,7 @@ class CommandHandler:
             "• /today — 📅 Summary of transactions logged today\n"
             "• /balance — 💰 Household net cash flow & savings rate\n"
             "• /bills — ⏰ Upcoming fixed bills and dues\n"
+            "• /timezone — 🌐 View or calibrate your active timezone\n"
             "• /family — 👥 Members, roles, currency & plan quota\n"
             "• /invite — 🔗 Invite partner/roommate to your household\n"
             "• /export — 📁 Download all transactions in CSV\n"
@@ -259,3 +338,4 @@ class CommandHandler:
             "• <i>\"Change the last one to income\"</i>\n\n"
             "💡 <i>Note: Slash commands (/month, /me, etc.) are always 100% free and never consume your monthly AI quota!</i>"
         )
+

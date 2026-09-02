@@ -236,15 +236,20 @@ def generate_fallback_summary(
             
     return f"{greeting}{subject} {has_verb} spent {total_str} across {agg.transaction_count} transactions {tf_period}{member_str}{top_cat_str}.{comp_str}"
 
+def format_timezone_footer(tz_name: Optional[str] = None) -> str:
+    tz = tz_name or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+    return f"💡 <i>Active timezone: {tz}. Change with /timezone</i>"
+
 def format_month_summary(
     query_result: QueryResult, 
     family_name: Optional[str] = None,
-    timeframe_label: Optional[str] = None
+    timeframe_label: Optional[str] = None,
+    tz_name: Optional[str] = None
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
     tf_str = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
-    fam_label = f" — {family_name}" if family_name else ""
+    fam_label = f" ({family_name})" if family_name else ""
     
     lines = [
         f"📊 <b>Family Summary — {tf_str}</b>{fam_label}",
@@ -254,7 +259,7 @@ def format_month_summary(
     if not agg or query_result.total_count == 0:
         lines.append("<i>No transactions recorded for this month yet.</i>")
         lines.append("")
-        lines.append("💡 <i>Type /help to see available commands or log an expense in chat!</i>")
+        lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
     has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
@@ -285,27 +290,29 @@ def format_month_summary(
         lines.append("")
         lines.append("👥 <b>Member Breakdown:</b>")
         for name, m in query_result.member_breakdown.members.items():
-            top_str = f" (Top: {m.top_category})" if m.top_category else ""
             if has_multi_curr:
                 m_inc = format_currency_dict(m.income_currency_totals, curr)
                 m_exp = format_currency_dict(m.expense_currency_totals, curr)
                 lines.append(f"👤 <b>{name}</b>:")
                 lines.append(f"  • Incomes: {m_inc}")
-                lines.append(f"  • Expenses: {m_exp}{top_str}")
+                lines.append(f"  • Expenses: {m_exp}")
             else:
                 lines.append(f"👤 <b>{name}</b>:")
                 lines.append(f"  • Incomes: {m.total_earned:,.2f} {curr} | Expenses: {m.total_spent:,.2f} {curr}")
                 sign_m = "+" if m.net_balance > 0 else ""
-                lines.append(f"  • Net: {sign_m}{m.net_balance:,.2f} {curr}{top_str}")
+                lines.append(f"  • Net: {sign_m}{m.net_balance:,.2f} {curr}")
                 
     lines.append("")
     lines.append(f"📊 <i>Total logs: {agg.transaction_count} transaction(s)</i>")
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
     return "\n".join(lines)
 
 def format_me_summary(
     query_result: QueryResult, 
     user_name: Optional[str] = None,
-    timeframe_label: Optional[str] = None
+    timeframe_label: Optional[str] = None,
+    tz_name: Optional[str] = None
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
@@ -320,7 +327,7 @@ def format_me_summary(
     if not agg or query_result.total_count == 0:
         lines.append("<i>You haven't logged any transactions for this month yet.</i>")
         lines.append("")
-        lines.append("💡 <i>Log your first expense or income simply by texting me!</i>")
+        lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
 
     has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
@@ -357,11 +364,14 @@ def format_me_summary(
 
     lines.append("")
     lines.append(f"📊 <i>Total logs: {agg.transaction_count} transaction(s)</i>")
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
     return "\n".join(lines)
 
 def format_today_summary(
     query_result: QueryResult,
-    is_family: bool = True
+    is_family: bool = True,
+    tz_name: Optional[str] = None
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
@@ -374,6 +384,8 @@ def format_today_summary(
     
     if not query_result.transactions:
         lines.append("<i>No transactions logged today.</i>")
+        lines.append("")
+        lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
     has_multi_curr = agg and (len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1)
@@ -400,11 +412,14 @@ def format_today_summary(
     if len(query_result.transactions) > 10:
         lines.append(f"<i>...and {len(query_result.transactions) - 10} more</i>")
         
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
     return "\n".join(lines)
 
 def format_bills_summary(
     bills: List[DecryptedScheduledBill],
-    timeframe_label: str = "This Month"
+    timeframe_label: str = "This Month",
+    tz_name: Optional[str] = None
 ) -> str:
     lines = [
         f"⏰ <b>Upcoming Bills — {timeframe_label}</b>",
@@ -413,6 +428,8 @@ def format_bills_summary(
     
     if not bills:
         lines.append("<i>No pending bills due for this period! 🎉</i>")
+        lines.append("")
+        lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
     for b in bills:
@@ -422,9 +439,14 @@ def format_bills_summary(
         
     lines.append("")
     lines.append(f"📋 <i>{len(bills)} pending commitment(s)</i>")
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
     return "\n".join(lines)
 
-def format_balance_summary(query_result: QueryResult) -> str:
+def format_balance_summary(
+    query_result: QueryResult,
+    tz_name: Optional[str] = None
+) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
     tf_str = (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
@@ -436,6 +458,8 @@ def format_balance_summary(query_result: QueryResult) -> str:
     
     if not agg or query_result.total_count == 0:
         lines.append("<i>No transactions recorded for this period.</i>")
+        lines.append("")
+        lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
     has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
@@ -454,5 +478,8 @@ def format_balance_summary(query_result: QueryResult) -> str:
         
     lines.append("")
     lines.append(f"📊 <i>Total: {agg.transaction_count} transaction(s)</i>")
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
     return "\n".join(lines)
+
 

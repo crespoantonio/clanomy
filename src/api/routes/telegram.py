@@ -9,6 +9,7 @@ from typing import Optional
 import time
 import uuid
 import logging
+import asyncio
 from collections import OrderedDict
 from sqlmodel import Session, select
 
@@ -62,6 +63,15 @@ class BoundedCooldownStore:
 
 
 _cooldown_store = BoundedCooldownStore()
+_tz_finder = None
+
+
+def get_timezone_finder():
+    global _tz_finder
+    if _tz_finder is None:
+        from timezonefinder import TimezoneFinder
+        _tz_finder = TimezoneFinder()
+    return _tz_finder
 
 
 def _is_query_or_command(text: Optional[str]) -> bool:
@@ -155,8 +165,36 @@ async def telegram_webhook(
         if "refunded_payment" in message:
             return billing_service.handle_refunded_payment_event(session, background_tasks, message, family, chat_id)
 
+        # Handle native Telegram location pin for 1-tap timezone calibration
+        if "location" in message and isinstance(message["location"], dict):
+            loc = message["location"]
+            lat = loc.get("latitude")
+            lon = loc.get("longitude")
+            if lat is not None and lon is not None:
+                try:
+                    tf = get_timezone_finder()
+                    tz_name = tf.timezone_at(lat=float(lat), lng=float(lon))
+                except Exception as e:
+                    logger.warning(f"Error determining timezone from location ({lat}, {lon}): {e}")
+                    tz_name = None
+
+                if tz_name:
+                    family_service = FamilyService()
+                    await asyncio.to_thread(family_service.set_user_timezone, user.id, tz_name)
+                    user.timezone = tz_name
+                    conf_msg = (
+                        f"📍 <b>Location Detected & Calibrated!</b>\n\n"
+                        f"Your active timezone has been automatically set to <b>{tz_name}</b>.\n"
+                        f"Your daily summaries (/today, /me) and date filters are now aligned to your local time."
+                    )
+                else:
+                    conf_msg = "⚠️ Could not determine the timezone from this location pin. Please configure it manually using <code>/timezone &lt;city&gt;</code>."
+                
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=conf_msg)
+                return {"status": "ok"}
+
         # Validate unsupported media & lengths
-        unsupported_media_keys = ("document", "audio", "video", "video_note", "photo", "sticker", "contact", "location")
+        unsupported_media_keys = ("document", "audio", "video", "video_note", "photo", "sticker", "contact")
         if any(k in message for k in unsupported_media_keys):
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=UNSUPPORTED_FORMAT_MESSAGE)
             return {"status": "ok"}
@@ -210,6 +248,8 @@ async def telegram_webhook(
                 "/vencimientos": cmd_handler.handle_bills,
                 "/balance": cmd_handler.handle_balance,
                 "/saldo": cmd_handler.handle_balance,
+                "/timezone": cmd_handler.handle_timezone,
+                "/zonahoraria": cmd_handler.handle_timezone,
                 "/undo": lambda u, f, *a: cmd_handler.handle_undo(u, f),
                 "/deshacer": lambda u, f, *a: cmd_handler.handle_undo(u, f),
                 "/help": lambda u, f, *a: cmd_handler.handle_help(u, f),

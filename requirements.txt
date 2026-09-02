@@ -242,3 +242,9 @@ watchfiles==1.2.0
     # via uvicorn
 websockets==17.1
     # via uvicorn
+timezonefinder==8.3.0
+    # via -r requirements.in
+timezonefinder-data==1.2026.3
+    # via timezonefinder
+h3==4.5.0
+    # via timezonefinder

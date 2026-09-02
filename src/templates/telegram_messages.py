@@ -3,6 +3,7 @@ Telegram HTML Message Templates for Clanomy.
 Consolidates user-facing notification strings and onboarding messages.
 """
 
+import html
 from typing import Optional
 from datetime import datetime, timezone
 from src.core.config import settings
@@ -28,39 +29,37 @@ SELF_HOSTED_UPGRADE_MESSAGE = (
 
 LIFETIME_PRO_CONFIRMATION = (
     "⭐️ <b>Clanomy Lifetime Pro Active</b>\n\n"
-    "Your workspace is enjoying permanent Lifetime Pro status. Thank you for your payment!"
+    "You have unlocked permanent Lifetime Pro access to Clanomy. Enjoy unlimited voice and text logging forever!"
 )
 
 SOLO_PRO_CONFIRMATION = (
     "🎉 <b>Welcome to Clanomy Solo Pro!</b>\n\n"
-    "Your subscription is now active! You have unlocked unlimited voice and text transaction logging "
-    "and AI queries for your personal workspace. Thank you for supporting Clanomy!"
+    "Your subscription is now active. Enjoy unlimited AI voice and text logging, "
+    "instant deterministic summaries, and private Notion mirroring."
 )
 
 FAMILY_PRO_CONFIRMATION = (
     "🎉 <b>Welcome to Clanomy Family Pro!</b>\n\n"
-    "Your subscription is now active! You have unlocked unlimited voice and text transaction logging, "
-    "shared family ledger for up to 5 members, and real-time Notion mirroring. "
-    "Thank you for supporting Clanomy!"
+    "Your subscription is now active. Enjoy unlimited AI voice and text logging for your entire household, "
+    "shared family ledger, per-member breakdowns, and real-time Notion database mirroring."
 )
 
 SOLO_PRO_MEMBER_NOTICE = (
     "ℹ️ <b>Workspace Plan Update</b>\n\n"
     "Your workspace admin has updated the workspace to the <b>Solo Pro</b> plan. "
-    "Solo Pro is designed for an individual user.\n\n"
-    "To start your own personal workspace and keep logging transactions, "
-    "simply type /leavefamily."
+    "As a non-admin member, you can continue viewing past records, or upgrade to your own "
+    "plan anytime using /upgrade."
 )
 
 REFUND_PROCESSED_MESSAGE = (
     "ℹ️ <b>Subscription Update:</b> Your payment was refunded. "
-    f"Your workspace has transitioned to the Free tier ({FREE_TIER_MONTHLY_LIMIT} logs/month). "
-    "All your historical data, past entries, and Notion sync remain 100% safe."
+    "Your workspace has been moved to the Free plan. Type /upgrade to resubscribe anytime."
 )
 
 PLAN_EXPIRED_MESSAGE = (
     "🔒 <b>Clanomy Pro Required</b>\n\n"
-    "Your workspace access period has ended. To continue logging transactions and querying your financial history, "
+    "This feature requires an active <b>Clanomy Pro</b> subscription. "
+    "To unlock unlimited AI logging, family sharing, and Notion sync, "
     "please upgrade to <b>Clanomy Pro</b> using /upgrade."
 )
 
@@ -68,16 +67,16 @@ UPGRADE_MENU_INTRO = (
     "⭐️ <b>Upgrade to Clanomy Pro</b>\n\n"
     "Choose the plan that fits your needs with secure billing (Apple Pay, Google Pay, or Credit/Debit Card):\n\n"
     "1️⃣ <b>Solo Pro ($4.99 / month)</b>\n"
-    "• Unlimited text & voice expense & income logging\n"
+    "• Unlimited text &amp; voice expense &amp; income logging\n"
     "• Real-time Notion database mirroring\n"
-    "• AI Natural language queries & cash flow insights\n"
-    "• CSV & JSON financial exports\n"
+    "• AI Natural language queries &amp; cash flow insights\n"
+    "• CSV &amp; JSON financial exports\n"
     "• 1 User\n\n"
     "2️⃣ <b>Family Pro ($9.99 / month)</b>\n"
     "• Everything in Solo Pro\n"
     "• Up to 5 Family Members with shared ledger\n"
-    "• Per-member spending attribution & budget visibility\n\n"
-    "🎁 <i>Annual Savings: Type <code>/upgrade annual</code> to get 2 Months Free on annual plans ($49.99 & $99.99/yr)!</i>\n\n"
+    "• Per-member spending attribution &amp; budget visibility\n\n"
+    "🎁 <i>Annual Savings: 2 Months Free on annual plans ($49.99 &amp; $99.99/yr)!</i>\n\n"
     "<i>Tap a button below to open secure checkout and activate immediately!</i>"
 )
 
@@ -85,9 +84,9 @@ UPGRADE_MENU_ANNUAL_INTRO = (
     "🎁 <b>Clanomy Pro Annual Plans (2 Months Free!)</b>\n\n"
     "Get a full year of unlimited AI financial tracking and save 17%:\n\n"
     "1️⃣ <b>Solo Pro Annual ($49.99 / year)</b> — ~$4.16/mo (Save $10)\n"
-    "• 1 User, Unlimited AI logging & Notion sync\n\n"
+    "• 1 User, Unlimited AI logging &amp; Notion sync\n\n"
     "2️⃣ <b>Family Pro Annual ($99.99 / year)</b> — ~$8.33/mo (Save $20)\n"
-    "• Up to 5 Members, Shared Ledger & Notion sync\n\n"
+    "• Up to 5 Members, Shared Ledger &amp; Notion sync\n\n"
     "<i>Tap a button below to activate your annual subscription!</i>"
 )
 
@@ -130,12 +129,12 @@ def format_voice_too_long(max_sec: int, received_sec: int) -> str:
 def format_free_tier_exceeded(monthly_tx_count: int) -> str:
     return (
         f"⚠️ <b>Monthly AI Quota Exceeded ({monthly_tx_count}/20)</b>\n\n"
-        "You've reached your free monthly AI quota for voice & text logs.\n\n"
-        "⚡ <b>Commands are ALWAYS 100% Free & Unlimited:</b>\n"
+        "You've reached your free monthly AI quota for voice &amp; text logs.\n\n"
+        "⚡ <b>Commands are ALWAYS 100% Free &amp; Unlimited:</b>\n"
         "• Type /month or /me for your spending breakdown\n"
         "• Type /today for today's logs\n"
         "• Type /bills for upcoming bill reminders\n"
-        "• Type /balance for net cash flow & savings\n\n"
+        "• Type /balance for net cash flow &amp; savings\n\n"
         "⭐️ <b>Upgrade to Clanomy Pro:</b>\n"
         "Unlock unlimited AI voice/text logging and family sharing with /upgrade."
     )
@@ -143,7 +142,7 @@ def format_free_tier_exceeded(monthly_tx_count: int) -> str:
 
 def format_welcome_message(user: User, family: Optional[Family], from_user: dict) -> str:
     plan_badge = ""
-    command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for instant (<40ms) summaries!"
+    command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for the fastest responses!"
 
     if family:
         if family.plan_type == "trial":
@@ -152,35 +151,41 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
                 now_utc = datetime.now(timezone.utc)
                 trial_end = family.trial_ends_at if family.trial_ends_at.tzinfo else family.trial_ends_at.replace(tzinfo=timezone.utc)
                 days_left = max(0, (trial_end - now_utc).days)
-            plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs & family features!\n\n"
-            command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for instant (<40ms) responses!"
+            plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs &amp; family features!\n\n"
+            command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for the fastest responses!"
         elif family.plan_type == "free":
             used = getattr(family, "monthly_tx_count", 0)
             plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/20 AI logs used this month).\n\n"
             command_bullet = "• ⚡ <b>Unlimited Free Commands:</b> Type /month, /me, /today, /bills, or /balance anytime — they are 100% free and don't count against your 20 monthly AI logs!"
         elif family.plan_type == "solo_pro":
-            plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text & voice logs, personal workspace).\n\n"
+            plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text &amp; voice logs, personal workspace).\n\n"
         elif family.plan_type == "family_pro":
-            plan_badge = "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — Unlimited text & voice logs, shared family ledger & Notion sync).\n\n"
+            plan_badge = "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — Unlimited text &amp; voice logs, shared family ledger &amp; Notion sync).\n\n"
         elif family.plan_type == "lifetime_pro":
             plan_badge = "👑 <b>Plan:</b> Lifetime Pro (Permanent active status).\n\n"
 
-    user_display_name = user.full_name or from_user.get("first_name") or "User"
+    raw_user_name = user.full_name or from_user.get("first_name") or "User"
+    user_display_name = html.escape(raw_user_name, quote=False)
+    project_name = html.escape(getattr(settings, "PROJECT_NAME", "Clanomy"), quote=False)
+    tz_name = html.escape(str(getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")), quote=False)
+
     return (
-        f"👋 <b>Welcome to {settings.PROJECT_NAME}, {user_display_name}!</b>\n\n"
+        f"👋 <b>Welcome to {project_name}, {user_display_name}!</b>\n\n"
         f"{plan_badge}"
         "<b>How Clanomy Works:</b>\n"
-        "• 🎙️ <b>AI Logging:</b> Send voice notes or text anytime (<i>\"Coffee 4\"</i>, <i>\"Earned 3,500 salary\"</i>, <i>\"Internet 50 due the 15th\"</i>).\n"
-        f"{command_bullet}\n\n"
+        "• 🎙️ <b>Natural Voice &amp; Text:</b> Log expenses or income in English or Spanish anytime (<i>\"Coffee 4\"</i>, <i>\"Gasté 35 en cena\"</i>, <i>\"Earned 3,500 salary\"</i>).\n"
+        f"{command_bullet}\n"
+        "• ↩️ <b>Mistake?</b> Type /undo anytime to instantly revert your last entry.\n\n"
         "💡 <b>Quick Setup:</b>\n"
         "• 💵 <b>Currency:</b> Set your default currency with <code>/currency USD</code> <i>(or ARS, EUR, MXN, etc.)</i>\n"
-        f"• 🌐 <b>Timezone:</b> For privacy, Telegram doesn't share your location with bots automatically. Your timezone defaults to <b>{getattr(settings, 'DEFAULT_TIMEZONE', 'America/Argentina/Buenos_Aires')}</b>. Calibrate anytime with /timezone or by sharing your location pin (📎 ➔ Location).\n\n"
+        f"• 🌐 <b>Timezone:</b> Defaults to <b>{tz_name}</b>. Calibrate anytime with /timezone or by sharing your location pin (📎 ➔ Location).\n\n"
         "<b>Try sending me something right now:</b>\n"
         "• 🎙️ <i>Send a voice note:</i> \"Coffee 4\"\n"
-        "• 💬 <i>Type an expense:</i> \"Spent 45 on groceries\"\n"
+        "• 💬 <i>Type an expense:</i> \"Spent 45 on groceries\" or \"45 cena\"\n"
         "• 💰 <i>Type an income:</i> \"Got paid 3,000 salary\"\n"
         "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
-        "Type /help anytime for Notion sync, family invites, and data export."
+        "👥 <i>Household teamwork: Use /invite to add your partner or family.</i>\n"
+        "Type /help anytime for Notion sync, family settings, and CSV/JSON export."
     )
 
 
@@ -195,27 +200,31 @@ LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED = (
 
 
 def format_leave_family_admin_prompt(family_name: str, new_admin_name: str) -> str:
+    escaped_family = html.escape(family_name, quote=False)
+    escaped_admin = html.escape(new_admin_name, quote=False)
     return (
         f"⚠️ <b>Confirm Leaving as Family Admin</b>\n\n"
-        f"You are currently the Admin of <b>{family_name}</b>.\n\n"
+        f"You are currently the Admin of <b>{escaped_family}</b>.\n\n"
         "If you leave:\n"
-        f"• Leadership will automatically transfer to <b>{new_admin_name}</b> (the oldest member).\n"
+        f"• Leadership will automatically transfer to <b>{escaped_admin}</b> (the oldest member).\n"
         "• The remaining members will continue sharing this family workspace.\n"
         "• You will be moved to your own new personal workspace.\n"
-        "• <b>All your personal logged expenses & transactions will be safely transferred with you.</b>\n\n"
+        "• <b>All your personal logged expenses &amp; transactions will be safely transferred with you.</b>\n\n"
         "To confirm leaving and transferring admin rights, please reply with:\n"
         "<b>CONFIRM LEAVE</b> <i>(or /leavefamily confirm)</i>"
     )
 
 
 def format_leave_family_member_prompt(family_name: str, admin_name: str) -> str:
+    escaped_family = html.escape(family_name, quote=False)
+    escaped_admin = html.escape(admin_name, quote=False)
     return (
         f"⚠️ <b>Confirm Leaving Family</b>\n\n"
-        f"You are currently a member of <b>{family_name}</b> (managed by {admin_name}).\n\n"
+        f"You are currently a member of <b>{escaped_family}</b> (managed by {escaped_admin}).\n\n"
         "If you leave:\n"
         "• You will exit this shared family workspace.\n"
         "• You will be placed in your own private personal workspace on the Free tier.\n"
-        "• <b>All your personal logged expenses & transactions will be safely transferred with you.</b>\n"
+        "• <b>All your personal logged expenses &amp; transactions will be safely transferred with you.</b>\n"
         "• Other family members will no longer see your newly logged expenses.\n\n"
         "To confirm leaving, please reply with:\n"
         "<b>CONFIRM LEAVE</b> <i>(or /leavefamily confirm)</i>"
@@ -223,28 +232,32 @@ def format_leave_family_member_prompt(family_name: str, admin_name: str) -> str:
 
 
 def format_non_admin_upgrade_intro(family_name: str, admin_name: str) -> str:
+    escaped_family = html.escape(family_name, quote=False)
+    escaped_admin = html.escape(admin_name, quote=False)
     return (
         f"⭐️ <b>Upgrade to Your Own Sovereign Workspace</b>\n\n"
-        f"You are currently a member of <b>{family_name}</b> (managed by {admin_name}).\n\n"
+        f"You are currently a member of <b>{escaped_family}</b> (managed by {escaped_admin}).\n\n"
         "Upgrading will create your own independent workspace and <b>migrate all your personal transaction history with you</b>, without disrupting the current family group:\n\n"
-        "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging & private Notion sync.\n\n"
+        "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging &amp; private Notion sync.\n\n"
         "2️⃣ <b>Family Pro ($9.99 / mo)</b> — Start your own family! Unlimited AI logging, shared ledger, and invite up to 4 members.\n\n"
         "<i>Tap a button below to choose your plan and launch your new workspace:</i>"
     )
 
 
 def format_family_split_notice(new_admin_name: str) -> str:
+    escaped_admin = html.escape(new_admin_name, quote=False)
     return (
         "ℹ️ <b>Family Workspace Update</b>\n\n"
         "The workspace admin has switched to a personal Solo Pro plan. You and the remaining family members have been placed into a new shared family workspace on the Free tier.\n\n"
-        f"👑 <b>{new_admin_name}</b> is your new workspace admin.\n\n"
+        f"👑 <b>{escaped_admin}</b> is your new workspace admin.\n\n"
         "Type /family to view your group, or /upgrade to unlock Family Pro anytime!"
     )
 
 
 def format_member_graduated_notice(member_name: str, plan_name: str) -> str:
+    escaped_member = html.escape(member_name, quote=False)
+    escaped_plan = html.escape(plan_name, quote=False)
     return (
         "ℹ️ <b>Family Member Graduated</b>\n\n"
-        f"<b>{member_name}</b> has upgraded to their own <b>{plan_name}</b> plan and transitioned to their own sovereign workspace. Their personal transactions have moved with them."
+        f"<b>{escaped_member}</b> has upgraded to their own <b>{escaped_plan}</b> plan and transitioned to their own sovereign workspace. Their personal transactions have moved with them."
     )
-

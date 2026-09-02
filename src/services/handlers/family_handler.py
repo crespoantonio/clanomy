@@ -1,4 +1,5 @@
 import asyncio
+import html
 from uuid import UUID
 from typing import Optional
 from src.services.family_service import FamilyService, PlanLimitExceededError
@@ -31,20 +32,22 @@ async def handle_family_info(user_uuid: UUID) -> str:
     info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
     members_str = []
     for m in info["members"]:
-        name = m.get("full_name") or m.get("username") or "User"
-        handle = f" (@{m['username']})" if m.get("username") else ""
+        raw_name = m.get("full_name") or m.get("username") or "User"
+        name = html.escape(raw_name, quote=False)
+        handle = f" (@{html.escape(m['username'], quote=False)})" if m.get("username") else ""
         role = " 👑 (Admin)" if m.get("is_admin") else ""
         members_str.append(f"• {name}{handle}{role}")
     members_formatted = "\n".join(members_str) if members_str else "• No members found"
     plan_type = info.get("plan_type", "free")
     plan_desc = plan_type.replace("_", " ").title()
     if plan_type == "free":
-        tx_info = f"{info.get('monthly_tx_count', 0)} / 20 (⚡ Commands are 100% free & unlimited)"
+        tx_info = f"{info.get('monthly_tx_count', 0)} / 20 (⚡ Commands are 100% free &amp; unlimited)"
     else:
         tx_info = f"{info.get('monthly_tx_count', 0)} (Unlimited)"
         
+    escaped_fam_name = html.escape(str(info['name']), quote=False)
     return (
-        f"👪 <b>Family Workspace: {info['name']}</b>\n"
+        f"👪 <b>Family Workspace: {escaped_fam_name}</b>\n"
         f"📋 <b>Plan:</b> {plan_desc}\n"
         f"📊 <b>Monthly AI Logs:</b> {tx_info}\n\n"
         f"<b>Members:</b>\n{members_formatted}\n\n"

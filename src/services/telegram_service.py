@@ -1,6 +1,8 @@
 import asyncio
+import html
 import httpx
 import logging
+import re
 from src.core.config import settings
 from src.core.http_client import get_http_client
 
@@ -68,7 +70,7 @@ class TelegramService:
             await self._post_with_retry("sendMessage", json=payload)
         except httpx.HTTPStatusError as e:
             if parse_mode and e.response.status_code == 400 and "can't parse entities" in e.response.text:
-                logger.warning(f"Telegram HTML parse error for chat {chat_id}. Retrying as plain text.")
+                logger.warning(f"Telegram HTML parse error for chat {chat_id}: {e.response.text}. Retrying as plain text.")
                 await self.send_message(chat_id=chat_id, text=text, parse_mode=None, reply_markup=reply_markup)
             else:
                 logger.error(f"Failed to send telegram message to {chat_id}: {e}")

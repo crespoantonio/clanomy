@@ -1,3 +1,4 @@
+import html
 from typing import Optional, List
 from datetime import datetime, timezone
 from uuid import UUID
@@ -275,8 +276,9 @@ class CommandHandler:
 
         normalized = validate_and_normalize_timezone(tz_input)
         if not normalized:
+            escaped_input = html.escape(tz_input, quote=False)
             return (
-                f"❌ <b>Unrecognized timezone:</b> '{tz_input}'\n\n"
+                f"❌ <b>Unrecognized timezone:</b> '{escaped_input}'\n\n"
                 f"Please provide a known city, IANA name, or UTC offset:\n"
                 f"• <code>/timezone Buenos Aires</code>\n"
                 f"• <code>/timezone Madrid</code>\n"
@@ -320,14 +322,14 @@ class CommandHandler:
         return (
             "✨ <b>Clanomy — Household Finance Assistant</b>\n\n"
             "⚡ <b>Unlimited Free Commands:</b>\n"
-            "• /month — 📊 Household monthly summary & member breakdown\n"
+            "• /month — 📊 Household monthly summary &amp; member breakdown\n"
             "• /month last — 📊 View last month's family summary\n"
-            "• /me — 👤 Your personal income, expenses & top categories\n"
+            "• /me — 👤 Your personal income, expenses &amp; top categories\n"
             "• /today — 📅 Summary of transactions logged today\n"
-            "• /balance — 💰 Household net cash flow & savings rate\n"
+            "• /balance — 💰 Household net cash flow &amp; savings rate\n"
             "• /bills — ⏰ Upcoming fixed bills and dues\n"
             "• /timezone — 🌐 View or calibrate your active timezone\n"
-            "• /family — 👥 Members, roles, currency & plan quota\n"
+            "• /family — 👥 Members, roles, currency &amp; plan quota\n"
             "• /invite — 🔗 Invite partner/roommate to your household\n"
             "• /export — 📁 Download all transactions in CSV\n"
             "• /undo — ↩️ Instantly revert your last logged expense\n\n"

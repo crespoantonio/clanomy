@@ -1,3 +1,4 @@
+import html
 from typing import Optional, List, Dict, Any
 from src.core.config import settings
 from src.services.query.models import QueryResult, DecryptedScheduledBill
@@ -248,8 +249,9 @@ def format_month_summary(
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
-    tf_str = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
-    fam_label = f" ({family_name})" if family_name else ""
+    raw_tf = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    tf_str = html.escape(raw_tf, quote=False)
+    fam_label = f" ({html.escape(family_name, quote=False)})" if family_name else ""
     
     lines = [
         f"📊 <b>Family Summary — {tf_str}</b>{fam_label}",
@@ -290,14 +292,15 @@ def format_month_summary(
         lines.append("")
         lines.append("👥 <b>Member Breakdown:</b>")
         for name, m in query_result.member_breakdown.members.items():
+            escaped_name = html.escape(name, quote=False)
             if has_multi_curr:
                 m_inc = format_currency_dict(m.income_currency_totals, curr)
                 m_exp = format_currency_dict(m.expense_currency_totals, curr)
-                lines.append(f"👤 <b>{name}</b>:")
+                lines.append(f"👤 <b>{escaped_name}</b>:")
                 lines.append(f"  • Incomes: {m_inc}")
                 lines.append(f"  • Expenses: {m_exp}")
             else:
-                lines.append(f"👤 <b>{name}</b>:")
+                lines.append(f"👤 <b>{escaped_name}</b>:")
                 lines.append(f"  • Incomes: {m.total_earned:,.2f} {curr} | Expenses: {m.total_spent:,.2f} {curr}")
                 sign_m = "+" if m.net_balance > 0 else ""
                 lines.append(f"  • Net: {sign_m}{m.net_balance:,.2f} {curr}")
@@ -316,8 +319,9 @@ def format_me_summary(
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
-    tf_str = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
-    u_label = f" — {user_name}" if user_name else ""
+    raw_tf = timeframe_label or (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    tf_str = html.escape(raw_tf, quote=False)
+    u_label = f" — {html.escape(user_name, quote=False)}" if user_name else ""
     
     lines = [
         f"👤 <b>Personal Summary — {tf_str}</b>{u_label}",
@@ -406,8 +410,10 @@ def format_today_summary(
     lines.append("📝 <b>Today's Transactions:</b>")
     for tx in query_result.transactions[:10]:
         tx_type_icon = "🟢" if getattr(tx, "type", "expense") == "income" else "🔴"
-        u_str = f" ({tx.user_name})" if is_family and tx.user_name else ""
-        lines.append(f"{tx_type_icon} {tx.amount:,.2f} {tx.currency} — {tx.concept} [<i>{tx.category}</i>]{u_str}")
+        u_str = f" ({html.escape(tx.user_name, quote=False)})" if is_family and tx.user_name else ""
+        c_esc = html.escape(tx.concept or "", quote=False)
+        cat_esc = html.escape(tx.category or "", quote=False)
+        lines.append(f"{tx_type_icon} {tx.amount:,.2f} {tx.currency} — {c_esc} [<i>{cat_esc}</i>]{u_str}")
         
     if len(query_result.transactions) > 10:
         lines.append(f"<i>...and {len(query_result.transactions) - 10} more</i>")
@@ -421,8 +427,9 @@ def format_bills_summary(
     timeframe_label: str = "This Month",
     tz_name: Optional[str] = None
 ) -> str:
+    escaped_tf = html.escape(timeframe_label, quote=False)
     lines = [
-        f"⏰ <b>Upcoming Bills — {timeframe_label}</b>",
+        f"⏰ <b>Upcoming Bills — {escaped_tf}</b>",
         "━━━━━━━━━━━━━━━━━━━━━"
     ]
     
@@ -436,8 +443,10 @@ def format_bills_summary(
     for b in bills:
         totals_by_curr[b.currency] = totals_by_curr.get(b.currency, 0.0) + b.amount
         date_str = b.due_date.strftime("%b %d") if hasattr(b.due_date, "strftime") else str(b.due_date)
-        u_str = f" • by {b.user_name}" if b.user_name else ""
-        lines.append(f"🗓️ <b>{date_str}</b>: {b.amount:,.2f} {b.currency} — {b.concept} (<i>{b.category}</i>){u_str}")
+        u_str = f" • by {html.escape(b.user_name, quote=False)}" if b.user_name else ""
+        c_esc = html.escape(b.concept or "", quote=False)
+        cat_esc = html.escape(b.category or "", quote=False)
+        lines.append(f"🗓️ <b>{date_str}</b>: {b.amount:,.2f} {b.currency} — {c_esc} (<i>{cat_esc}</i>){u_str}")
         
     lines.append("")
     total_parts = [f"{amt:,.2f} {curr}" for curr, amt in totals_by_curr.items()]
@@ -454,7 +463,8 @@ def format_balance_summary(
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
-    tf_str = (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    raw_tf = (query_result.intent.timeframe or "this_month").replace('_', ' ').capitalize()
+    tf_str = html.escape(raw_tf, quote=False)
     
     lines = [
         f"💰 <b>Cash Flow & Balance — {tf_str}</b>",

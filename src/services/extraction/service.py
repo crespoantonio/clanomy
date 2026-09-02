@@ -10,7 +10,12 @@ from src.core.config import settings
 from src.core.llm.base import BaseLLMProvider
 from src.core.llm.factory import get_llm_provider
 from src.services.extraction.models import ExtractionResult, UnifiedResult, ExtractionError
-from src.services.extraction.prompts import build_extraction_prompt, build_unified_prompt
+from src.services.extraction.prompts import (
+    UNIFIED_SYSTEM_PROMPT,
+    EXTRACTION_SYSTEM_PROMPT,
+    build_extraction_prompt,
+    build_unified_prompt,
+)
 from src.services.extraction.fallback import fallback_regex_extract, fallback_regex_classify
 
 logger = logging.getLogger(__name__)
@@ -55,18 +60,27 @@ class ExtractionService:
             raise ValueError("Input text is empty or contains only whitespace")
 
         ref = reference_time or datetime.now(timezone.utc)
-        current_date_str = ref.strftime("%Y-%m-%d %H:%M:%S UTC")
+        current_date_str = ref.strftime("%Y-%m-%d")
         effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
 
-        system_prompt = build_unified_prompt(effective_default_currency, current_date_str)
+        system_prompt = UNIFIED_SYSTEM_PROMPT
+        user_prompt = (
+            "<system_context>\n"
+            f"Default Workspace Currency: {effective_default_currency}\n"
+            f"Current Reference Date: {current_date_str}\n"
+            "</system_context>\n\n"
+            "Classify intent and extract details from this text:\n"
+            f"<user_input>\n{text}\n</user_input>"
+        )
 
         start_time = time.time()
         try:
             content = await self.provider.complete_structured(
                 system_prompt=system_prompt,
-                user_prompt=f"Classify intent and extract details from this text:\n<user_input>\n{text}\n</user_input>",
+                user_prompt=user_prompt,
                 schema=UnifiedResult,
-                timeout=60.0
+                timeout=60.0,
+                max_tokens=2000
             )
 
             try:
@@ -100,18 +114,27 @@ class ExtractionService:
             raise ValueError("Input text is empty or contains only whitespace")
 
         ref = reference_time or datetime.now(timezone.utc)
-        current_date_str = ref.strftime("%Y-%m-%d %H:%M:%S UTC")
+        current_date_str = ref.strftime("%Y-%m-%d")
         effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
 
-        system_prompt = build_extraction_prompt(effective_default_currency, current_date_str)
+        system_prompt = EXTRACTION_SYSTEM_PROMPT
+        user_prompt = (
+            "<system_context>\n"
+            f"Default Workspace Currency: {effective_default_currency}\n"
+            f"Current Reference Date: {current_date_str}\n"
+            "</system_context>\n\n"
+            "Extract transaction details from this text:\n"
+            f"<user_input>\n{text}\n</user_input>"
+        )
 
         start_time = time.time()
         try:
             content = await self.provider.complete_structured(
                 system_prompt=system_prompt,
-                user_prompt=f"Extract transaction details from this text:\n<user_input>\n{text}\n</user_input>",
+                user_prompt=user_prompt,
                 schema=ExtractionResult,
-                timeout=60.0
+                timeout=60.0,
+                max_tokens=2000
             )
             try:
                 result = ExtractionResult.model_validate_json(content)

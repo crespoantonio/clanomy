@@ -18,7 +18,7 @@ from src.core.config import settings
 from src.core.encryption import EncryptionService
 from src.core.llm.base import BaseLLMProvider
 from src.core.llm.factory import get_llm_provider
-from src.services.query.prompts import get_query_intent_system_prompt
+from src.services.query.prompts import QUERY_INTENT_SYSTEM_PROMPT, get_query_intent_system_prompt
 from src.db.session import engine
 from src.db.models import Transaction, User, ScheduledBill
 from src.services.query.models import (
@@ -239,13 +239,20 @@ class QueryService:
             return ParsedQueryIntent(intent="net_cash_flow", timeframe=tf, scope="family")
 
         ref_time = reference_time or datetime.now(timezone.utc)
-        current_date_str = ref_time.strftime("%Y-%m-%d %H:%M:%S UTC")
-        system_prompt = get_query_intent_system_prompt(current_date_str)
+        current_date_str = ref_time.strftime("%Y-%m-%d")
+        system_prompt = QUERY_INTENT_SYSTEM_PROMPT
+        user_prompt = (
+            "<system_context>\n"
+            f"Current Reference Date: {current_date_str}\n"
+            "</system_context>\n\n"
+            "Classify this financial query:\n"
+            f"<user_input>\n{text}\n</user_input>"
+        )
 
         try:
             intent_json = await self.provider.complete_structured(
                 system_prompt=system_prompt,
-                user_prompt=f"Classify this financial query:\n<user_input>\n{text}\n</user_input>",
+                user_prompt=user_prompt,
                 schema=ParsedQueryIntent,
                 timeout=60.0
             )

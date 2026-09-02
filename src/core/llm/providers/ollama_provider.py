@@ -32,8 +32,10 @@ class OllamaProvider(BaseLLMProvider):
         user_prompt: str,
         schema: Type[BaseModel],
         temperature: float = 0.0,
-        timeout: float = 60.0
+        timeout: float = 60.0,
+        max_tokens: int = 600
     ) -> str:
+
         sanitized_user = sanitize_prompt_input(user_prompt)
         logger.info(f"Calling Ollama model {self.model} for structured completion...")
         async with get_global_ollama_semaphore():

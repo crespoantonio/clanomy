@@ -11,8 +11,7 @@ from tenacity.wait import wait_base
 from src.core.config import settings
 from src.core.http_client import get_http_client
 from src.core.ai_client import sanitize_prompt_input
-from src.core.llm.base import BaseLLMProvider
-from src.services.extraction.models import PayloadTruncatedError
+from src.core.llm.base import BaseLLMProvider, PayloadTruncatedError
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +76,14 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
     def __init__(
         self,
-        model: str = settings.AI_MODEL,
-        base_url: str = settings.AI_BASE_URL,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
         api_key: Optional[str] = None
     ):
-        self.model = model
-        self.base_url = base_url.rstrip("/")
+        self.model = model or settings.AI_MODEL
+        self.base_url = (base_url or settings.AI_BASE_URL).rstrip("/")
         self.api_key = api_key or settings.AI_API_KEY
+
 
     @retry(
         stop=stop_after_attempt(settings.AI_MAX_RETRIES),
@@ -97,7 +97,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         user_prompt: str,
         schema: Type[BaseModel],
         temperature: float = 0.0,
-        timeout: float = 30.0
+        timeout: float = 30.0,
+        max_tokens: int = 600
     ) -> str:
         client = get_http_client()
         headers = {
@@ -118,8 +119,9 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             ],
             "response_format": {"type": "json_object"},
             "temperature": temperature,
-            "max_tokens": 2000
+            "max_tokens": max_tokens
         }
+
 
         logger.info(f"Calling Cloud AI model {self.model} at {self.base_url}...")
         response = await client.post(

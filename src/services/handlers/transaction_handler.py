@@ -249,8 +249,11 @@ def handle_transaction_undo(
                     item_lines.append(f"• {icon} {sign}{fmt_amt} ({html.escape(it['category'])} - {html.escape(it['concept'])})")
 
                 items_block = "\n".join(item_lines)
+                is_exchange_pair = (len(deleted_items) == 2 and all(it.get("category") == "Exchange" for it in deleted_items))
+                title = "🗑️ <b>Removed currency exchange:</b>\n" if is_exchange_pair else f"🗑️ <b>Removed {len(deleted_items)} transactions from your last message:</b>\n"
                 return (
-                    f"🗑️ <b>Removed {len(deleted_items)} transactions from your last message:</b>\n"
+                    f"{title}"
+
                     f"{items_block}\n\n"
                     f"📊 <b>Updated {snapshot['month_name']} Balance ({primary_curr}):</b>\n"
                     f"• Total In: {formatted_in}\n"

@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, AliasChoices, field_validator
+from pydantic import Field, AliasChoices, field_validator, model_validator
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -46,21 +46,92 @@ class Settings(BaseSettings):
     WHISPER_VAD_FILTER: bool = False
     WHISPER_MAX_CONCURRENT: int = 1
     
-    # AI Engine Configuration (Unified Provider / OpenAI-Compatible Standard)
+    # AI Engine Configuration (Unified Provider / Multi-Backend Support)
     AI_PROVIDER: Optional[str] = None
     AI_API_KEY: Optional[str] = Field(
         default=None,
-        validation_alias=AliasChoices("AI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY")
+        validation_alias=AliasChoices("AI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY")
     )
-    AI_BASE_URL: str = Field(
-        default="https://api.groq.com/openai/v1",
-        validation_alias=AliasChoices("AI_BASE_URL", "AI_API_BASE_URL", "GROQ_BASE_URL")
+    AI_BASE_URL: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("AI_BASE_URL", "AI_API_BASE_URL", "GROQ_BASE_URL", "GEMINI_BASE_URL")
     )
-    AI_MODEL: str = "llama-3.3-70b-versatile"
-    AI_WHISPER_MODEL: str = "whisper-large-v3-turbo"
+    AI_MODEL: Optional[str] = None
+    AI_WHISPER_MODEL: Optional[str] = None
     AI_MAX_RETRIES: int = 3
     AI_RETRY_BACKOFF_MIN: float = 0.5
     AI_RETRY_BACKOFF_MAX: float = 4.0
+
+    @model_validator(mode="after")
+    def resolve_ai_defaults(self) -> 'Settings':
+        prov = (self.AI_PROVIDER or "").lower().strip()
+        # Key prefix auto-detection if AI_PROVIDER is not explicitly specified
+        if not prov and self.AI_API_KEY:
+            key = self.AI_API_KEY.strip()
+            if key.startswith("AIzaSy"):
+                prov = "gemini"
+            elif key.startswith("gsk_"):
+                prov = "groq"
+            elif key.startswith("sk-"):
+                prov = "openai"
+
+        # If user explicitly selected a provider (like gemini or openai), but AI_BASE_URL / AI_MODEL are still
+        # pointing to the legacy Groq defaults or unset, resolve them to the target provider.
+        is_default_or_unset_base_url = (not self.AI_BASE_URL) or (self.AI_BASE_URL.rstrip("/") == "https://api.groq.com/openai/v1")
+
+        if prov in ("gemini", "google"):
+            if is_default_or_unset_base_url:
+                self.AI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+            if not self.AI_MODEL or self.AI_MODEL == "llama-3.3-70b-versatile":
+                self.AI_MODEL = "gemini-2.0-flash"
+            if not self.AI_WHISPER_MODEL or self.AI_WHISPER_MODEL == "whisper-large-v3-turbo":
+                self.AI_WHISPER_MODEL = "gemini-2.0-flash"
+        elif prov in ("openai", "chatgpt"):
+            if is_default_or_unset_base_url:
+                self.AI_BASE_URL = "https://api.openai.com/v1"
+            if not self.AI_MODEL or self.AI_MODEL == "llama-3.3-70b-versatile":
+                self.AI_MODEL = "gpt-4o-mini"
+            if not self.AI_WHISPER_MODEL or self.AI_WHISPER_MODEL == "whisper-large-v3-turbo":
+                self.AI_WHISPER_MODEL = "whisper-1"
+        elif prov == "ollama":
+            if is_default_or_unset_base_url:
+                self.AI_BASE_URL = self.OLLAMA_BASE_URL
+            if not self.AI_MODEL:
+                self.AI_MODEL = self.OLLAMA_MODEL
+        else:
+            # Default to Groq
+            if not self.AI_BASE_URL:
+                self.AI_BASE_URL = "https://api.groq.com/openai/v1"
+            if not self.AI_MODEL:
+                self.AI_MODEL = "llama-3.3-70b-versatile"
+            if not self.AI_WHISPER_MODEL:
+                self.AI_WHISPER_MODEL = "whisper-large-v3-turbo"
+        return self
+
+
+    @property
+    def effective_ai_provider(self) -> str:
+        if self.AI_PROVIDER:
+            prov = self.AI_PROVIDER.lower().strip()
+            if prov in ("gemini", "google"):
+                return "gemini"
+            if prov in ("openai", "chatgpt"):
+                return "openai"
+            if prov == "ollama":
+                return "ollama"
+            if prov in ("groq", "cloud_ai", "openai_compatible"):
+                return "groq"
+        if self.AI_API_KEY:
+            key = self.AI_API_KEY.strip()
+            if key.startswith("AIzaSy"):
+                return "gemini"
+            if key.startswith("sk-"):
+                return "openai"
+            if key.startswith("gsk_"):
+                return "groq"
+            return "groq"
+        return "ollama"
+
 
     # Local Ollama Fallback (Used when AI_API_KEY is empty / self-hosting)
     OLLAMA_BASE_URL: str = "http://localhost:11434"

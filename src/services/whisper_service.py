@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import os
 import tempfile
@@ -116,9 +117,12 @@ class WhisperService:
             if not audio_bytes or len(audio_bytes) == 0:
                 raise InferenceError(f"Downloaded audio from {audio_url} is empty")
 
-        # 3. Cloud Whisper Inference (Primary for Render / Cloud deployments)
+        # 3. Cloud Audio Inference (Gemini Multimodal OR Groq/OpenAI Cloud Whisper)
         if settings.AI_API_KEY and settings.AI_API_KEY.strip():
             client = get_http_client()
+            if settings.effective_ai_provider == "gemini":
+                return await self._transcribe_gemini(client, audio_bytes, language=language, total_start_time=total_start_time)
+
             headers = {"Authorization": f"Bearer {settings.AI_API_KEY}"}
             files = {"file": ("audio.ogg", audio_bytes, "audio/ogg")}
             data = {
@@ -240,3 +244,100 @@ class WhisperService:
                     os.unlink(temp_file_path)
                 except Exception as e:
                     logger.warning(f"Failed to clean up temporary file {temp_file_path}: {e}")
+
+    async def _transcribe_gemini(
+        self,
+        client: httpx.AsyncClient,
+        audio_bytes: bytes,
+        language: Optional[str] = None,
+        total_start_time: float = 0.0
+    ) -> Tuple[str, str]:
+        """
+        Transcribes audio directly using Google Gemini's native multimodal audio understanding.
+        Bypasses Whisper entirely, delivering high-speed bilingual transcription.
+        """
+        b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
+        model = settings.AI_WHISPER_MODEL or settings.AI_MODEL or "gemini-2.0-flash"
+        if not model.startswith("gemini"):
+            model = "gemini-2.0-flash"
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": settings.AI_API_KEY
+        }
+        lang_note = f" The speaker is speaking {language}." if language else ""
+        prompt_text = (
+            f"Transcribe the spoken audio verbatim in its original language (Spanish or English).{lang_note} "
+            "Return ONLY the raw transcription text. "
+            "Do NOT add explanations, timestamps, markdown formatting, introductory text, or quotation marks."
+        )
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "inline_data": {
+                                "mime_type": "audio/ogg",
+                                "data": b64_audio
+                            }
+                        },
+                        {
+                            "text": prompt_text
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.0,
+                "maxOutputTokens": 1000
+            }
+        }
+
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                inference_start_time = time.perf_counter()
+                resp = await client.post(url, headers=headers, json=payload, timeout=30.0)
+                if resp.status_code == 429 and attempt < max_attempts:
+                    retry_after = 1.5
+                    try:
+                        retry_after = float(resp.headers.get("retry-after", 1.5))
+                    except (ValueError, TypeError):
+                        pass
+                    logger.warning(
+                        f"[Gemini Audio 429] Rate limited. Retrying in {retry_after:.2f}s "
+                        f"(attempt {attempt}/{max_attempts})..."
+                    )
+                    await asyncio.sleep(retry_after)
+                    continue
+
+                resp.raise_for_status()
+                result_data = resp.json()
+                text = ""
+                candidates = result_data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        text = parts[0].get("text", "").strip()
+
+                detected_lang = language or "auto"
+                inference_duration = time.perf_counter() - inference_start_time
+                total_duration = time.perf_counter() - total_start_time if total_start_time else inference_duration
+                logger.info(
+                    f"[3s Audit] Gemini Multimodal Audio transcription took {inference_duration:.4f} seconds "
+                    f"| Total transaction took {total_duration:.4f} seconds (model: {model})"
+                )
+                return text, detected_lang
+            except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.ConnectError) as e:
+                sanitized_err = sanitize_exception_message(e)
+                if attempt == max_attempts:
+                    logger.error(f"[Gemini Audio] All {max_attempts} attempts failed: {sanitized_err}")
+                    raise InferenceError("Audio transcription service is momentarily busy. Please try again or send as text.") from e
+                backoff = 1.0 * attempt
+                logger.warning(f"[Gemini Audio Retry] Attempt {attempt}/{max_attempts} failed: {sanitized_err}. Retrying in {backoff:.2f}s...")
+                await asyncio.sleep(backoff)
+            except Exception as e:
+                sanitized_err = sanitize_exception_message(e)
+                logger.error(f"[Gemini Audio] Unexpected error: {sanitized_err}")
+                raise InferenceError("Audio transcription encountered an unexpected error. Please try again or send as text.") from e

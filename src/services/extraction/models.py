@@ -7,14 +7,13 @@ from src.services.extraction.normalizers import normalize_category_value, normal
 
 logger = logging.getLogger(__name__)
 
+from src.core.llm.base import PayloadTruncatedError
+
 class ExtractionError(Exception):
     """Custom exception raised when extraction fails."""
     pass
 
 
-class PayloadTruncatedError(ExtractionError):
-    """Raised when LLM output generation exceeds token budget and was truncated."""
-    pass
 
 class ParsedItem(BaseModel):
     type: Literal["expense", "income"] = Field(

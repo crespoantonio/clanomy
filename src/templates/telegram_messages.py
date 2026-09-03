@@ -21,10 +21,10 @@ UNSUPPORTED_FORMAT_MESSAGE = (
 )
 
 SELF_HOSTED_UPGRADE_MESSAGE = (
-    "🏠 <b>Self-Hosted Clanomy</b>\n\n"
-    "You are running a self-hosted instance of Clanomy. All features (unlimited voice and text logging, "
-    "multi-member family sharing, Notion syncing, natural language insights, and data exports) are "
-    "<b>fully unlocked</b> with no quotas or subscriptions required!"
+    "⏳ <b>Subscriptions Coming Soon</b>\n\n"
+    "We are currently in private beta testing. Dedicated subscription tiers "
+    "will be required in the future, but right now all features are <b>100% unlocked for free</b>.\n\n"
+    "We will notify you here well in advance before any subscription system goes live!"
 )
 
 LIFETIME_PRO_CONFIRMATION = (

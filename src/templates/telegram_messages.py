@@ -23,8 +23,7 @@ UNSUPPORTED_FORMAT_MESSAGE = (
 SELF_HOSTED_UPGRADE_MESSAGE = (
     "⏳ <b>Subscriptions Coming Soon</b>\n\n"
     "We are currently in private beta testing. Dedicated subscription tiers "
-    "will be required in the future, but right now all features are <b>100% unlocked for free</b>.\n\n"
-    "We will notify you here well in advance before any subscription system goes live!"
+    "will be required in the future, but right now all features are <b>100% unlocked for free</b>."
 )
 
 DAILY_LIMIT_REACHED_MESSAGE = (

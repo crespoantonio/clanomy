@@ -105,8 +105,8 @@ def can_log_transaction(family: Family, limit: int = FREE_TIER_MONTHLY_LIMIT, cu
     # Check for lazy monthly reset
     check_and_reset_monthly_quota(family, current_date=current_date)
     
-    # Free tier logic
-    if family.plan_type == "free" and family.monthly_tx_count < limit:
+    # Free tier logic (also covers expired trials prior to daily cron transition)
+    if family.plan_type in ("free", "trial") and family.monthly_tx_count < limit:
         return True
         
     return False

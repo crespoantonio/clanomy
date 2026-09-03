@@ -27,6 +27,12 @@ SELF_HOSTED_UPGRADE_MESSAGE = (
     "We will notify you here well in advance before any subscription system goes live!"
 )
 
+DAILY_LIMIT_REACHED_MESSAGE = (
+    "⚠️ <b>Daily Limit Reached</b>\n\n"
+    "Your workspace has reached its fair-use limit of <b>{limit} messages</b> for today.\n\n"
+    "All limits reset to zero daily at <b>10:00 UTC</b>."
+)
+
 LIFETIME_PRO_CONFIRMATION = (
     "⭐️ <b>Clanomy Lifetime Pro Active</b>\n\n"
     "You have unlocked permanent Lifetime Pro access to Clanomy. Enjoy unlimited voice and text logging forever!"

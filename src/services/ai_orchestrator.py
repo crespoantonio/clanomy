@@ -219,7 +219,10 @@ class AIOrchestrator:
                     session.execute(
                         sa_update(Family)
                         .where(Family.id == family_id)
-                        .values(monthly_tx_count=Family.monthly_tx_count + tx_count)
+                        .values(
+                            monthly_tx_count=Family.monthly_tx_count + tx_count,
+                            daily_tx_count=Family.daily_tx_count + tx_count
+                        )
                     )
 
                 session.commit()

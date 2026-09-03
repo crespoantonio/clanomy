@@ -26,6 +26,7 @@ from src.services.handlers.command_handler import CommandHandler
 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 from src.services.subscription_service import (
     can_log_transaction,
+    check_transaction_allowance,
     check_and_reset_monthly_quota,
     handle_recurring_renewal,
     handle_subscription_cancellation,
@@ -34,6 +35,7 @@ from src.services.subscription_service import (
 from src.templates.telegram_messages import (
     UNAUTHORIZED_ACCESS_MESSAGE,
     UNSUPPORTED_FORMAT_MESSAGE,
+    DAILY_LIMIT_REACHED_MESSAGE,
     format_message_too_long,
     format_voice_too_long,
     format_voice_too_large,
@@ -290,22 +292,27 @@ async def telegram_webhook(
 
         is_voice = bool(audio_file_id)
         is_tx_text = bool(text and not _is_query_or_command(text))
-        if family and (is_voice or is_tx_text) and not can_log_transaction(family):
-            is_admin = FamilyService().is_family_admin(family.id, user.id)
-            if is_admin:
-                quota_msg = (
-                    f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
-                    f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
-                    "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
-                )
-            else:
-                quota_msg = (
-                    f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
-                    f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
-                    "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
-                )
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
-            return {"status": "ok"}
+        if family and (is_voice or is_tx_text):
+            allowed, reason, limit_val = check_transaction_allowance(family)
+            if not allowed:
+                if reason == "daily_limit":
+                    quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val)
+                else:
+                    is_admin = FamilyService().is_family_admin(family.id, user.id)
+                    if is_admin:
+                        quota_msg = (
+                            f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
+                            f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
+                            "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
+                        )
+                    else:
+                        quota_msg = (
+                            f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
+                            f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
+                            "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
+                        )
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
+                return {"status": "ok"}
 
         orchestrator = AIOrchestrator()
         background_tasks.add_task(

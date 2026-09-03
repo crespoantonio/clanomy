@@ -22,6 +22,7 @@ class Family(SQLModel, table=True):
     plan_type: str = Field(default="free")
     subscription_status: str = Field(default="active")
     monthly_tx_count: int = Field(default=0)
+    daily_tx_count: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     last_reset_month: Optional[str] = Field(default=None)
     max_members: int = Field(default=5)
     trial_ends_at: Optional[datetime] = Field(default=None)

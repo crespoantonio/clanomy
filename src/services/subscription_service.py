@@ -10,6 +10,8 @@ from src.core.subscription_config import (
     SubscriptionTier,
     FREE_TIER_MONTHLY_LIMIT,
     TRIAL_DURATION_DAYS,
+    DAILY_FAIR_USE_LIMITS,
+    DEFAULT_DAILY_LIMIT,
     get_tier_config
 )
 
@@ -79,6 +81,11 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
 
     return False
 
+def get_daily_fair_use_limit(plan_type: str) -> int:
+    """Returns the daily fair-use message limit for the given plan type."""
+    return DAILY_FAIR_USE_LIMITS.get(plan_type, DEFAULT_DAILY_LIMIT)
+
+
 def check_and_reset_monthly_quota(family: Family, current_date: Optional[datetime] = None) -> bool:
     """
     Checks if a new calendar month has started based on family.last_reset_month.
@@ -94,22 +101,67 @@ def check_and_reset_monthly_quota(family: Family, current_date: Optional[datetim
         return True
     return False
 
-def can_log_transaction(family: Family, limit: int = FREE_TIER_MONTHLY_LIMIT, current_date: Optional[datetime] = None) -> bool:
+
+def check_transaction_allowance(
+    family: Family,
+    limit: int = FREE_TIER_MONTHLY_LIMIT,
+    current_date: Optional[datetime] = None
+) -> Tuple[bool, Optional[str], int]:
+    """
+    Checks if a transaction can be logged and returns:
+    (allowed: bool, rejection_reason: Optional[str], quota_limit: int)
+    rejection_reason can be:
+      - None: allowed
+      - "monthly_limit": Free tier exceeded monthly limit
+      - "daily_limit": Pro/Trial tier exceeded daily fair-use pool
+    """
+    if not settings.ENABLE_SUBSCRIPTIONS:
+        return True, None, 0
+
+    # 1. Pro / Trial / Paid workspaces: check daily pool
+    if has_unlimited_access(family, now=current_date):
+        daily_limit = get_daily_fair_use_limit(family.plan_type)
+        current_daily = getattr(family, "daily_tx_count", 0) or 0
+        if current_daily >= daily_limit:
+            return False, "daily_limit", daily_limit
+        return True, None, daily_limit
+
+    # 2. Free tier logic: check monthly quota
+    check_and_reset_monthly_quota(family, current_date=current_date)
+    if family.monthly_tx_count < limit:
+        return True, None, limit
+
+    return False, "monthly_limit", limit
+
+
+def can_log_transaction(
+    family: Family,
+    limit: int = FREE_TIER_MONTHLY_LIMIT,
+    current_date: Optional[datetime] = None
+) -> bool:
     """
     Determines if a family is allowed to log a new transaction.
-    Performs lazy monthly counter reset if month has changed.
+    Backward-compatible boolean wrapper around check_transaction_allowance.
     """
-    if has_unlimited_access(family, now=current_date):
-        return True
-    
-    # Check for lazy monthly reset
-    check_and_reset_monthly_quota(family, current_date=current_date)
-    
-    # Free tier logic (also covers expired trials prior to daily cron transition)
-    if family.plan_type in ("free", "trial") and family.monthly_tx_count < limit:
-        return True
-        
-    return False
+    allowed, _, _ = check_transaction_allowance(family, limit=limit, current_date=current_date)
+    return allowed
+
+
+def reset_daily_quotas(session: Session) -> int:
+    """
+    Resets daily_tx_count to 0 for all active workspaces.
+    IMPORTANT: Strictly zeroes daily_tx_count and NEVER touches monthly_tx_count (preserving Free tier usage).
+    Runs silently every day at 10:00 UTC via the trial lifecycle job.
+    """
+    from sqlalchemy import update as sa_update
+    stmt = (
+        sa_update(Family)
+        .where(Family.daily_tx_count > 0)
+        .values(daily_tx_count=0)
+    )
+    result = session.execute(stmt)
+    session.commit()
+    return result.rowcount or 0
 
 def extract_plan_and_family_id(invoice_payload: str) -> Tuple[str, Optional[str]]:
     """

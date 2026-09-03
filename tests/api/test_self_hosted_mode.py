@@ -72,11 +72,11 @@ def test_upgrade_command_in_self_hosted_mode(app_client, mock_telegram, telegram
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
-        # Verify friendly self-hosted message was sent
+        # Verify friendly self-hosted / closed beta message was sent
         assert len(mock_telegram.messages) == 1
         msg = mock_telegram.messages[0]["text"]
-        assert "Self-Hosted Clanomy" in msg
-        assert "fully unlocked" in msg
+        assert "Subscriptions Coming Soon" in msg
+        assert "100% unlocked for free" in msg
 
 def test_allowed_telegram_users_access_granted(app_client, mock_telegram, telegram_payload_factory):
     """Users in ALLOWED_TELEGRAM_USERS list are permitted through."""

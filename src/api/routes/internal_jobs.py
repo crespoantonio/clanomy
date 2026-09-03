@@ -40,6 +40,7 @@ async def trigger_trial_lifecycle_job(
             "job": "trial-lifecycle",
             "day_50_processed": result.get("day_50_processed", 0),
             "day_60_processed": result.get("day_60_processed", 0),
+            "daily_quotas_reset": result.get("daily_quotas_reset", 0),
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except Exception as e:

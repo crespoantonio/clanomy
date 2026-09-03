@@ -10,6 +10,7 @@ from src.db.session import engine as default_engine
 from src.services.telegram_service import TelegramService
 from src.core.config import settings
 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
+from src.services.subscription_service import reset_daily_quotas
 
 logger = logging.getLogger(__name__)
 
@@ -221,12 +222,22 @@ async def run_daily_trial_notifications(
     ignore_lock: bool = False
 ) -> Dict[str, int]:
     """
-    Runs the full daily trial notification job (both Day 50 and Day 60 checks).
-    Database flags (notified_day_50, notified_day_60) guarantee idempotency.
+    Runs the full daily trial notification job (both Day 50 and Day 60 checks)
+    and executes the silent 10:00 UTC fair-use daily quota reset.
     """
+    # 1. Reset fair-use daily message quotas for all active workspaces (runs silently every day at 10:00 UTC)
+    daily_resets = 0
+    if session is not None:
+        daily_resets = reset_daily_quotas(session)
+    else:
+        eng = engine or default_engine
+        with Session(eng) as sess:
+            daily_resets = reset_daily_quotas(sess)
+    logger.info(f"Daily fair-use quota reset completed: {daily_resets} workspaces reset to 0.")
+
     if not settings.ENABLE_SUBSCRIPTIONS:
         logger.debug("ENABLE_SUBSCRIPTIONS is disabled (Self-Hosted mode). Skipping trial notifications.")
-        return {"day_50_processed": 0, "day_60_processed": 0}
+        return {"day_50_processed": 0, "day_60_processed": 0, "daily_quotas_reset": daily_resets}
 
     logger.info("Running daily trial notification lifecycle check...")
 
@@ -242,7 +253,8 @@ async def run_daily_trial_notifications(
     logger.info(f"Daily trial notifications complete: {day_50_count} Day-50, {day_60_count} Day-60.")
     return {
         "day_50_processed": day_50_count,
-        "day_60_processed": day_60_count
+        "day_60_processed": day_60_count,
+        "daily_quotas_reset": daily_resets
     }
 
 class NotificationScheduler:

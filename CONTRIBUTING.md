@@ -17,10 +17,13 @@ We encourage contributions in the following areas:
 
 ## 🔒 Protected Core Areas & Policy
 
-Clanomy operates on an **open-core model**. To protect project integrity, security, and stability:
-- **Core Billing & Quotas (`src/services/subscription_service.py`)**: Maintained exclusively by the core maintainers.
-- **Project Branding & Root Documentation (`README.md`, `.github/workflows/`)**: Managed by the project owner.
-- Pull requests attempting to modify protected core files or internal workflows are automatically rejected by our CI guardrails.
+Clanomy operates on an **open-core model**. To protect project integrity, commercial infrastructure, and user security:
+- **Commercial Web & Landing Page (`landing/`)**: Maintained exclusively by the project owner.
+- **Core Monetization, Tiers & Billing (`src/services/billing/`, `src/services/subscription_service.py`, `src/core/subscription_config.py`, `alembic/versions/*lemonsqueezy*`)**: Maintained exclusively by core maintainers.
+- **Trial Lifecycle & Internal Jobs (`src/services/notification_scheduler.py`, `src/api/routes/internal_jobs.py`)**: Managed by the project owner.
+- **Core Security & Cryptography (`src/core/security.py`, `src/core/config.py`)**: Strict security-reviewed surface.
+- **Project Branding, Licensing & CI Guardrails (`README.md`, `LICENSE`, `.github/`)**: Governed by the repository owner.
+- Pull requests attempting to modify protected files are automatically rejected by our CI guardrails.
 
 ---
 

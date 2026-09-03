@@ -138,7 +138,15 @@ class FamilyService:
             if not family:
                 raise ValueError("Workspace not found")
             if family.plan_type == "solo_pro":
-                raise PlanLimitExceededError("Solo Pro plan only supports 1 user. Please upgrade to Family Pro using /upgrade to invite family members.")
+                raise PlanLimitExceededError("Solo Pro plan only supports 1 user. Please upgrade to Duo Pro or Family Pro using /upgrade to invite members.")
+            if family.plan_type == "duo_pro":
+                current_members = len(session.exec(select(User).where(User.family_id == family_id)).all())
+                if current_members >= 2:
+                    raise PlanLimitExceededError("Duo Pro plan only supports up to 2 partners. Please upgrade to Family Pro using /upgrade to invite more members.")
+            if family.plan_type == "family_pro":
+                current_members = len(session.exec(select(User).where(User.family_id == family_id)).all())
+                if current_members >= 5:
+                    raise PlanLimitExceededError("Family Pro plan has reached its limit of 5 members.")
 
             token = secrets.token_urlsafe(16)
             expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
@@ -194,7 +202,13 @@ class FamilyService:
 
                 if target_family.plan_type == "solo_pro":
                     self._log_3s_audit("join_family_via_invite", start_time)
-                    return False, "⚠️ This workspace is on a Solo Pro plan (1 user limit) and cannot accept new members. The admin must upgrade to Family Pro.", None
+                    return False, "⚠️ This workspace is on a Solo Pro plan (1 user limit) and cannot accept new members. The admin must upgrade to Duo Pro or Family Pro.", None
+
+                if target_family.plan_type == "duo_pro":
+                    member_count = len(session.exec(select(User).where(User.family_id == target_family.id)).all())
+                    if member_count >= 2:
+                        self._log_3s_audit("join_family_via_invite", start_time)
+                        return False, "⚠️ This workspace has reached the Duo Pro limit of 2 members. The admin must upgrade to Family Pro to invite more members.", None
 
                 if target_family.plan_type == "family_pro":
                     member_count = len(session.exec(select(User).where(User.family_id == target_family.id)).all())

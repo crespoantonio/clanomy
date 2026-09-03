@@ -27,27 +27,47 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          # Protected files/paths list for payments, monetization, security, and branding:
-          # - Payment and billing services
+          # Protected files/paths list for payments, monetization, security, web, and branding:
+          # - Public web studio and commercial landing page (landing/)
+          # - Payment, billing services, and tier registries
           # - Lemon Squeezy webhook routes and API endpoints
-          # - Subscription and tier configurations
-          # - Payment database migrations
-          # - Payment test suites
-          # - Monetization strategy documentation & licensing
-          # - GitHub workflows and CI security rules
+          # - Trial lifecycle, reminder schedulers, and internal jobs
+          # - Core cryptographic security, auth verification, and settings
+          # - Payment and security test suites
+          # - Monetization strategy documentation, licensing, and CI workflows
           PROTECTED_PATTERNS=(
-            "^README\.md$"
-            "^LICENSE$"
-            "^\.env\.example$"
+            # Web & Marketing
+            "^landing/"
+
+            # Core Monetization, Tiers & Billing Engine
+            "^src/core/subscription_config\.py$"
             "^src/services/subscription_service\.py$"
             "^src/services/billing/"
             "^src/api/routes/lemonsqueezy\.py$"
-            "^src/core/subscription_config\.py$"
             "^alembic/versions/.*lemonsqueezy.*"
-            "^docs/monetization-and-subscription-strategy\.md$"
+
+            # Trial Expiration & Internal Jobs
+            "^src/services/notification_scheduler\.py$"
+            "^src/api/routes/internal_jobs\.py$"
+
+            # Core Security & Configuration
+            "^src/core/security\.py$"
+            "^src/core/config\.py$"
+
+            # Sensitive Test Suites (Billing, Tiers, Cron, Security)
             "^tests/services/test_lemonsqueezy_billing\.py$"
             "^tests/services/test_subscription_service\.py$"
-            "^\.github/workflows/"
+            "^tests/services/test_three_tier_pricing\.py$"
+            "^tests/services/test_notification_scheduler\.py$"
+            "^tests/api/test_internal_jobs\.py$"
+
+            # Governance, Licensing, CI & Operational Strategy
+            "^README\.md$"
+            "^LICENSE$"
+            "^\.env\.example$"
+            "^\.github/"
+            "^docs/monetization-and-subscription-strategy\.md$"
+            "^docs/gcp_cloud_scheduler_setup\.md$"
           )
 
           VIOLATIONS=()
@@ -71,7 +91,7 @@ jobs:
               echo "  - $v"
             done
             echo ""
-            echo "Modifications to billing logic, payment webhooks, subscription tiers, payment migrations, CI workflows, or core licensing are strictly restricted. Please see CONTRIBUTING.md."
+            echo "Modifications to the public web landing page (landing/), billing logic, payment webhooks, subscription tiers, internal cron jobs, core security/config, CI workflows, or core licensing are strictly restricted. Please see CONTRIBUTING.md."
             exit 1
           fi
 

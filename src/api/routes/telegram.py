@@ -84,7 +84,7 @@ def _is_query_or_command(text: Optional[str]) -> bool:
         return True
     if "confirm delete" in t or "delete account" in t or "confirm leave" in t or "confirmar salir" in t:
         return True
-    if t.startswith(("export", "notion", "invite", "create family", "leave family", "remove member", "family info", "my family", "upgrade")):
+    if t.startswith(("export", "notion", "invite", "create family", "leave family", "remove member", "family info", "my family", "upgrade", "tier", "tiers", "plan", "plans", "pricing")):
         return True
     if t.startswith(("how", "what", "show", "tell", "list", "summary", "breakdown", "report", "chart", "compare")):
         return True
@@ -264,9 +264,19 @@ async def telegram_webhook(
         if text and text.strip().lower() in ("/billing", "/portal", "/cancel"):
             return await billing_service.handle_billing_command(background_tasks, user, family, chat_id)
 
-        # Handle /upgrade command
-        if text and (text.strip().lower() == "/upgrade" or text.strip().lower().startswith("/upgrade ") or text.strip().lower() == "upgrade"):
-            return await billing_service.handle_upgrade_command(background_tasks, text, user, family, chat_id)
+        # Handle /upgrade, /tier, /plan, /pricing commands
+        if text:
+            clean_cmd = text.strip().lower()
+            first_word = clean_cmd.split()[0]
+            if first_word in (
+                "/upgrade", "upgrade",
+                "/tier", "tier",
+                "/tiers", "tiers",
+                "/plan", "plan",
+                "/plans", "plans",
+                "/pricing", "pricing"
+            ):
+                return await billing_service.handle_upgrade_command(background_tasks, text, user, family, chat_id)
 
         # Determine audio or text
         audio_file_id = voice.get("file_id") if voice else None

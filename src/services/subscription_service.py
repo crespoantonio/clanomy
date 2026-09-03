@@ -19,7 +19,7 @@ ALLOWED_PAID_PLANS: Dict[str, str] = {
     for code, tier in SUBSCRIPTION_TIERS.items()
 }
 
-VALID_PLAN_TYPES: Set[str] = {"free", "trial", "solo_pro", "family_pro", "lifetime_pro"}
+VALID_PLAN_TYPES: Set[str] = {"free", "trial", "solo_pro", "duo_pro", "family_pro", "lifetime_pro"}
 VALID_SUBSCRIPTION_STATUSES: Set[str] = {"active", "cancelled", "expired"}
 
 def _compare_datetimes(target_dt: Optional[datetime], current_dt: datetime) -> bool:
@@ -36,14 +36,14 @@ def is_unlimited_plan(plan_type: str) -> bool:
     """
     Returns True if the plan type provides unlimited transactions.
     """
-    return plan_type in ("trial", "solo_pro", "family_pro", "lifetime_pro")
+    return plan_type in ("trial", "solo_pro", "duo_pro", "family_pro", "lifetime_pro")
 
 def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool:
     """
     Helper to check if a family has unlimited access based on its current plan_type
     and subscription_status.
     - If ENABLE_SUBSCRIPTIONS is False (Self-Hosted mode): always returns True.
-    - For active lifetime_pro, solo_pro, family_pro: unlimited access.
+    - For active lifetime_pro, solo_pro, duo_pro, family_pro: unlimited access.
     - For active trial workspaces: verifies that trial_ends_at has not expired.
     - For cancelled subscriptions: retains Pro access until current_period_end.
     - For expired or free subscriptions: no unlimited access.
@@ -55,7 +55,7 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
 
     # Cancelled subscriptions retain Pro access until their paid current_period_end
     if family.subscription_status == "cancelled":
-        if family.plan_type in ("solo_pro", "family_pro", "lifetime_pro") and family.current_period_end is not None:
+        if family.plan_type in ("solo_pro", "duo_pro", "family_pro", "lifetime_pro") and family.current_period_end is not None:
             return _compare_datetimes(family.current_period_end, current_time)
         return False
 
@@ -65,7 +65,7 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
     if family.plan_type == "lifetime_pro":
         return True
 
-    if family.plan_type in ("solo_pro", "family_pro"):
+    if family.plan_type in ("solo_pro", "duo_pro", "family_pro"):
         # If current_period_end is tracked, enforce access with a 48h webhook delivery grace window
         if family.current_period_end is not None:
             grace_period_end = family.current_period_end + timedelta(hours=48)

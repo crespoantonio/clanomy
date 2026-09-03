@@ -152,6 +152,13 @@ async def landing_script():
         return FileResponse(js_path, media_type="application/javascript")
     return Response(status_code=404)
 
+@app.get("/translations.js", include_in_schema=False)
+async def landing_translations():
+    trans_path = os.path.join(_LANDING_DIR, "translations.js")
+    if os.path.exists(trans_path):
+        return FileResponse(trans_path, media_type="application/javascript")
+    return Response(status_code=404)
+
 @app.get("/assets/{file_path:path}", include_in_schema=False)
 async def landing_assets(file_path: str):
     asset_file = os.path.join(_LANDING_DIR, "assets", file_path)

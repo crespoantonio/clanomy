@@ -140,14 +140,16 @@ def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_pay
     intro = mock_telegram.messages[0]["text"]
     assert "Upgrade to Clanomy Pro" in intro
     assert "Solo Pro ($4.99 / month)" in intro
-    assert "Family Pro ($9.99 / month)" in intro
+    assert "Duo Pro ($7.99 / month)" in intro
+    assert "Family Pro ($11.99 / month)" in intro
 
     reply_markup = mock_telegram.messages[0].get("reply_markup")
     assert reply_markup is not None
     buttons = reply_markup["inline_keyboard"]
-    assert len(buttons) == 2
+    assert len(buttons) == 3
     assert "Solo Pro" in buttons[0][0]["text"]
-    assert "Family Pro" in buttons[1][0]["text"]
+    assert "Duo Pro" in buttons[1][0]["text"]
+    assert "Family Pro" in buttons[2][0]["text"]
 
 def test_webhook_upgrade_command_solo_tier(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
     """[P1] Webhook should handle '/upgrade solo' and dispatch Solo Pro checkout button directly."""
@@ -254,9 +256,34 @@ def test_webhook_upgrade_command_saas(app_client, mock_telegram, telegram_payloa
     assert len(mock_telegram.messages) == 1
     msg = mock_telegram.messages[0]
     assert "Solo Pro" in msg["text"]
+    assert "Duo Pro" in msg["text"]
     assert "Family Pro" in msg["text"]
     assert msg.get("reply_markup") is not None
     assert "inline_keyboard" in msg["reply_markup"]
+
+def test_webhook_tier_command_alias(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
+    """[P0] /tier and /plan commands alias to upgrade menu with 3 tier buttons."""
+    from src.core.config import settings
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+
+    payload = telegram_payload_factory(
+        text="/tier",
+        user_id=9002
+    )
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    assert response.status_code == 200
+    assert len(mock_telegram.messages) == 1
+    msg = mock_telegram.messages[0]
+    assert "Duo Pro" in msg["text"]
+    buttons = msg["reply_markup"]["inline_keyboard"]
+    assert len(buttons) == 3
+    assert "Solo Pro" in buttons[0][0]["text"]
+    assert "Duo Pro" in buttons[1][0]["text"]
+    assert "Family Pro" in buttons[2][0]["text"]
 
 def test_webhook_billing_command(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
     """[P0] /billing command returns customer portal link when configured."""

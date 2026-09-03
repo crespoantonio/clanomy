@@ -28,6 +28,7 @@ from src.templates.telegram_messages import (
     SELF_HOSTED_UPGRADE_MESSAGE,
     LIFETIME_PRO_CONFIRMATION,
     SOLO_PRO_CONFIRMATION,
+    DUO_PRO_CONFIRMATION,
     FAMILY_PRO_CONFIRMATION,
     SOLO_PRO_MEMBER_NOTICE,
     UPGRADE_MENU_INTRO,
@@ -394,6 +395,8 @@ class LemonSqueezyBillingService:
                                 chat_id=member.telegram_id,
                                 text=SOLO_PRO_MEMBER_NOTICE
                             )
+            elif target_plan == "duo_pro":
+                background_tasks.add_task(self.telegram_service.send_message, chat_id=chat_id, text=DUO_PRO_CONFIRMATION)
             elif target_plan == "family_pro":
                 background_tasks.add_task(self.telegram_service.send_message, chat_id=chat_id, text=FAMILY_PRO_CONFIRMATION)
 
@@ -413,7 +416,7 @@ class LemonSqueezyBillingService:
         elif status in ("past_due", "unpaid", "paused", "cancelled", "expired"):
             family.subscription_status = status
 
-        was_family_pro = (family.plan_type == "family_pro")
+        was_multi_member_plan = (family.plan_type in ("family_pro", "duo_pro"))
 
         # Update tier plan and capacity if customer upgraded/downgraded in portal
         variant_id = attributes.get("variant_id")
@@ -422,8 +425,8 @@ class LemonSqueezyBillingService:
             family.plan_type = tier.internal_plan
             family.max_members = tier.max_members
 
-            # If downgraded from family_pro to solo_pro, split remaining non-admins into a new Free family
-            if was_family_pro and tier.internal_plan == "solo_pro":
+            # If downgraded to solo_pro from a multi-member plan, split remaining non-admins into a new Free family
+            if was_multi_member_plan and tier.internal_plan == "solo_pro":
                 fam_service = FamilyService()
                 new_family, non_admins = fam_service.split_family_on_downgrade(family.id)
                 if new_family and non_admins and background_tasks:
@@ -565,13 +568,17 @@ class LemonSqueezyBillingService:
             solo_annual_url = await self.create_checkout_url(
                 family_id_str, chat_id, "solo_pro_annual", user_id=user_id_str, is_graduation=is_graduation
             )
+            duo_annual_url = await self.create_checkout_url(
+                family_id_str, chat_id, "duo_pro_annual", user_id=user_id_str, is_graduation=is_graduation
+            )
             fam_annual_url = await self.create_checkout_url(
                 family_id_str, chat_id, "family_pro_annual", user_id=user_id_str, is_graduation=is_graduation
             )
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": "💳 Solo Pro Annual ($49.99/yr)", "url": solo_annual_url}],
-                    [{"text": "💳 Family Pro Annual ($99.99/yr)", "url": fam_annual_url}]
+                    [{"text": "💳 Duo Pro Annual ($79.99/yr) ⭐", "url": duo_annual_url}],
+                    [{"text": "💳 Family Pro Annual ($119.99/yr)", "url": fam_annual_url}]
                 ]
             }
             background_tasks.add_task(
@@ -608,13 +615,39 @@ class LemonSqueezyBillingService:
             )
             return {"status": "ok"}
 
+        elif arg in ("duo", "duo_pro", "couple", "couples", "pair"):
+            duo_url = await self.create_checkout_url(
+                family_id_str, chat_id, "duo_pro", user_id=user_id_str, is_graduation=is_graduation
+            )
+            reply_markup = {
+                "inline_keyboard": [
+                    [{"text": "💳 Upgrade to Duo Pro ($7.99/mo)", "url": duo_url}]
+                ]
+            }
+            if is_graduation:
+                intro = (
+                    "👫 <b>Upgrade to Your Own Duo Pro Workspace</b>\n\n"
+                    "Upgrading will create your own couples workspace as Admin for you and your partner, migrating all your personal transactions.\n\n"
+                    "Tap below to complete your checkout with Card, Apple Pay, or Google Pay:"
+                )
+            else:
+                intro = "👫 <b>Upgrade to Clanomy Duo Pro</b>\n\nTap below to complete your upgrade for 2 partners with Card, Apple Pay, or Google Pay:"
+
+            background_tasks.add_task(
+                self.telegram_service.send_message,
+                chat_id=chat_id,
+                text=intro,
+                reply_markup=reply_markup
+            )
+            return {"status": "ok"}
+
         elif arg in ("family", "family_pro", "fam"):
             fam_url = await self.create_checkout_url(
                 family_id_str, chat_id, "family_pro", user_id=user_id_str, is_graduation=is_graduation
             )
             reply_markup = {
                 "inline_keyboard": [
-                    [{"text": "💳 Upgrade to Family Pro ($9.99/mo)", "url": fam_url}]
+                    [{"text": "💳 Upgrade to Family Pro ($11.99/mo)", "url": fam_url}]
                 ]
             }
             if is_graduation:
@@ -638,13 +671,17 @@ class LemonSqueezyBillingService:
             solo_url = await self.create_checkout_url(
                 family_id_str, chat_id, "solo_pro", user_id=user_id_str, is_graduation=is_graduation
             )
+            duo_url = await self.create_checkout_url(
+                family_id_str, chat_id, "duo_pro", user_id=user_id_str, is_graduation=is_graduation
+            )
             fam_url = await self.create_checkout_url(
                 family_id_str, chat_id, "family_pro", user_id=user_id_str, is_graduation=is_graduation
             )
             reply_markup = {
                 "inline_keyboard": [
                     [{"text": "💳 Solo Pro ($4.99 / mo)", "url": solo_url}],
-                    [{"text": "💳 Family Pro ($9.99 / mo)", "url": fam_url}]
+                    [{"text": "💳 Duo Pro ($7.99 / mo) ⭐", "url": duo_url}],
+                    [{"text": "💳 Family Pro ($11.99 / mo)", "url": fam_url}]
                 ]
             }
             if is_graduation and family:

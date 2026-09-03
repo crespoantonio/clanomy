@@ -38,6 +38,12 @@ SOLO_PRO_CONFIRMATION = (
     "instant deterministic summaries, and private Notion mirroring."
 )
 
+DUO_PRO_CONFIRMATION = (
+    "🎉 <b>Welcome to Clanomy Duo Pro!</b>\n\n"
+    "Your subscription is now active. Enjoy unlimited AI voice and text logging for 2 partners, "
+    "a shared couple ledger, per-member breakdowns, and real-time Notion database mirroring."
+)
+
 FAMILY_PRO_CONFIRMATION = (
     "🎉 <b>Welcome to Clanomy Family Pro!</b>\n\n"
     "Your subscription is now active. Enjoy unlimited AI voice and text logging for your entire household, "
@@ -67,26 +73,21 @@ UPGRADE_MENU_INTRO = (
     "⭐️ <b>Upgrade to Clanomy Pro</b>\n\n"
     "Choose the plan that fits your needs with secure billing (Apple Pay, Google Pay, or Credit/Debit Card):\n\n"
     "1️⃣ <b>Solo Pro ($4.99 / month)</b>\n"
-    "• Unlimited text &amp; voice expense &amp; income logging\n"
-    "• Real-time Notion database mirroring\n"
-    "• AI Natural language queries &amp; cash flow insights\n"
-    "• CSV &amp; JSON financial exports\n"
-    "• 1 User\n\n"
-    "2️⃣ <b>Family Pro ($9.99 / month)</b>\n"
-    "• Everything in Solo Pro\n"
-    "• Up to 5 Family Members with shared ledger\n"
-    "• Per-member spending attribution &amp; budget visibility\n\n"
-    "🎁 <i>Annual Savings: 2 Months Free on annual plans ($49.99 &amp; $99.99/yr)!</i>\n\n"
-    "<i>Tap a button below to open secure checkout and activate immediately!</i>"
+    "• Unlimited text &amp; voice logging &amp; Notion sync for 1 User\n\n"
+    "2️⃣ <b>Duo Pro ($7.99 / month) — Best for Couples ⭐</b>\n"
+    "• Everything in Solo Pro for 2 Partners with shared ledger &amp; Notion sync\n\n"
+    "3️⃣ <b>Family Pro ($11.99 / month)</b>\n"
+    "• Everything in Duo Pro for up to 5 Family Members with shared ledger\n\n"
+    "🎁 <i>Annual Savings: 2 Months Free on annual plans ($49.99, $79.99, $119.99/yr)!</i>\n\n"
+    "<i>Tap a button below to open secure checkout and activate immediately:</i>"
 )
 
 UPGRADE_MENU_ANNUAL_INTRO = (
     "🎁 <b>Clanomy Pro Annual Plans (2 Months Free!)</b>\n\n"
     "Get a full year of unlimited AI financial tracking and save 17%:\n\n"
-    "1️⃣ <b>Solo Pro Annual ($49.99 / year)</b> — ~$4.16/mo (Save $10)\n"
-    "• 1 User, Unlimited AI logging &amp; Notion sync\n\n"
-    "2️⃣ <b>Family Pro Annual ($99.99 / year)</b> — ~$8.33/mo (Save $20)\n"
-    "• Up to 5 Members, Shared Ledger &amp; Notion sync\n\n"
+    "1️⃣ <b>Solo Pro Annual ($49.99 / year)</b> — ~$4.16/mo (1 User)\n\n"
+    "2️⃣ <b>Duo Pro Annual ($79.99 / year)</b> — ~$6.66/mo (2 Partners ⭐)\n\n"
+    "3️⃣ <b>Family Pro Annual ($119.99 / year)</b> — ~$9.99/mo (Up to 5 Members)\n\n"
     "<i>Tap a button below to activate your annual subscription!</i>"
 )
 
@@ -168,6 +169,8 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
             command_bullet = "• ⚡ <b>Unlimited Free Commands:</b> Type /month, /me, /today, /bills, or /balance anytime — they are 100% free and don't count against your 20 monthly AI logs!"
         elif family.plan_type == "solo_pro":
             plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text &amp; voice logs, personal workspace).\n\n"
+        elif family.plan_type == "duo_pro":
+            plan_badge = "👫 <b>Plan:</b> Duo Pro (Active — Unlimited text &amp; voice logs, shared ledger for 2 partners).\n\n"
         elif family.plan_type == "family_pro":
             plan_badge = "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — Unlimited text &amp; voice logs, shared family ledger &amp; Notion sync).\n\n"
         elif family.plan_type == "lifetime_pro":
@@ -247,8 +250,9 @@ def format_non_admin_upgrade_intro(family_name: str, admin_name: str) -> str:
         f"⭐️ <b>Upgrade to Your Own Sovereign Workspace</b>\n\n"
         f"You are currently a member of <b>{escaped_family}</b> (managed by {escaped_admin}).\n\n"
         "Upgrading will create your own independent workspace and <b>migrate all your personal transaction history with you</b>, without disrupting the current family group:\n\n"
-        "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging &amp; private Notion sync.\n\n"
-        "2️⃣ <b>Family Pro ($9.99 / mo)</b> — Start your own family! Unlimited AI logging, shared ledger, and invite up to 4 members.\n\n"
+        "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging &amp; private Notion sync (1 User).\n\n"
+        "2️⃣ <b>Duo Pro ($7.99 / mo)</b> — Shared workspace for you and your partner (2 Members).\n\n"
+        "3️⃣ <b>Family Pro ($11.99 / mo)</b> — Start your own family workspace for up to 5 members.\n\n"
         "<i>Tap a button below to choose your plan and launch your new workspace:</i>"
     )
 

@@ -1,6 +1,9 @@
 // Clanomy Landing Page Interactive Script (Vanilla JS)
 
 document.addEventListener('DOMContentLoaded', () => {
+  let isAnnual = false;
+  let currentLang = 'en';
+
   // 1. Billing Period Toggle (Monthly <-> Annual)
   const billingToggle = document.getElementById('billing-toggle');
   const monthlyLabel = document.getElementById('toggle-monthly-label');
@@ -12,8 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const familyPrice = document.getElementById('family-price');
   const familyPeriod = document.getElementById('family-period');
 
-  let isAnnual = false;
-
   function updatePricing(annual) {
     isAnnual = annual;
     if (billingToggle) {
@@ -24,17 +25,21 @@ document.addEventListener('DOMContentLoaded', () => {
       annualLabel.classList.toggle('active', isAnnual);
     }
 
+    const periodText = isAnnual
+      ? (currentLang === 'es' ? '/ año' : '/ year')
+      : (currentLang === 'es' ? '/ mes' : '/ month');
+
     if (soloPrice && soloPeriod) {
       soloPrice.textContent = isAnnual ? '49.99' : '4.99';
-      soloPeriod.textContent = isAnnual ? '/ year' : '/ month';
+      soloPeriod.textContent = periodText;
     }
     if (duoPrice && duoPeriod) {
       duoPrice.textContent = isAnnual ? '79.99' : '7.99';
-      duoPeriod.textContent = isAnnual ? '/ year' : '/ month';
+      duoPeriod.textContent = periodText;
     }
     if (familyPrice && familyPeriod) {
       familyPrice.textContent = isAnnual ? '119.99' : '11.99';
-      familyPeriod.textContent = isAnnual ? '/ year' : '/ month';
+      familyPeriod.textContent = periodText;
     }
   }
 
@@ -52,7 +57,62 @@ document.addEventListener('DOMContentLoaded', () => {
     annualLabel.addEventListener('click', () => updatePricing(true));
   }
 
-  // 2. FAQ Accordion
+  // 2. Language Switcher (EN <-> ES)
+  function setLanguage(lang) {
+    if (typeof TRANSLATIONS === 'undefined' || !TRANSLATIONS[lang]) return;
+    currentLang = lang;
+    document.documentElement.lang = lang;
+
+    const btnEn = document.getElementById('lang-btn-en');
+    const btnEs = document.getElementById('lang-btn-es');
+    if (btnEn && btnEs) {
+      btnEn.classList.toggle('active', lang === 'en');
+      btnEs.classList.toggle('active', lang === 'es');
+    }
+
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      const key = el.getAttribute('data-i18n');
+      if (TRANSLATIONS[lang] && TRANSLATIONS[lang][key] !== undefined) {
+        el.innerHTML = TRANSLATIONS[lang][key];
+      }
+    });
+
+    // Update pricing period labels according to active language
+    updatePricing(isAnnual);
+
+    try {
+      localStorage.setItem('clanomy_lang', lang);
+    } catch (e) {
+      // Ignore localStorage exceptions
+    }
+  }
+
+  const btnEn = document.getElementById('lang-btn-en');
+  const btnEs = document.getElementById('lang-btn-es');
+  if (btnEn) {
+    btnEn.addEventListener('click', () => setLanguage('en'));
+  }
+  if (btnEs) {
+    btnEs.addEventListener('click', () => setLanguage('es'));
+  }
+
+  // Detect preferred language
+  let savedLang = null;
+  try {
+    savedLang = localStorage.getItem('clanomy_lang');
+  } catch (e) {}
+
+  if (!savedLang && navigator.language && navigator.language.startsWith('es')) {
+    savedLang = 'es';
+  }
+
+  if (savedLang && savedLang === 'es') {
+    setLanguage('es');
+  } else {
+    setLanguage('en');
+  }
+
+  // 3. FAQ Accordion
   const faqQuestions = document.querySelectorAll('.faq-question');
   faqQuestions.forEach((button) => {
     button.addEventListener('click', () => {
@@ -79,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 3. Legal Modals (Terms, Privacy, Refund)
+  // 4. Legal Modals (Terms, Privacy, Refund)
   const modalTriggers = document.querySelectorAll('.modal-trigger');
   const modals = document.querySelectorAll('.modal');
   const closeButtons = document.querySelectorAll('.modal-close');

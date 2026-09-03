@@ -36,8 +36,10 @@ class Settings(BaseSettings):
     LEMON_SQUEEZY_STORE_ID: Optional[str] = None
     LEMON_SQUEEZY_WEBHOOK_SECRET: Optional[str] = None
     LEMON_SQUEEZY_SOLO_PRO_VARIANT_ID: Optional[str] = None
+    LEMON_SQUEEZY_DUO_PRO_VARIANT_ID: Optional[str] = None
     LEMON_SQUEEZY_FAMILY_PRO_VARIANT_ID: Optional[str] = None
     LEMON_SQUEEZY_SOLO_PRO_ANNUAL_VARIANT_ID: Optional[str] = None
+    LEMON_SQUEEZY_DUO_PRO_ANNUAL_VARIANT_ID: Optional[str] = None
     LEMON_SQUEEZY_FAMILY_PRO_ANNUAL_VARIANT_ID: Optional[str] = None
     
     # Whisper settings

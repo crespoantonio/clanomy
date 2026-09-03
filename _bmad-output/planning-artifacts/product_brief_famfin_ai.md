@@ -7,7 +7,7 @@
 ---
 
 ## 1. Project Overview
-Clanomy is a messaging-based (Telegram/WhatsApp) SaaS that allows users to log expenses and manage family budgets using natural language (voice and text). Unlike existing solutions, it prioritizes **data sovereignty** by using local AI models and targets the **family/household segment** through multi-user synchronization.
+Clanomy is a messaging-based (Telegram/WhatsApp) SaaS that allows users to log expenses and manage family budgets using natural language (voice and text). Unlike existing solutions, it prioritizes **data security** by using AES 256 Encryption for data at rest, and in transit. Targets the **family/household segment** through multi-user synchronization.
 
 ## 2. Strategic Objectives
 - **Zero-Friction Logging:** Enable users to log expenses in <3 seconds via voice or text.

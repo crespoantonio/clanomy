@@ -11,7 +11,9 @@ def test_landing_page_root_serves_html():
     assert "Clanomy" in content
     assert "support@clanomy.com" in content
     assert "Solo Pro" in content
+    assert "Duo Pro" in content
     assert "Family Pro" in content
+    assert "Custom & Teams" in content
     assert "Terms of Service" in content
     assert "Privacy Policy" in content
     assert "Refund & Cancellation Policy" in content
@@ -19,6 +21,11 @@ def test_landing_page_root_serves_html():
     assert "assets/clanomy_logo.jpg" in content
     assert "assets/dashboard_preview.jpg" in content
     assert "What is Zero-Knowledge AES-256 Privacy" in content
+    assert "Self-Hosted" in content
+    assert "Business Source License 1.1" in content
+    assert "unlimited, lifetime use of all pre-built slash commands" in content
+    assert "Is my financial data or voice recordings used to train AI models" in content
+    assert "Zero AI Training Policy" in content
 
 def test_landing_page_static_assets():
     client = TestClient(app)
@@ -34,6 +41,7 @@ def test_landing_page_static_assets():
     assert js_resp.status_code == 200
     assert "javascript" in js_resp.headers.get("content-type", "")
     assert "billing-toggle" in js_resp.text
+    assert "duo-price" in js_resp.text
 
     # Image assets
     logo_resp = client.get("/assets/clanomy_logo.jpg")

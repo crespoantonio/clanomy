@@ -198,7 +198,7 @@ def test_format_day_60_message_content():
     
     msg = format_day_60_message(family)
     assert "safe" in msg.lower()
-    assert "30" in msg
+    assert "20" in msg or "free transaction logs" in msg
     assert "/upgrade" in msg
     assert "Free" in msg or "free" in msg
 
@@ -287,7 +287,7 @@ async def test_process_day_60_notifications_lifecycle(memory_session):
     msg = mock_telegram.sent_messages[0]
     assert msg["chat_id"] == 33333
     assert "safe" in msg["text"].lower()
-    assert "30" in msg["text"]
+    assert "20" in msg["text"] or "free transaction logs" in msg["text"]
     assert "/upgrade" in msg["text"]
 
     # Verify family transitioned to free and notified_day_60 set

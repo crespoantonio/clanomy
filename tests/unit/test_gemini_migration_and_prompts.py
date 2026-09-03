@@ -182,7 +182,7 @@ def test_openai_provider_cache_hit_logging(caplog):
             }
         }
     }
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.INFO, logger="src.core.llm.providers.openai_provider"):
         _log_token_usage(mock_usage_data, "gemini-2.5-flash-lite")
     assert "[Prompt Cache HIT]" in caplog.text
     assert "4876/4876 input tokens read from cache for gemini-2.5-flash-lite" in caplog.text

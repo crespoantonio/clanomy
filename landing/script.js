@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const annualLabel = document.getElementById('toggle-annual-label');
   const soloPrice = document.getElementById('solo-price');
   const soloPeriod = document.getElementById('solo-period');
+  const duoPrice = document.getElementById('duo-price');
+  const duoPeriod = document.getElementById('duo-period');
   const familyPrice = document.getElementById('family-price');
   const familyPeriod = document.getElementById('family-period');
 
@@ -22,18 +24,17 @@ document.addEventListener('DOMContentLoaded', () => {
       annualLabel.classList.toggle('active', isAnnual);
     }
 
-    if (soloPrice && soloPeriod && familyPrice && familyPeriod) {
-      if (isAnnual) {
-        soloPrice.textContent = '49.99';
-        soloPeriod.textContent = '/ year';
-        familyPrice.textContent = '99.99';
-        familyPeriod.textContent = '/ year';
-      } else {
-        soloPrice.textContent = '4.99';
-        soloPeriod.textContent = '/ month';
-        familyPrice.textContent = '9.99';
-        familyPeriod.textContent = '/ month';
-      }
+    if (soloPrice && soloPeriod) {
+      soloPrice.textContent = isAnnual ? '49.99' : '4.99';
+      soloPeriod.textContent = isAnnual ? '/ year' : '/ month';
+    }
+    if (duoPrice && duoPeriod) {
+      duoPrice.textContent = isAnnual ? '79.99' : '7.99';
+      duoPeriod.textContent = isAnnual ? '/ year' : '/ month';
+    }
+    if (familyPrice && familyPeriod) {
+      familyPrice.textContent = isAnnual ? '119.99' : '11.99';
+      familyPeriod.textContent = isAnnual ? '/ year' : '/ month';
     }
   }
 

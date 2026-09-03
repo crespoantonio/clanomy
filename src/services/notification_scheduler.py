@@ -9,6 +9,7 @@ from src.db.models import Family, User, Transaction
 from src.db.session import engine as default_engine
 from src.services.telegram_service import TelegramService
 from src.core.config import settings
+from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +90,11 @@ def format_day_50_message(family: Family, tx_count: int, days_remaining: int) ->
         "Type /upgrade to choose your plan (or /upgrade annual to get 2 Months Free)!"
     )
 
-def format_day_60_message(family: Family) -> str:
+def format_day_60_message(family: Optional[Family] = None) -> str:
     """
-    Formats the Day 60 Transition Message:
+    Day 60 expired message sent once when trial ends.
     - Reassures user that all historical data, past Ask queries, and Notion sync remain 100% safe and intact.
-    - Clearly explains the Free tier limits: 30 transaction logs/month shared across the family workspace.
+    - Clearly explains the Free tier limits: shared transaction logs/month across the workspace.
     - Provides a friendly /upgrade CTA.
     """
     return (
@@ -101,12 +102,13 @@ def format_day_60_message(family: Family) -> str:
         "Your workspace has transitioned to the <b>Free tier</b>.\n\n"
         "🛡️ <b>Your data is 100% safe:</b>\n"
         "• All your historical transactions, past Ask queries, and Notion sync remain completely safe and intact.\n"
-        "• Nothing has been deleted.\n\n"
+        "• Nothing has been deleted, and no family members have been removed.\n\n"
         "📋 <b>Free Tier Limits:</b>\n"
-        "• 30 free transaction logs per month shared across your workspace.\n"
+        f"• {FREE_TIER_MONTHLY_LIMIT} free transaction logs per month shared across your workspace.\n"
+        "• Unlimited use of all pre-built slash commands (/month, /today, /balance, /bills, /me, /undo, /export) forever at $0.\n"
         "• Full access to query and view all your historical records.\n\n"
         "Want to unlock unlimited logs and features?\n"
-        "Type /upgrade anytime to activate <b>Solo Pro</b> ($4.99/mo) or <b>Family Pro</b> ($9.99/mo)!"
+        "Type /upgrade anytime to activate <b>Solo Pro</b> ($4.99/mo), <b>Duo Pro</b> ($7.99/mo), or <b>Family Pro</b> ($11.99/mo)!"
     )
 
 async def process_day_50_notifications(

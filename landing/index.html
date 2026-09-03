@@ -23,7 +23,8 @@
       <nav class="nav-links">
         <a href="#features" class="nav-link">Features</a>
         <a href="#how-it-works" class="nav-link">How It Works</a>
-        <a href="#web-studio" class="nav-link">Web Studio</a>
+        <a href="#web-studio" class="nav-link">Web Studio <span class="badge" style="font-size: 0.65rem; padding: 0.12rem 0.4rem; margin-left: 0.2rem; vertical-align: middle;">Soon</span></a>
+        <a href="#self-hosted" class="nav-link">Self-Hosted</a>
         <a href="#pricing" class="nav-link">Pricing</a>
         <a href="#faq" class="nav-link">FAQ</a>
       </nav>
@@ -218,7 +219,7 @@
       <div class="coming-soon-card">
         <div class="coming-soon-info">
           <div class="coming-soon-badge">✨ Roadmap Preview • Coming Soon</div>
-          <h2 class="coming-soon-title">Clanomy Web Studio</h2>
+          <h2 class="coming-soon-title">Clanomy Web Studio <span class="badge badge-gold" style="font-size: 0.85rem; vertical-align: middle; margin-left: 0.4rem;">Coming Soon</span></h2>
           <p class="coming-soon-desc">
             The power of fast AI logging in Telegram meets the depth of a full desktop financial suite. View, manage, filter, and edit everything directly from your browser with instant bi-directional sync.
           </p>
@@ -247,7 +248,65 @@
 
         <div class="preview-media">
           <img src="assets/dashboard_preview.jpg" alt="Clanomy Web Studio Dashboard Preview" class="preview-image">
-          <div class="preview-tag">Web Studio Preview</div>
+          <div class="preview-tag">Web Studio Preview • Coming Soon</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Self-Hosted Freedom Section -->
+  <section class="self-hosted-section" id="self-hosted">
+    <div class="container">
+      <div class="self-hosted-card">
+        <div class="self-hosted-content text-center">
+          <div class="badge badge-gold">🔓 Source-Available • Business Source License 1.1</div>
+          <h2 class="section-title">Host It Yourself, or Let Us Handle the Cloud.</h2>
+          <p class="section-subtitle">
+            Your family's financial data belongs to you. Clanomy is source-available on GitHub. Run your own private instance for $0 with zero artificial limits for personal and household use, or choose Clanomy Cloud for a turnkey, maintenance-free experience.
+          </p>
+        </div>
+
+        <div class="comparison-grid">
+          <!-- Community Self-Hosted -->
+          <div class="comparison-col">
+            <h3>Community Self-Hosted</h3>
+            <div class="comparison-price">100% Free Forever</div>
+            <ul class="comparison-list">
+              <li>✓ <b>Full source code</b> available on GitHub</li>
+              <li>✓ Deploy with <b>Podman or Docker</b> compose files</li>
+              <li>✓ <b>100% Private:</b> run offline with local Ollama + Whisper</li>
+              <li>✓ Unlimited multi-user ledgers & Notion sync unlocked</li>
+              <li>✓ Unlimited use of all pre-built commands & exports</li>
+              <li>✓ Governed by <b>BSL 1.1</b> for personal & family use</li>
+              <li>⚠️ You manage your server, database backups, & bot webhooks</li>
+            </ul>
+            <a href="https://github.com/crespoantonio/clanomy" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-block">
+              View Source on GitHub
+            </a>
+          </div>
+
+          <!-- Clanomy Cloud -->
+          <div class="comparison-col highlighted-col">
+            <div class="popular-tag">Managed Convenience</div>
+            <h3>Clanomy Cloud</h3>
+            <div class="comparison-price">From $4.99 / month</div>
+            <ul class="comparison-list">
+              <li>✓ <b>Instant start</b> directly via <code>@clanomy_bot</code></li>
+              <li>✓ <b>Zero server maintenance</b> or terminal configuration</li>
+              <li>✓ Managed cloud infrastructure with automated database backups</li>
+              <li>✓ High-speed cloud AI inference with instant voice transcription</li>
+              <li>✓ <b>60-day free trial</b> with no credit card upfront</li>
+              <li>✓ Continuous updates, new features, and Web Studio access (Coming Soon)</li>
+              <li>✓ Priority support & automated Notion sync</li>
+            </ul>
+            <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block">
+              Start 60-Day Free Trial
+            </a>
+          </div>
+        </div>
+
+        <div class="license-note">
+          ⚖️ <b>License Protection Notice:</b> Clanomy is distributed under the <b>Business Source License 1.1 (BSL 1.1)</b>. Personal, non-commercial, and family self-hosting is 100% free and permanently encouraged. However, third parties are legally prohibited from offering Clanomy on a commercial, hosted, managed, or Software-as-a-Service (SaaS) basis. Commercial SaaS rights are reserved exclusively to Clanomy Authors.
         </div>
       </div>
     </div>
@@ -258,9 +317,68 @@
     <div class="container">
       <div class="section-header text-center">
         <div class="badge">Simple & Transparent Pricing</div>
-        <h2 class="section-title">Start Free. Upgrade for Unlimited Power.</h2>
-        <p class="section-subtitle">Every new account includes a full 60-day free trial with no credit card required.</p>
-        
+        <h2 class="section-title">Start Free. Upgrade as You Grow.</h2>
+        <p class="section-subtitle">Every new account begins with a 60-day unrestricted trial of Pro features. No credit card required upfront.</p>
+      </div>
+
+      <!-- Hero Free Foundation Card (Base Layer) -->
+      <div class="free-foundation-card">
+        <div class="foundation-header">
+          <div class="badge badge-cyan">🎁 100% Free Forever • No Credit Card Required</div>
+          <h3 class="foundation-title">The Clanomy Free Foundation</h3>
+          <p class="foundation-desc">
+            Everyone starts with a <b>60-day unrestricted trial</b> of our full Pro suite. After day 60, your workspace continues on our generous Free plan forever—with zero paywalls on your reports, records, or pre-built commands.
+          </p>
+        </div>
+
+        <div class="foundation-pillars">
+          <div class="pillar-item">
+            <div class="pillar-icon">⚡</div>
+            <div class="pillar-content">
+              <h4>Unlimited Slash Commands</h4>
+              <p>Run <code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/me</code>, <code>/undo</code>, and <code>/export</code> anytime with zero rate limits or paywalls.</p>
+            </div>
+          </div>
+
+          <div class="pillar-item">
+            <div class="pillar-icon">👨‍👩‍👧‍👦</div>
+            <div class="pillar-content">
+              <h4>Your Family Stays Together</h4>
+              <p>Nobody is kicked out. Family members who joined during your trial remain in your shared household ledger on the Free tier.</p>
+            </div>
+          </div>
+
+          <div class="pillar-item">
+            <div class="pillar-icon">🤖</div>
+            <div class="pillar-content">
+              <h4>20 Monthly AI Logs (Shared)</h4>
+              <p>Log expenses via voice or text. The 20 free AI logs are shared across your workspace and reset automatically every 30 days.</p>
+            </div>
+          </div>
+
+          <div class="pillar-item">
+            <div class="pillar-icon">🔒</div>
+            <div class="pillar-content">
+              <h4>Zero-Knowledge Privacy</h4>
+              <p>Application-level AES-256 field encryption ensures nobody—not even database admins or hosting providers—can read your entries.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="foundation-action">
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg">
+            <svg class="telegram-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/></svg>
+            Start Free in Telegram (No CC Required)
+          </a>
+        </div>
+      </div>
+
+      <!-- Pro Upgrade Header & Billing Toggle -->
+      <div class="pro-header text-center">
+        <div class="badge">🚀 Need Unlimited AI & Multi-Member Ledgers?</div>
+        <h3 class="pro-title">Upgrade Your Workspace to Pro</h3>
+        <p class="pro-subtitle">Unlock unlimited AI voice/text logging, real-time Notion synchronization, and shared family workspaces.</p>
+
         <!-- Billing Period Toggle -->
         <div class="toggle-container">
           <span class="toggle-label active" id="toggle-monthly-label">Monthly</span>
@@ -271,29 +389,10 @@
         </div>
       </div>
 
+      <!-- The 3 Core Pro Upgrade Cards -->
       <div class="pricing-grid">
-        <!-- Free Tier -->
-        <div class="pricing-card">
-          <div class="card-tier-name">Free Trial & Basic</div>
-          <div class="card-price">
-            <span class="currency">$</span><span class="amount">0</span>
-            <span class="period">/ 60 days</span>
-          </div>
-          <p class="card-desc">Full access to all Pro features for 60 days. Then 20 transactions / month free forever.</p>
-          <ul class="card-features">
-            <li>✓ 60 Days Unlimited Pro Access</li>
-            <li>✓ Dual text & voice logging</li>
-            <li>✓ English & Spanish understanding</li>
-            <li>✓ AES-256 field encryption</li>
-            <li>✓ 20 free monthly logs after trial</li>
-            <li>✗ Notion database sync (after trial)</li>
-          </ul>
-          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-block">Start Free in Telegram</a>
-        </div>
-
         <!-- Solo Pro -->
-        <div class="pricing-card highlighted">
-          <div class="popular-tag">Most Popular</div>
+        <div class="pricing-card">
           <div class="card-tier-name">Solo Pro</div>
           <div class="card-price">
             <span class="currency">$</span><span class="amount" id="solo-price">4.99</span>
@@ -301,13 +400,34 @@
           </div>
           <p class="card-desc">For individuals wanting complete financial clarity, unlimited AI logging, and Notion sync.</p>
           <ul class="card-features">
+            <li>✓ <b>1 User</b> workspace</li>
             <li>✓ <b>Unlimited</b> voice & text logging</li>
             <li>✓ <b>Real-time Notion Sync</b></li>
             <li>✓ Smart AI cash flow queries</li>
             <li>✓ Scheduled bills & due date tracker</li>
             <li>✓ CSV & JSON data export</li>
-            <li>✓ 1 User workspace</li>
             <li>✓ Self-service customer billing portal</li>
+          </ul>
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-block">Upgrade in Telegram</a>
+        </div>
+
+        <!-- Duo Pro -->
+        <div class="pricing-card highlighted">
+          <div class="popular-tag">Best for Couples</div>
+          <div class="card-tier-name">Duo Pro</div>
+          <div class="card-price">
+            <span class="currency">$</span><span class="amount" id="duo-price">7.99</span>
+            <span class="period" id="duo-period">/ month</span>
+          </div>
+          <p class="card-desc">For couples, partners, and roommates managing joint finances with total clarity.</p>
+          <ul class="card-features">
+            <li>✓ <b>Everything in Solo Pro</b></li>
+            <li>✓ <b>2 Partner / Household Members</b></li>
+            <li>✓ Shared couple ledger & attribution</li>
+            <li>✓ Shared & private expense tags</li>
+            <li>✓ Shared Notion database mirror</li>
+            <li>✓ Couple balance & savings analytics</li>
+            <li>✓ Self-service billing portal</li>
           </ul>
           <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block">Upgrade in Telegram</a>
         </div>
@@ -316,21 +436,30 @@
         <div class="pricing-card">
           <div class="card-tier-name">Family Pro</div>
           <div class="card-price">
-            <span class="currency">$</span><span class="amount" id="family-price">9.99</span>
+            <span class="currency">$</span><span class="amount" id="family-price">11.99</span>
             <span class="period" id="family-period">/ month</span>
           </div>
-          <p class="card-desc">For couples, families, and roommates managing shared finances with complete transparency.</p>
+          <p class="card-desc">For households wanting complete transparency across parents, kids, and dependents.</p>
           <ul class="card-features">
-            <li>✓ <b>Everything in Solo Pro</b></li>
+            <li>✓ <b>Everything in Duo Pro</b></li>
             <li>✓ <b>Up to 5 Family Members</b></li>
-            <li>✓ Shared household ledger</li>
             <li>✓ Per-member spending attribution</li>
             <li>✓ Multi-currency segregation</li>
+            <li>✓ Family budget alerts & limits</li>
             <li>✓ Shared Notion family database</li>
             <li>✓ Priority email support</li>
           </ul>
           <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block">Upgrade in Telegram</a>
         </div>
+      </div>
+
+      <!-- Roadmap Ribbon for Custom & Teams -->
+      <div class="roadmap-ribbon">
+        <div class="roadmap-badge">🚀 Roadmap</div>
+        <div class="roadmap-text">
+          <strong>Need Clanomy for 6+ members?</strong> Our <b>Custom & Teams</b> tier for coliving spaces, large households, and field teams is currently in development.
+        </div>
+        <span class="roadmap-status">Coming Soon</span>
       </div>
 
       <!-- Fulfillment Notice -->
@@ -413,6 +542,50 @@
 
         <div class="faq-item">
           <button class="faq-question" aria-expanded="false">
+            <span>Is my financial data or voice recordings used to train AI models?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><b>No, absolutely not.</b> Clanomy enforces a strict, non-negotiable <b>Zero AI Training Policy</b>.</p>
+            <p>All expense parsing and voice transcriptions are processed exclusively through paid commercial developer API tiers. Under these commercial agreements, the AI providers are contractually and legally bound <b>never to use your inputs, prompts, audio files, or financial records to train machine learning models</b>.</p>
+            <p>Your inputs exist in transient AI memory only for the split-second required to extract categories and amounts, and are immediately discarded. Furthermore, if you prefer complete air-gapped isolation, Clanomy can be self-hosted locally on your own machine using private open-source models (Ollama + Faster-Whisper) where zero data ever leaves your local network.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span>What happens when my 60-day trial ends? Does my family stay together on the Free plan?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><b>Yes! Your family stays completely together.</b> Nobody is removed from your household or forced into a separate solo account. Your shared household ledger, all historical records, and invited family members remain completely intact.</p>
+            <p>On the Free tier, your family workspace shares <b>20 free AI voice and text transaction logs per month</b>, while everyone in your household enjoys <b>unlimited, lifetime use of all pre-built slash commands</b> (<code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/me</code>, <code>/undo</code>, <code>/export</code>) with zero paywalls.</p>
+            <p>If your household ever needs unlimited AI logging or Notion sync, your family admin can upgrade anytime to <b>Duo Pro</b> (for couples) or <b>Family Pro</b> (for up to 5 members).</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span>Can I self-host Clanomy on my own hardware for free?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><b>Yes!</b> Clanomy is source-available on GitHub under the Business Source License 1.1. You can clone the repository, run it using Podman or Docker on your own home lab or private VPS, and even connect local offline AI models (Ollama + Faster-Whisper) for 100% air-gapped financial tracking at $0 for your personal household.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span>Can a third party host Clanomy and charge money for it?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer">
+            <p><b>No.</b> Under our <b>Business Source License 1.1 (BSL 1.1)</b>, self-hosting is free for personal, non-commercial, and family use. However, third parties are legally prohibited from offering Clanomy on a commercial, hosted, managed, or Software-as-a-Service (SaaS) basis, or charging users for access. Commercial SaaS rights are reserved exclusively to Clanomy Authors.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
             <span>How do I cancel or manage my subscription?</span>
             <span class="faq-toggle">+</span>
           </button>
@@ -442,7 +615,8 @@
         <ul class="footer-links">
           <li><a href="#features">Features</a></li>
           <li><a href="#how-it-works">How It Works</a></li>
-          <li><a href="#web-studio">Web Studio</a></li>
+          <li><a href="#web-studio">Web Studio <span style="font-size: 0.78em; color: var(--gold-accent);">(Coming Soon)</span></a></li>
+          <li><a href="#self-hosted">Self-Hosted</a></li>
           <li><a href="#pricing">Pricing</a></li>
           <li><a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer">Launch Telegram Bot</a></li>
         </ul>
@@ -535,7 +709,7 @@
         <ul>
           <li><strong>Lemon Squeezy:</strong> For Merchant of Record payment processing and invoicing.</li>
           <li><strong>Notion:</strong> When enabled by you, transactions are transmitted via TLS 1.3 to your personal Notion database.</li>
-          <li><strong>AI Inference:</strong> Transcription and extraction are executed through secured, zero-data-retention AI endpoints solely for the duration of the request.</li>
+          <li><strong>AI Inference & Zero Training:</strong> Transcription and extraction are executed through secured, zero-data-retention commercial developer AI endpoints solely for the transient duration of the request. Customer data, voice recordings, and financial prompts are strictly never retained or used to train machine learning models.</li>
         </ul>
 
         <h4>5. Data Deletion Rights</h4>

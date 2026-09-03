@@ -203,7 +203,8 @@ async def test_handle_upgrade_command_self_hosted(monkeypatch):
         await task.func(*task.args, **task.kwargs)
 
     assert len(mock_tg.sent_messages) == 1
-    assert "Self-Hosted" in mock_tg.sent_messages[0]["text"]
+    assert "Subscriptions Coming Soon" in mock_tg.sent_messages[0]["text"]
+    assert "100% unlocked for free" in mock_tg.sent_messages[0]["text"]
 
 
 @pytest.mark.anyio

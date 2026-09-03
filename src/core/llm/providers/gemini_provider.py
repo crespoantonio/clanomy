@@ -32,6 +32,46 @@ def _log_gemini_token_usage(data: dict, model: str) -> None:
         )
 
 
+def clean_gemini_schema(schema_dict: dict) -> dict:
+    """
+    Converts Pydantic v2 JSON Schema to Gemini's OpenAPI 3.0 compatible subset.
+    - Inlines all definitions from $defs ($ref).
+    - Flattens nullable fields from anyOf: [{type: ...}, {type: null}] to {type: ..., nullable: True}.
+    - Removes unsupported keywords (title, default, etc.).
+    """
+    import copy
+    d = copy.deepcopy(schema_dict)
+    defs = d.pop("$defs", {})
+
+    def resolve(node):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                ref_name = node["$ref"].split("/")[-1]
+                if ref_name in defs:
+                    resolved = resolve(copy.deepcopy(defs[ref_name]))
+                    node.clear()
+                    node.update(resolved)
+                    return node
+            if "anyOf" in node:
+                non_null = [s for s in node["anyOf"] if s.get("type") != "null"]
+                if len(non_null) == 1:
+                    primary = resolve(non_null[0])
+                    node.clear()
+                    node.update(primary)
+                    node["nullable"] = True
+                    return node
+            # Remove title and default which can trigger Gemini OpenAPI schema validation errors
+            node.pop("title", None)
+            node.pop("default", None)
+            for k, v in list(node.items()):
+                node[k] = resolve(v)
+        elif isinstance(node, list):
+            return [resolve(item) for item in node]
+        return node
+
+    return resolve(d)
+
+
 class GeminiProvider(BaseLLMProvider):
     """Native raw HTTP provider for Google Gemini API."""
 
@@ -63,6 +103,9 @@ class GeminiProvider(BaseLLMProvider):
         }
         sanitized_user = sanitize_prompt_input(user_prompt)
 
+        raw_schema = schema.model_json_schema()
+        gemini_schema = clean_gemini_schema(raw_schema)
+
         payload = {
             "systemInstruction": {
                 "parts": [{"text": system_prompt}]
@@ -77,13 +120,17 @@ class GeminiProvider(BaseLLMProvider):
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
                 "responseMimeType": "application/json",
-                "responseSchema": schema.model_json_schema()
+                "responseSchema": gemini_schema
             }
         }
 
         logger.info(f"Calling native Gemini model {self.model}...")
         response = await client.post(url, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Gemini API error ({e.response.status_code}): {e.response.text}")
+            raise e
         data = response.json()
 
         _log_gemini_token_usage(data, self.model)

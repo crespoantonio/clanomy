@@ -32,12 +32,21 @@ def _log_gemini_token_usage(data: dict, model: str) -> None:
         )
 
 
+ALLOWED_GEMINI_FIELDS = {
+    "type", "format", "description", "nullable", "enum",
+    "maxItems", "minItems", "properties", "required", "minProperties",
+    "maxProperties", "minLength", "maxLength", "pattern", "example",
+    "anyOf", "propertyOrdering", "items", "minimum", "maximum"
+}
+
+
 def clean_gemini_schema(schema_dict: dict) -> dict:
     """
     Converts Pydantic v2 JSON Schema to Gemini's OpenAPI 3.0 compatible subset.
     - Inlines all definitions from $defs ($ref).
     - Flattens nullable fields from anyOf: [{type: ...}, {type: null}] to {type: ..., nullable: True}.
-    - Removes unsupported keywords (title, default, etc.).
+    - Maps JSON Schema Draft 2020 keywords not supported by Gemini OpenAPI (exclusiveMinimum -> minimum).
+    - Removes unsupported metadata (title, default, etc.).
     """
     import copy
     d = copy.deepcopy(schema_dict)
@@ -48,10 +57,8 @@ def clean_gemini_schema(schema_dict: dict) -> dict:
             if "$ref" in node:
                 ref_name = node["$ref"].split("/")[-1]
                 if ref_name in defs:
-                    resolved = resolve(copy.deepcopy(defs[ref_name]))
-                    node.clear()
-                    node.update(resolved)
-                    return node
+                    return resolve(copy.deepcopy(defs[ref_name]))
+
             if "anyOf" in node:
                 non_null = [s for s in node["anyOf"] if s.get("type") != "null"]
                 if len(non_null) == 1:
@@ -59,12 +66,20 @@ def clean_gemini_schema(schema_dict: dict) -> dict:
                     node.clear()
                     node.update(primary)
                     node["nullable"] = True
-                    return node
-            # Remove title and default which can trigger Gemini OpenAPI schema validation errors
+
+            # Convert JSON Schema exclusiveMinimum to OpenAPI 3.0 minimum
+            if "exclusiveMinimum" in node:
+                node["minimum"] = node.pop("exclusiveMinimum")
+            if "exclusiveMaximum" in node:
+                node["maximum"] = node.pop("exclusiveMaximum")
+
+            # Remove unsupported keywords that cause Google API validation errors
             node.pop("title", None)
             node.pop("default", None)
-            for k, v in list(node.items()):
-                node[k] = resolve(v)
+
+            for k in list(node.keys()):
+                node[k] = resolve(node[k])
+            return node
         elif isinstance(node, list):
             return [resolve(item) for item in node]
         return node

@@ -32,7 +32,7 @@ def is_retryable_provider_error(exception: BaseException) -> bool:
 
 
 def _log_token_usage(data: dict, model: str) -> None:
-    """Logs token consumption and reports prompt cache hits when available."""
+    """Logs token consumption and reports cache HIT / MISS status for OpenAI/Groq requests."""
     usage = data.get("usage")
     if not isinstance(usage, dict):
         return
@@ -45,11 +45,11 @@ def _log_token_usage(data: dict, model: str) -> None:
 
     if cached_tokens > 0:
         logger.info(
-            f"[Prompt Cache HIT] {cached_tokens}/{prompt_tokens} input tokens read from cache for {model}"
+            f"[Prompt Cache HIT] {cached_tokens}/{prompt_tokens} tokens served from cache for {model} (output: {completion_tokens})"
         )
-    elif prompt_tokens > 0:
-        logger.debug(
-            f"[Token Usage] {prompt_tokens} input, {completion_tokens} output for {model}"
+    else:
+        logger.info(
+            f"[Prompt Cache MISS] 0/{prompt_tokens} cached (full inference run) for {model} (output: {completion_tokens})"
         )
 
 

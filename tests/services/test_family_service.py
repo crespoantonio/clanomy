@@ -610,4 +610,46 @@ def test_graduate_member_to_new_workspace(session: Session, family_service: Fami
     assert tx_grad.family_id == new_fam.id
 
 
+def test_free_and_trial_member_limit_enforcement(session: Session, family_service: FamilyService):
+    """Verify that Free and Trial workspaces enforce the 5-member limit on invite creation and joining."""
+    from src.services.family_service import PlanLimitExceededError
+
+    # Create free family with 5 members
+    fam = Family(name="Free Family Cap", plan_type="free", max_members=5)
+    session.add(fam)
+    session.commit()
+
+    admin = User(telegram_id=9401, username="admin_free", family_id=fam.id, is_admin=True)
+    session.add(admin)
+    session.commit()
+
+    # Add 4 more members (total 5)
+    for i in range(2, 6):
+        u = User(telegram_id=9400 + i, username=f"member_{i}", family_id=fam.id, is_admin=False)
+        session.add(u)
+    session.commit()
+
+    # 1. Attempting to create invite when at 5 members must raise PlanLimitExceededError
+    with pytest.raises(PlanLimitExceededError) as exc:
+        family_service.create_invite(fam.id, admin.id)
+    assert "limit of 5 members" in str(exc.value)
+
+    # 2. Attempting to join with an existing token when at 5 members must be rejected
+    invite = FamilyInvite(family_id=fam.id, created_by_user_id=admin.id, token="free_cap_token", expires_at=datetime.now(timezone.utc) + timedelta(hours=1))
+    session.add(invite)
+    session.commit()
+
+    other_fam = Family(name="Other")
+    session.add(other_fam)
+    session.commit()
+    outsider = User(telegram_id=9499, username="outsider", family_id=other_fam.id)
+    session.add(outsider)
+    session.commit()
+
+    ok, msg, _ = family_service.join_family_via_invite("free_cap_token", outsider.id)
+    assert ok is False
+    assert "limit of 5 members" in msg
+
+
+
 

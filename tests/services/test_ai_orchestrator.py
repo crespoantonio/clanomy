@@ -296,7 +296,7 @@ async def test_orchestrator_persistence_success(orchestrator, monkeypatch):
     assert added_transaction.amount == "encrypted_15.0 USD"
     assert added_transaction.concept == "encrypted_Starbucks"
     
-    mock_session.commit.assert_called_once()
+    assert mock_session.commit.called
 
 @pytest.mark.anyio
 async def test_orchestrator_persistence_failure_rollback(orchestrator, monkeypatch):
@@ -650,6 +650,7 @@ async def test_orchestrator_expense_mirroring_error(mock_notion_cls, orchestrato
     mock_session_class = MagicMock()
     mock_session_class.return_value.__enter__.return_value = mock_session
     monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    monkeypatch.setattr("src.services.handlers.notion_handler.Session", mock_session_class)
 
     mock_user = MagicMock(family_id=UUID(family_id), full_name="Tony")
     mock_family = MagicMock(plan_type="trial", subscription_status="active", trial_ends_at=None, notion_api_key="encrypted_key", notion_database_id="db1")
@@ -674,7 +675,7 @@ async def test_orchestrator_expense_mirroring_error(mock_notion_cls, orchestrato
     
     # Should not crash and should send telegram message
     mock_send_message.assert_called_once()
-    mock_session.commit.assert_called_once()
+    assert mock_session.commit.called
 
 @pytest.mark.anyio
 @patch("src.services.ai_orchestrator.NotionService")

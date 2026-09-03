@@ -143,10 +143,12 @@ class FamilyService:
                 current_members = len(session.exec(select(User).where(User.family_id == family_id)).all())
                 if current_members >= 2:
                     raise PlanLimitExceededError("Duo Pro plan only supports up to 2 partners. Please upgrade to Family Pro using /upgrade to invite more members.")
-            if family.plan_type == "family_pro":
+            if family.plan_type in ("family_pro", "free", "trial"):
                 current_members = len(session.exec(select(User).where(User.family_id == family_id)).all())
-                if current_members >= 5:
-                    raise PlanLimitExceededError("Family Pro plan has reached its limit of 5 members.")
+                max_allowed = family.max_members or 5
+                if current_members >= max_allowed:
+                    plan_label = "Family Pro" if family.plan_type == "family_pro" else "Free/Trial"
+                    raise PlanLimitExceededError(f"{plan_label} plan has reached its limit of {max_allowed} members.")
 
             token = secrets.token_urlsafe(16)
             expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
@@ -210,11 +212,13 @@ class FamilyService:
                         self._log_3s_audit("join_family_via_invite", start_time)
                         return False, "⚠️ This workspace has reached the Duo Pro limit of 2 members. The admin must upgrade to Family Pro to invite more members.", None
 
-                if target_family.plan_type == "family_pro":
+                if target_family.plan_type in ("family_pro", "free", "trial"):
                     member_count = len(session.exec(select(User).where(User.family_id == target_family.id)).all())
-                    if member_count >= 5:
+                    max_allowed = target_family.max_members or 5
+                    if member_count >= max_allowed:
+                        plan_label = "Family Pro" if target_family.plan_type == "family_pro" else "Free/Trial"
                         self._log_3s_audit("join_family_via_invite", start_time)
-                        return False, "⚠️ This workspace has reached the Family Pro limit of 5 members.", None
+                        return False, f"⚠️ This workspace has reached its limit of {max_allowed} members.", None
 
                 old_family_id = user.family_id
                 old_family = session.get(Family, old_family_id) if old_family_id else None

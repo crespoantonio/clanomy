@@ -76,7 +76,7 @@ class GeminiProvider(BaseLLMProvider):
     """Native raw HTTP provider for Google Gemini API."""
 
     def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
-        self.model = model or settings.AI_MODEL or "gemini-2.5-flash-lite"
+        self.model = model or settings.AI_MODEL or "gemini-3.1-flash-lite"
         self.api_key = api_key or settings.AI_API_KEY
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
 

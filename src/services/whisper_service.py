@@ -261,9 +261,9 @@ class WhisperService:
         Bypasses Whisper entirely, delivering high-speed bilingual transcription.
         """
         b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
-        model = settings.AI_WHISPER_MODEL or settings.AI_MODEL or "gemini-2.5-flash-lite"
+        model = settings.AI_WHISPER_MODEL or settings.AI_MODEL or "gemini-3.1-flash-lite"
         if not model.startswith("gemini") or model == "gemini-2.0-flash":
-            model = "gemini-2.5-flash-lite"
+            model = "gemini-3.1-flash-lite"
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         headers = {

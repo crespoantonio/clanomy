@@ -63,8 +63,8 @@ def test_settings_gemini_provider_defaults():
     )
     assert s.effective_ai_provider == "gemini"
     assert s.AI_BASE_URL == "https://generativelanguage.googleapis.com/v1beta/openai"
-    assert s.AI_MODEL == "gemini-2.5-flash-lite"
-    assert s.AI_WHISPER_MODEL == "gemini-2.5-flash-lite"
+    assert s.AI_MODEL == "gemini-3.1-flash-lite"
+    assert s.AI_WHISPER_MODEL == "gemini-3.1-flash-lite"
 
 
 def test_settings_groq_provider_defaults():
@@ -147,7 +147,7 @@ def test_llm_factory_auto_detects_gemini_key():
 
 @pytest.mark.anyio
 async def test_gemini_provider_complete_structured_success():
-    provider = GeminiProvider(model="gemini-2.5-flash-lite", api_key="AIzaSyTestKey")
+    provider = GeminiProvider(model="gemini-3.1-flash-lite", api_key="AIzaSyTestKey")
     mock_client = AsyncMock()
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -185,7 +185,7 @@ async def test_gemini_provider_complete_structured_success():
 
 @pytest.mark.anyio
 async def test_gemini_provider_complete_structured_max_tokens():
-    provider = GeminiProvider(model="gemini-2.5-flash-lite", api_key="AIzaSyTestKey")
+    provider = GeminiProvider(model="gemini-3.1-flash-lite", api_key="AIzaSyTestKey")
     mock_client = AsyncMock()
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -212,7 +212,7 @@ async def test_gemini_provider_complete_structured_max_tokens():
 
 @pytest.mark.anyio
 async def test_gemini_provider_complete_text_success():
-    provider = GeminiProvider(model="gemini-2.5-flash-lite", api_key="AIzaSyTestKey")
+    provider = GeminiProvider(model="gemini-3.1-flash-lite", api_key="AIzaSyTestKey")
     mock_client = AsyncMock()
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -273,8 +273,8 @@ def test_settings_gemini_auto_migrates_legacy_2_0_model():
         AI_MODEL="gemini-2.0-flash",
         AI_WHISPER_MODEL="gemini-2.0-flash"
     )
-    assert s.AI_MODEL == "gemini-2.5-flash-lite"
-    assert s.AI_WHISPER_MODEL == "gemini-2.5-flash-lite"
+    assert s.AI_MODEL == "gemini-3.1-flash-lite"
+    assert s.AI_WHISPER_MODEL == "gemini-3.1-flash-lite"
 
 
 def test_openai_provider_cache_hit_and_miss_logging(caplog):
@@ -344,13 +344,13 @@ def test_gemini_provider_cache_hit_and_miss_logging(caplog):
         handler = MemoryHandler()
         gemini_logger.addHandler(handler)
         try:
-            _log_gemini_token_usage(mock_hit, "gemini-2.5-flash-lite")
-            _log_gemini_token_usage(mock_miss, "gemini-2.5-flash-lite")
+            _log_gemini_token_usage(mock_hit, "gemini-3.1-flash-lite")
+            _log_gemini_token_usage(mock_miss, "gemini-3.1-flash-lite")
         finally:
             gemini_logger.removeHandler(handler)
 
     captured = caplog.text + "\n" + "\n".join(records)
     assert "[Prompt Cache HIT]" in captured
-    assert "1800/2000 tokens served from cache for gemini-2.5-flash-lite" in captured
+    assert "1800/2000 tokens served from cache for gemini-3.1-flash-lite" in captured
     assert "[Prompt Cache MISS]" in captured
-    assert "0/2000 cached (full inference run) for gemini-2.5-flash-lite" in captured
+    assert "0/2000 cached (full inference run) for gemini-3.1-flash-lite" in captured

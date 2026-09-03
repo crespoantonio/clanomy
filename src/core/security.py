@@ -24,6 +24,24 @@ def verify_origin_secret(received_secret: Optional[str]) -> bool:
         return False
     return secrets.compare_digest(received_secret, settings.CLOUDFLARE_ORIGIN_SECRET.strip())
 
+def verify_cron_secret(received_secret: Optional[str]) -> bool:
+    """
+    Verifies that the request carries the configured CRON_SECRET (or falls back to MESSAGING_WEBHOOK_SECRET).
+    Uses constant-time comparison to prevent timing attacks.
+    """
+    expected = (getattr(settings, "CRON_SECRET", None) or "").strip()
+    if not expected:
+        expected = (getattr(settings, "MESSAGING_WEBHOOK_SECRET", None) or "").strip()
+
+    if not expected or not received_secret:
+        return False
+
+    clean_received = received_secret.strip()
+    if clean_received.lower().startswith("bearer "):
+        clean_received = clean_received[7:].strip()
+
+    return secrets.compare_digest(clean_received, expected)
+
 def mask_database_url(url: Optional[str]) -> str:
     """
     Masks the password in a database URL string to protect credentials from appearing in logs or error traces.

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     TELEGRAM_BOT_USERNAME: Optional[str] = None
     MESSAGING_WEBHOOK_SECRET: str
+    CRON_SECRET: Optional[str] = None  # Secret header token required to invoke internal background jobs (e.g. via GCP Cloud Scheduler)
+    ENABLE_INTERNAL_SCHEDULER: bool = False  # Set to True only if running without an external cron trigger (defaults to False)
     CLOUDFLARE_ORIGIN_SECRET: Optional[str] = None  # Optional secret header token to block direct origin access
     ENABLE_DOCS: bool = False  # Set to True to expose Swagger/OpenAPI docs (/docs, /redoc, /openapi.json)
     USER_COOLDOWN_SECONDS: float = 0.5

@@ -12,6 +12,7 @@ from src.core.http_client import HTTPClientManager
 from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 from src.api.routes.lemonsqueezy import router as lemonsqueezy_router
+from src.api.routes.internal_jobs import router as internal_jobs_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,21 +43,28 @@ async def lifespan(app: FastAPI):
     # Initialize HTTP client pool
     HTTPClientManager().init()
     
-    # Start background daily trial lifecycle notification scheduler
-    from src.services.notification_scheduler import start_notification_scheduler, stop_notification_scheduler
-    try:
-        start_notification_scheduler()
-    except Exception as e:
-        logger.warning(f"Failed to start notification scheduler: {e}", exc_info=True)
+    # In SaaS/cloud mode, external triggers (e.g. GCP Cloud Scheduler) invoke /api/internal/jobs/trial-lifecycle.
+    # In-process scheduler is only started if explicitly enabled via ENABLE_INTERNAL_SCHEDULER.
+    if settings.ENABLE_INTERNAL_SCHEDULER:
+        from src.services.notification_scheduler import start_notification_scheduler
+        try:
+            start_notification_scheduler()
+            logger.info("Internal NotificationScheduler started.")
+        except Exception as e:
+            logger.warning(f"Failed to start notification scheduler: {e}", exc_info=True)
+    else:
+        logger.info("Internal in-memory scheduler is disabled. Trial lifecycle jobs are managed via /api/internal/jobs/trial-lifecycle.")
 
     yield
     
     # Graceful shutdown sequence for Render rolling deployments
     logger.info("Shutdown signal received. Initiating graceful task draining...")
-    try:
-        await stop_notification_scheduler()
-    except Exception as e:
-        logger.warning(f"Error stopping notification scheduler: {e}", exc_info=True)
+    if settings.ENABLE_INTERNAL_SCHEDULER:
+        from src.services.notification_scheduler import stop_notification_scheduler
+        try:
+            await stop_notification_scheduler()
+        except Exception as e:
+            logger.warning(f"Error stopping notification scheduler: {e}", exc_info=True)
 
     # Allow in-flight Groq inference & Telegram background webhook tasks to complete
     await asyncio.sleep(3.0)
@@ -87,8 +95,13 @@ async def security_and_origin_middleware(request: Request, call_next):
     logger.info(f"Incoming HTTP {request.method} {request.url.path} from {client_ip}")
 
     # 1. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
-    # Allows /health probe, Telegram webhook, and Lemon Squeezy webhook pass-through
-    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in ("/health", "/api/v1/telegram/webhook", "/api/webhooks/lemonsqueezy"):
+    # Allows /health probe, Telegram webhook, Lemon Squeezy webhook, and internal cron jobs pass-through
+    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in (
+        "/health",
+        "/api/v1/telegram/webhook",
+        "/api/webhooks/lemonsqueezy",
+        "/api/internal/jobs/trial-lifecycle"
+    ):
         origin_header = request.headers.get("X-Origin-Verify-Secret") or request.headers.get("X-Clanomy-Origin-Key")
         if not verify_origin_secret(origin_header):
             logger.warning(f"Direct origin access attempt blocked on {request.url.path} from {client_ip}")
@@ -116,6 +129,7 @@ _LANDING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
 app.include_router(lemonsqueezy_router)
+app.include_router(internal_jobs_router)
 
 @app.get("/", include_in_schema=False)
 async def root():

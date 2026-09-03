@@ -9,8 +9,7 @@ def test_landing_page_root_serves_html():
     assert "text/html" in response.headers.get("content-type", "")
     content = response.text
     assert "Clanomy" in content
-    assert "Walk-Me" in content
-    assert "clanomy@walk-me.app" in content
+    assert "support@clanomy.com" in content
     assert "Solo Pro" in content
     assert "Family Pro" in content
     assert "Terms of Service" in content
@@ -19,6 +18,7 @@ def test_landing_page_root_serves_html():
     assert "Clanomy Web Studio" in content
     assert "assets/clanomy_logo.jpg" in content
     assert "assets/dashboard_preview.jpg" in content
+    assert "What is Zero-Knowledge AES-256 Privacy" in content
 
 def test_landing_page_static_assets():
     client = TestClient(app)

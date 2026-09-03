@@ -260,15 +260,26 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
             target_currency=target_curr
         )
 
-    # 4. Fallback to transaction extraction (supporting single or multi-line items)
+    # 4. Fallback to transaction extraction (supporting single or multi-line items and inline batches)
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     header_regex = r'^(?:los\s+gastos\s+fijos|gastos\s+fijos|fixed\s+expenses|fixed\s+bills|facturas\s+por\s+pagar|bills\s+due)'
     if len(lines) > 1 and re.search(header_regex, lines[0].lower()):
-        candidate_lines = lines[1:]
+        base_lines = lines[1:]
     else:
-        candidate_lines = lines
+        base_lines = lines
+
+    # Expand lines if multiple amounts are present separated by " y ", " and ", or ","
+    candidate_lines = []
+    amount_token_regex = r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b'
+    for line in base_lines:
+        parts = [p.strip() for p in re.split(r'\s+(?:y|and)\s+|,\s*', line) if p.strip()]
+        if len(parts) > 1 and all(re.search(amount_token_regex, p) for p in parts):
+            candidate_lines.extend(parts)
+        else:
+            candidate_lines.append(line)
 
     extracted_items = []
+    CURRENCY_CODES = {'usd', 'ars', 'eur', 'gbp', 'mxn', 'clp', 'cop', 'brl', 'pen'}
     for line in candidate_lines:
         try:
             # Check for due date in line: "con vencimiento el 18/09", "con vencimento el 18/09", "vence el 04/09", "due on 09/18"
@@ -295,12 +306,35 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
 
             item_ex = fallback_regex_extract(line, default_currency=effective_default_currency)
             clean_concept = re.sub(r'(?:\.\s*)?(?:con\s+)?(?:vencim(?:iento|ento)|vence|vto\.?|venc\.?|due\s+(?:on|date)).*$', '', item_ex.concept, flags=re.IGNORECASE).strip()
-            clean_concept = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*[a-zA-Z]{3})?', '', clean_concept).strip()
+            def _repl_curr_amt(m):
+                code = m.group(1)
+                if code and code.lower() in CURRENCY_CODES:
+                    return ''
+                elif code:
+                    return code
+                return ''
+            clean_concept = re.sub(r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?:\s*([a-zA-Z]{3})\b)?', _repl_curr_amt, clean_concept).strip()
+            clean_concept = re.sub(r'^(?:gasté|gaste|compré|compre|pagué|pague|cargué|cargue|spent|bought|paid|got)\s+', '', clean_concept, flags=re.IGNORECASE).strip()
+            clean_concept = re.sub(r'^(?:en\s+el|en\s+la|en\s+los|en\s+las|en|on\s+the|on|for)\s+', '', clean_concept, flags=re.IGNORECASE).strip()
             clean_concept = clean_concept.strip(" .:-")
+
+            final_category = item_ex.category
+            if final_category == "Other" and clean_concept:
+                from src.services.extraction.normalizers import normalize_category_value
+                norm = normalize_category_value(clean_concept.lower())
+                if norm and norm != "Other":
+                    final_category = norm
+                elif any(w in clean_concept.lower() for w in ['verdu', 'verduler', 'súper', 'super', 'comida', 'almacén', 'almacen', 'cena', 'almuerzo', 'despensa', 'coffee', 'cafe']):
+                    final_category = "Food/Drink"
+                elif any(w in clean_concept.lower() for w in ['nafta', 'combustible', 'gas', 'uber', 'taxi', 'colectivo', 'subte', 'pasaje']):
+                    final_category = "Transport"
+                elif any(w in clean_concept.lower() for w in ['luz', 'gas', 'agua', 'internet', 'wifi', 'alquiler', 'expensas', 'tarjeta']):
+                    final_category = "Rent/Bills"
+
             extracted_items.append(ParsedItem(
                 type=item_ex.type,
                 amount=item_ex.amount,
-                category=item_ex.category,
+                category=final_category,
                 concept=clean_concept or item_ex.concept,
                 currency=item_ex.currency,
                 transaction_date=item_ex.transaction_date,

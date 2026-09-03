@@ -334,3 +334,78 @@ async def test_batch_confirmation_formatting_expenses_only(db_setup):
         assert "2 Gasto(s) Registrado(s)" in reply
         assert "• 💸 <b>almuerzo:</b> $15.00 USD (Food/Drink)" in reply
         assert "• 💸 <b>taxi:</b> $10.00 USD (Transport)" in reply
+
+
+def test_inline_batch_fallback_expenses():
+    from src.services.extraction.fallback import fallback_regex_classify
+
+    res1 = fallback_regex_classify("2509 verdu y 5999 almacén", default_currency="ARS")
+    assert res1.action == "log_transaction"
+    assert len(res1.items) == 2
+    assert res1.items[0].amount == 2509.0
+    assert res1.items[0].concept == "verdu"
+    assert res1.items[0].category == "Food/Drink"
+    assert res1.items[0].currency == "ARS"
+    assert res1.items[1].amount == 5999.0
+    assert res1.items[1].concept == "almacén"
+    assert res1.items[1].category == "Food/Drink"
+    assert res1.items[1].currency == "ARS"
+
+    res2 = fallback_regex_classify("Gaste 399 en el súper y 599 en nafta", default_currency="ARS")
+    assert res2.action == "log_transaction"
+    assert len(res2.items) == 2
+    assert res2.items[0].amount == 399.0
+    assert res2.items[0].concept == "súper"
+    assert res2.items[0].category == "Food/Drink"
+    assert res2.items[0].currency == "ARS"
+    assert res2.items[1].amount == 599.0
+    assert res2.items[1].concept == "nafta"
+    assert res2.items[1].category == "Transport"
+    assert res2.items[1].currency == "ARS"
+
+
+@pytest.mark.anyio
+async def test_inline_batch_live_ollama_ai():
+    """Live AI test running against real local Ollama (e.g. llama3) if reachable."""
+    import httpx
+    ollama_url = "http://localhost:11434"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{ollama_url}/api/tags")
+            if resp.status_code != 200:
+                pytest.skip("Local Ollama is not running on port 11434")
+            data = resp.json()
+            models = [m.get("name", "") for m in data.get("models", [])]
+            if not any("llama3" in m for m in models):
+                pytest.skip(f"llama3 not available in Ollama models: {models}")
+    except Exception:
+        pytest.skip("Local Ollama is not reachable on port 11434")
+
+    from src.core.llm.providers.ollama_provider import OllamaProvider
+    from src.services.extraction.prompts import UNIFIED_SYSTEM_PROMPT
+
+    provider = OllamaProvider(model="llama3:latest", host=ollama_url)
+    user_prompt = (
+        "<system_context>\n"
+        "Default Workspace Currency: ARS\n"
+        "Current Reference Date: 2026-09-03\n"
+        "</system_context>\n"
+        "<user_input>\n"
+        "2509 verdu y 5999 almacén\n"
+        "</user_input>"
+    )
+
+    raw_json = await provider.complete_structured(
+        system_prompt=UNIFIED_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        schema=UnifiedResult,
+        temperature=0.0
+    )
+
+    parsed = UnifiedResult.model_validate_json(raw_json)
+    assert parsed.action == "log_transaction"
+    assert len(parsed.items) == 2
+    amounts = [item.amount for item in parsed.items]
+    assert 2509.0 in amounts
+    assert 5999.0 in amounts
+

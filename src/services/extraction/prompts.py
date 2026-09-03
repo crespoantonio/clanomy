@@ -57,20 +57,19 @@ ACTIONS ('action'):
 1. "log_transaction": The user is recording one or more expenses, income, or scheduled bills.
    - English: "15 for coffee", "spent 225.50 on internet", "got paid 1500 salary", "lunch 20 usd", "Spent 10 on lunch and 20 on gas".
    - Spanish: "Hoy gasté 1500 pesos en comida", "sueldo 2000 usd", "pagué 500 de luz", "Kar me pagó 120000", "Gasté 10 en pan y 20 en queso".
-   
-   - EXTRACT THESE INTO 'items' ARRAY:
-     * EXHAUSTIVE BATCH LIST RULE: You MUST extract EVERY SINGLE transaction into the 'items' array. If the user mentions 3 items, there MUST be 3 objects in the 'items' array. Never stop at the first item!
-     * Each item in the 'items' array must contain:
-       - 'type': "expense" or "income". (Set to "income" for verbs like "paid me", "earned", "won", "me pagó", "ingresó", "me ingresó", "gané", "recibí". Default to "expense").
-       - 'amount': positive float (> 0)
-       - 'category': standard category name
-       - 'concept': ONLY the core merchant, item, person, or entity. YOU MUST STRIP verbs ("compré", "cargué", "pagó", "spent", "bought"), prepositions ("en", "de", "para", "on", "for", "from"), and filler. (e.g., "Cargue 29 pesos en cositas" -> "cositas"; "Kar me pagó 120000" -> "Kar"; "spent 20 on gas" -> "gas").
-       - 'currency': 3-letter ISO code. Respect Default Workspace Currency from <system_context>!
-       - 'transaction_date': YYYY-MM-DD string if relative or past date specified relative to Current Reference Date (null if today or no date).
-       - 'due_date': YYYY-MM-DD string if future/scheduled bill or expiration date calculated relative to Current Reference Date. Null if immediate.
-       - 'is_scheduled_bill': true ONLY if the item specifies an explicit future due date. False otherwise.
-       
-     * TOP-LEVEL FIELDS: Populate the top-level scalar fields ('amount', 'category', 'concept', 'currency', 'type', 'transaction_date', 'due_date', 'is_scheduled_bill') using data from the FIRST item ONLY. Do not let this prevent you from fully populating the 'items' array.
+      - EXTRACT THESE INTO 'items' ARRAY:
+      * EXHAUSTIVE BATCH LIST RULE: You MUST extract EVERY SINGLE transaction into the 'items' array. If the user mentions 2 or more expenses or income (e.g. joined by 'y', 'and', ',', or on multiple lines like "2509 verdu y 5999 almacén", "Gaste 399 en el súper y 599 en nafta", "10 lunch, 20 gas"), there MUST be one object per transaction in the 'items' array. NEVER stop at the first item!
+      * Each item in the 'items' array must contain:
+        - 'type': "expense" or "income". (Set to "income" for verbs like "paid me", "earned", "won", "me pagó", "ingresó", "me ingresó", "gané", "recibí". Default to "expense").
+        - 'amount': positive float (> 0)
+        - 'category': standard category name
+        - 'concept': ONLY the core merchant, item, person, or entity. YOU MUST STRIP verbs ("compré", "cargué", "pagó", "spent", "bought"), prepositions ("en", "de", "para", "on", "for", "from"), and filler. (e.g., "Cargue 29 pesos en cositas" -> "cositas"; "Kar me pagó 120000" -> "Kar"; "spent 20 on gas" -> "gas"; "2509 verdu" -> "verdu"; "5999 almacén" -> "almacén").
+        - 'currency': 3-letter ISO code. Respect Default Workspace Currency from <system_context>!
+        - 'transaction_date': YYYY-MM-DD string if relative or past date specified relative to Current Reference Date (null if today or no date).
+        - 'due_date': YYYY-MM-DD string if future/scheduled bill or expiration date calculated relative to Current Reference Date. Null if immediate.
+        - 'is_scheduled_bill': true ONLY if the item specifies an explicit future due date. False otherwise.
+        
+      * TOP-LEVEL FIELDS: Populate the top-level scalar fields ('amount', 'category', 'concept', 'currency', 'type', 'transaction_date', 'due_date', 'is_scheduled_bill') using data from the FIRST item in 'items'. Ensure the 'items' array contains ALL items without omission.
 
      * CURRENCY EXCHANGE / SWAP RULE:
        - If the user exchanged currency (e.g. "Cambie 200 dolares por 300000 pesos"):

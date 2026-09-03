@@ -616,53 +616,63 @@
   </section>
 
   <!-- Footer -->
-  <footer class="footer">
-    <div class="container footer-container">
-      <div class="footer-col brand-col">
-        <div class="logo">
-          <img src="assets/clanomy_logo.jpg" alt="Clanomy Logo" class="logo-img">
-          <span class="logo-text">Clanomy</span>
-        </div>
-        <p class="footer-tagline" data-i18n="footer.tagline">Privacy-first personal and family financial assistant for Telegram.</p>
-        <p class="footer-operator" data-i18n="footer.operator">Developed & Operated by <b>Clanomy</b></p>
-        <p class="footer-support"><span data-i18n="footer.support">Support Contact:</span> <a href="mailto:support@clanomy.com">support@clanomy.com</a></p>
-        <div class="footer-kofi" style="margin-top: 0.85rem;">
-          <a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer" class="btn btn-kofi btn-sm" id="footer-kofi-btn">
-            <svg class="kofi-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M23.881 8.948c-.773-4.085-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.7-2.486-3.96-3.957c-.96-1.12-1.464-2.47-1.185-3.696.425-1.868 2.378-2.618 3.956-2.029 1.19.444 1.189 1.587 1.189 1.587s.07-1.143 1.258-1.587c1.579-.589 3.532.161 3.957 2.029.278 1.226-.226 2.576-1.168 3.679zm7.651-1.226c-.368 1.942-1.928 2.222-3.411 2.244v-4.636c1.482.022 3.042.302 3.411 2.392z"/></svg>
-            <span data-i18n="footer.kofi">Support Project on Ko-fi</span>
-          </a>
-        </div>
+<footer class="footer">
+  <div class="container footer-container">
+    <div class="footer-col brand-col">
+      <div class="logo">
+        <img src="assets/clanomy_logo.jpg" alt="Clanomy Logo" class="logo-img">
+        <span class="logo-text">Clanomy</span>
       </div>
-
-      <div class="footer-col">
-        <h4 data-i18n="footer.product_heading">Product</h4>
-        <ul class="footer-links">
-          <li><a href="#features" data-i18n="nav.features">Features</a></li>
-          <li><a href="#how-it-works" data-i18n="nav.how_it_works">How It Works</a></li>
-          <li><a href="#web-studio"><span data-i18n="nav.web_studio">Web Studio</span> <span style="font-size: 0.78em; color: var(--gold-accent);">(<span data-i18n="studio.soon_badge">Coming Soon</span>)</span></a></li>
-          <li><a href="#self-hosted" data-i18n="nav.self_hosted">Self-Hosted</a></li>
-          <li><a href="#pricing" data-i18n="nav.pricing">Pricing</a></li>
-          <li><a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer"><span data-i18n="footer.kofi_link">Support on Ko-fi ☕</span></a></li>
-          <li><a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" data-i18n="footer.launch_bot">Launch Telegram Bot</a></li>
-        </ul>
-      </div>
-
-      <div class="footer-col">
-        <h4 data-i18n="footer.legal_heading">Legal & Compliance</h4>
-        <ul class="footer-links">
-          <li><a href="#" class="modal-trigger" data-modal="terms-modal" data-i18n="footer.terms">Terms of Service</a></li>
-          <li><a href="#" class="modal-trigger" data-modal="privacy-modal" data-i18n="footer.privacy">Privacy Policy</a></li>
-          <li><a href="#" class="modal-trigger" data-modal="refund-modal" data-i18n="footer.refund">Refund & Cancellation Policy</a></li>
-        </ul>
+      <p class="footer-tagline" data-i18n="footer.tagline">Privacy-first personal and family financial assistant for Telegram.</p>
+      <p class="footer-operator" data-i18n="footer.operator">Developed & Operated by <b>Clanomy</b></p>
+      <p class="footer-support"><span data-i18n="footer.support">Support Contact:</span> <a href="mailto:support@clanomy.com">support@clanomy.com</a></p>
+      
+      <!-- Action Buttons Row: GitHub + Ko-fi -->
+      <div class="footer-actions" style="margin-top: 0.85rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+        
+        <a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer" class="btn btn-kofi btn-sm" id="footer-kofi-btn">
+          <svg class="kofi-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.7-2.486-3.96-3.957c-.96-1.12-1.464-2.47-1.185-3.696.425-1.868 2.378-2.618 3.956-2.029 1.19.444 1.189 1.587 1.189 1.587s.07-1.143 1.258-1.587c1.579-.589 3.532.161 3.957 2.029.278 1.226-.226 2.576-1.168 3.679zm7.651-1.226c-.368 1.942-1.928 2.222-3.411 2.244v-4.636c1.482.022 3.042.302 3.411 2.392z"/></svg>
+          <span data-i18n="footer.kofi">Support on Ko-fi</span>
+        </a>
+        <a href="https://github.com/crespoantonio/clanomy" target="_blank" rel="noopener noreferrer" class="btn btn-github btn-sm" id="footer-github-btn">
+          <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span data-i18n="footer.github">GitHub</span>
+        </a>
       </div>
     </div>
 
-    <div class="footer-bottom">
-      <div class="container bottom-container">
-        <p data-i18n="footer.copyright">© 2026 Clanomy. All rights reserved. Payments securely processed by Lemon Squeezy (Merchant of Record).</p>
-      </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.product_heading">Product</h4>
+      <ul class="footer-links">
+        <li><a href="#features" data-i18n="nav.features">Features</a></li>
+        <li><a href="#how-it-works" data-i18n="nav.how_it_works">How It Works</a></li>
+        <li><a href="#web-studio"><span data-i18n="nav.web_studio">Web Studio</span> <span style="font-size: 0.78em; color: var(--gold-accent);">(<span data-i18n="studio.soon_badge">Coming Soon</span>)</span></a></li>
+        <li><a href="#self-hosted" data-i18n="nav.self_hosted">Self-Hosted</a></li>
+        <li><a href="https://github.com/crespoantonio/clanomy" target="_blank" rel="noopener noreferrer"><span data-i18n="footer.github_link">GitHub Repository ↗</span></a></li>
+        <li><a href="#pricing" data-i18n="nav.pricing">Pricing</a></li>
+        <li><a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer"><span data-i18n="footer.kofi_link">Support on Ko-fi ☕</span></a></li>
+        <li><a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" data-i18n="footer.launch_bot">Launch Telegram Bot</a></li>
+      </ul>
     </div>
-  </footer>
+
+    <div class="footer-col">
+      <h4 data-i18n="footer.legal_heading">Legal & Compliance</h4>
+      <ul class="footer-links">
+        <li><a href="#" class="modal-trigger" data-modal="terms-modal" data-i18n="footer.terms">Terms of Service</a></li>
+        <li><a href="#" class="modal-trigger" data-modal="privacy-modal" data-i18n="footer.privacy">Privacy Policy</a></li>
+        <li><a href="#" class="modal-trigger" data-modal="refund-modal" data-i18n="footer.refund">Refund & Cancellation Policy</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <div class="container bottom-container">
+      <p data-i18n="footer.copyright">© 2026 Clanomy. All rights reserved. Payments securely processed by Lemon Squeezy (Merchant of Record).</p>
+    </div>
+  </div>
+</footer>
 
   <!-- MODALS -->
 

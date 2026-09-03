@@ -2,9 +2,21 @@ import pytest
 from fastapi.testclient import TestClient
 from src.main import app
 
-def test_landing_page_root_serves_html():
+def test_api_root_status():
     client = TestClient(app)
     response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers.get("content-type", "").startswith("application/json")
+    data = response.json()
+    assert data == {
+        "status": "online",
+        "service": "Clanomy API",
+        "version": "1.0.0"
+    }
+
+def test_landing_page_serves_html():
+    client = TestClient(app)
+    response = client.get("/landing")
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
     content = response.text
@@ -64,7 +76,7 @@ def test_landing_page_static_assets():
 
 def test_landing_page_bilingual_toggle_elements():
     client = TestClient(app)
-    response = client.get("/")
+    response = client.get("/landing")
     assert response.status_code == 200
     content = response.text
     assert 'id="lang-switch"' in content
@@ -79,7 +91,7 @@ def test_all_html_data_i18n_keys_exist_in_translations():
     import re
     client = TestClient(app)
     
-    html_resp = client.get("/")
+    html_resp = client.get("/landing")
     assert html_resp.status_code == 200
     html_content = html_resp.text
 

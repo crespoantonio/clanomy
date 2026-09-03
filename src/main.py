@@ -133,10 +133,18 @@ app.include_router(internal_jobs_router)
 
 @app.get("/", include_in_schema=False)
 async def root():
+    return {
+        "status": "online",
+        "service": "Clanomy API",
+        "version": "1.0.0"
+    }
+
+@app.get("/landing", include_in_schema=False)
+async def landing_page():
     index_path = os.path.join(_LANDING_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    return {"message": f"Welcome to {settings.PROJECT_NAME}"}
+    return Response(status_code=404)
 
 @app.get("/styles.css", include_in_schema=False)
 async def landing_styles():

@@ -219,10 +219,7 @@ class AIOrchestrator:
                     session.execute(
                         sa_update(Family)
                         .where(Family.id == family_id)
-                        .values(
-                            monthly_tx_count=Family.monthly_tx_count + tx_count,
-                            daily_tx_count=Family.daily_tx_count + tx_count
-                        )
+                        .values(monthly_tx_count=Family.monthly_tx_count + tx_count)
                     )
 
                 session.commit()
@@ -589,7 +586,21 @@ class AIOrchestrator:
                             family_service = FamilyService()
                             family_currency = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
                         except Exception:
+                            family_id = None
                             family_currency = "USD"
+
+                        # Track daily AI message usage for this workspace
+                        if family_id:
+                            try:
+                                with Session(engine) as d_sess:
+                                    d_sess.execute(
+                                        sa_update(Family)
+                                        .where(Family.id == family_id)
+                                        .values(daily_tx_count=Family.daily_tx_count + 1)
+                                    )
+                                    d_sess.commit()
+                            except Exception as d_err:
+                                logger.warning(f"Could not increment daily_tx_count: {d_err}")
 
                         extraction_service = ExtractionService()
                         override_tx_time = None

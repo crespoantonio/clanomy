@@ -84,14 +84,31 @@ def clean_gemini_schema(schema_dict: dict) -> dict:
             return [resolve(item) for item in node]
         return node
 
-    return resolve(d)
+    resolved = resolve(d)
+
+    # For extraction schemas containing "items", remove redundant root transaction scalars
+    # so Gemini's constrained decoding grammar cannot shortcut through single scalars.
+    props = resolved.get("properties", {})
+    if "items" in props and "action" in props:
+        for s in {
+            "amount", "concept", "category", "currency", "type",
+            "transaction_date", "due_date", "is_scheduled_bill"
+        }:
+            props.pop(s, None)
+
+    return resolved
 
 
 class GeminiProvider(BaseLLMProvider):
     """Native raw HTTP provider for Google Gemini API."""
 
     def __init__(self, model: Optional[str] = None, api_key: Optional[str] = None):
-        self.model = model or settings.AI_MODEL or "gemini-2.5-flash-lite"
+        if model:
+            self.model = model
+        elif settings.AI_MODEL and "gemini" in settings.AI_MODEL.lower():
+            self.model = settings.AI_MODEL
+        else:
+            self.model = "gemini-2.5-flash-lite"
         self.api_key = api_key or settings.AI_API_KEY
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
 

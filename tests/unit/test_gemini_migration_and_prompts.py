@@ -118,7 +118,8 @@ def test_settings_key_auto_detection():
     assert s_openai.effective_ai_provider == "openai"
 
 
-from src.core.llm.providers.gemini_provider import GeminiProvider, _log_gemini_token_usage
+from src.core.llm.providers.gemini_provider import GeminiProvider, _log_gemini_token_usage, clean_gemini_schema
+from src.services.extraction.models import UnifiedResult
 from src.core.llm.base import PayloadTruncatedError
 from pydantic import BaseModel
 
@@ -354,3 +355,37 @@ def test_gemini_provider_cache_hit_and_miss_logging(caplog):
     assert "1800/2000 tokens served from cache for gemini-2.5-flash-lite" in captured
     assert "[Prompt Cache MISS]" in captured
     assert "0/2000 cached (full inference run) for gemini-2.5-flash-lite" in captured
+
+
+def test_clean_gemini_schema_prunes_root_scalars_for_extraction():
+    raw_schema = UnifiedResult.model_json_schema()
+    cleaned = clean_gemini_schema(raw_schema)
+    props = cleaned.get("properties", {})
+    # Verify items and action are preserved
+    assert "items" in props
+    assert "action" in props
+    # Verify redundant root transaction scalars are pruned
+    for scalar in ["amount", "concept", "category", "currency", "type", "transaction_date", "due_date", "is_scheduled_bill"]:
+        assert scalar not in props, f"Scalar {scalar} was not pruned from root properties"
+
+
+def test_gemini_provider_model_fallback_and_guard():
+    # If no model is specified and settings.AI_MODEL is not gemini, fallback is gemini-2.5-flash-lite
+    with patch("src.core.config.settings.AI_MODEL", "llama-3.3-70b-versatile"):
+        p = GeminiProvider()
+        assert p.model == "gemini-2.5-flash-lite"
+
+    # If explicit model is provided, it is respected
+    p_explicit = GeminiProvider(model="gemini-3.1-flash-lite")
+    assert p_explicit.model == "gemini-3.1-flash-lite"
+
+    # If settings.AI_MODEL starts with gemini, it is used
+    with patch("src.core.config.settings.AI_MODEL", "gemini-3.6-flash"):
+        p_setting = GeminiProvider()
+        assert p_setting.model == "gemini-3.6-flash"
+
+    # If settings.AI_MODEL has models/gemini-* prefix, it is used
+    with patch("src.core.config.settings.AI_MODEL", "models/gemini-2.5-flash"):
+        p_prefixed = GeminiProvider()
+        assert p_prefixed.model == "models/gemini-2.5-flash"
+

@@ -37,6 +37,18 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+eval_results/
+eval_reports/
+eval_*.json
+eval_*.jsonl
+*.eval.json
+*.eval.jsonl
+
+# Logs & Local Databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
 
 # Project Specific (BMad and Agents)
 _bmad/

@@ -58,12 +58,15 @@ ACTIONS ('action'):
    - English: "15 for coffee", "spent 225.50 on internet", "got paid 1500 salary", "lunch 20 usd", "Spent 10 on lunch and 20 on gas".
    - Spanish: "Hoy gasté 1500 pesos en comida", "sueldo 2000 usd", "pagué 500 de luz", "Kar me pagó 120000", "Gasté 10 en pan y 20 en queso".
       - EXTRACT THESE INTO 'items' ARRAY:
-      * EXHAUSTIVE BATCH LIST RULE: You MUST extract EVERY SINGLE transaction into the 'items' array. If the user mentions 2 or more expenses or income (e.g. joined by 'y', 'and', ',', or on multiple lines like "2509 verdu y 5999 almacén", "Gaste 399 en el súper y 599 en nafta", "10 lunch, 20 gas"), there MUST be one object per transaction in the 'items' array. NEVER stop at the first item!
+      * EXHAUSTIVE BATCH LIST RULE (1 to 15+ items): You MUST extract EVERY SINGLE transaction into the 'items' array. Whether the user mentions 1, 2, 5, 10, or 15 items, there MUST be exactly one object per transaction in the 'items' array. NEVER stop at the first item!
+      * CONVERSATIONAL CHATTER & NOISE IMMUNITY: Users often embed transactions inside stories, greetings, jokes, or casual chat (e.g., "Hola clanomy, hoy me volví loco en el centro: me compré una remera por 15000, después clavé un café de 2500 y me depositaron 50000 de un laburo, qué día!"). You MUST ignore the chatter/filler and extract EVERY genuine income and expense mentioned.
+      * FLEXIBLE AMOUNT POSITIONING: The numeric amount may appear BEFORE the concept ("2509 verdu"), IN THE MIDDLE ("gasté 1200 pesos en un taxi al aeropuerto"), or AT THE END ("almuerzo con amigos 3500"). Recognize amounts regardless of their position in each phrase or line.
+      * MIXED INCOMES & EXPENSES: A single message may contain both incomes (salary, freelance, deposits, gifts, refunds) and expenses (food, transport, bills, shopping). Set item 'type' to "income" for inflows (verbs: "paid me", "earned", "deposited", "received", "me pagó", "ingresó", "me depositaron", "cobré", "gané", "recibí") and "expense" for outflows.
       * Each item in the 'items' array must contain:
-        - 'type': "expense" or "income". (Set to "income" for verbs like "paid me", "earned", "won", "me pagó", "ingresó", "me ingresó", "gané", "recibí". Default to "expense").
+        - 'type': "expense" or "income"
         - 'amount': positive float (> 0)
         - 'category': standard category name
-        - 'concept': ONLY the core merchant, item, person, or entity. YOU MUST STRIP verbs ("compré", "cargué", "pagó", "spent", "bought"), prepositions ("en", "de", "para", "on", "for", "from"), and filler. (e.g., "Cargue 29 pesos en cositas" -> "cositas"; "Kar me pagó 120000" -> "Kar"; "spent 20 on gas" -> "gas"; "2509 verdu" -> "verdu"; "5999 almacén" -> "almacén").
+        - 'concept': ONLY the core merchant, item, person, or entity. YOU MUST STRIP verbs ("compré", "cargué", "pagó", "spent", "bought", "cobré"), prepositions ("en", "de", "para", "on", "for", "from"), and conversational noise. (e.g., "Cargue 29 pesos en cositas" -> "cositas"; "Kar me pagó 120000" -> "Kar"; "spent 20 on gas" -> "gas"; "2509 verdu" -> "verdu"; "5999 almacén" -> "almacén").
         - 'currency': 3-letter ISO code. Respect Default Workspace Currency from <system_context>!
         - 'transaction_date': YYYY-MM-DD string if relative or past date specified relative to Current Reference Date (null if today or no date).
         - 'due_date': YYYY-MM-DD string if future/scheduled bill or expiration date calculated relative to Current Reference Date. Null if immediate.

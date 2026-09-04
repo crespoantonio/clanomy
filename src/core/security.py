@@ -42,6 +42,21 @@ def verify_cron_secret(received_secret: Optional[str]) -> bool:
 
     return secrets.compare_digest(clean_received, expected)
 
+def verify_simulation_secret(received_secret: Optional[str]) -> bool:
+    """
+    Verifies that the request carries the configured SIMULATION_SECRET.
+    Uses constant-time comparison. Rejects immediately if no secret is configured or sent.
+    """
+    expected = (getattr(settings, "SIMULATION_SECRET", None) or "").strip()
+    if not expected or not received_secret:
+        return False
+
+    clean_received = received_secret.strip()
+    if clean_received.lower().startswith("bearer "):
+        clean_received = clean_received[7:].strip()
+
+    return secrets.compare_digest(clean_received, expected)
+
 def mask_database_url(url: Optional[str]) -> str:
     """
     Masks the password in a database URL string to protect credentials from appearing in logs or error traces.

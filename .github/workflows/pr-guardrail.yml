@@ -53,13 +53,17 @@ jobs:
             # Core Security & Configuration
             "^src/core/security\.py$"
             "^src/core/config\.py$"
+            "^src/api/routes/simulate\.py$"
 
-            # Sensitive Test Suites (Billing, Tiers, Cron, Security)
+            # Sensitive Test Suites & Evaluation Harness
             "^tests/services/test_lemonsqueezy_billing\.py$"
             "^tests/services/test_subscription_service\.py$"
             "^tests/services/test_three_tier_pricing\.py$"
             "^tests/services/test_notification_scheduler\.py$"
             "^tests/api/test_internal_jobs\.py$"
+            "^tests/data/"
+            "^tests/evaluation/"
+            "^scripts/run_llm_eval\.py$"
 
             # Governance, Licensing, CI & Operational Strategy
             "^README\.md$"

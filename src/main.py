@@ -13,6 +13,7 @@ from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 from src.api.routes.lemonsqueezy import router as lemonsqueezy_router
 from src.api.routes.internal_jobs import router as internal_jobs_router
+from src.api.routes.simulate import router as simulate_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -128,6 +129,7 @@ _LANDING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
+app.include_router(simulate_router, prefix="/api/v1")
 app.include_router(lemonsqueezy_router)
 app.include_router(internal_jobs_router)
 

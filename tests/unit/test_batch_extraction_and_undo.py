@@ -367,6 +367,10 @@ def test_inline_batch_fallback_expenses():
 @pytest.mark.anyio
 async def test_inline_batch_live_ollama_ai():
     """Live AI test running against real local Ollama (e.g. llama3) if reachable."""
+    import os
+    if os.environ.get("RUN_LIVE_AI") != "true":
+        pytest.skip("Skipping live AI test during fast unit test runs. Set RUN_LIVE_AI=true to execute.")
+
     import httpx
     ollama_url = "http://localhost:11434"
     try:

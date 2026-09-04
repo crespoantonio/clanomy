@@ -477,18 +477,65 @@ class AIOrchestrator:
 
     async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
         async with self._user_locks[str(user_id)]:
-            await self._orchestrate_impl(user_id=user_id, text=text, audio_file_id=audio_file_id, chat_id=chat_id, message_id=message_id)
+            await self._orchestrate_impl(
+                user_id=user_id,
+                text=text,
+                audio_file_id=audio_file_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                send_telegram=True,
+                dry_run=False
+            )
 
-    async def _orchestrate_impl(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
+    async def simulate_message(
+        self,
+        text: str,
+        default_currency: str = "USD",
+        dry_run: bool = True,
+        user_id: Optional[str] = None,
+        family_id: Optional[str] = None,
+        extraction_service: Optional[ExtractionService] = None
+    ) -> dict:
+        uid = user_id or "00000000-0000-0000-0000-000000000001"
+        return await self._orchestrate_impl(
+            user_id=uid,
+            text=text,
+            audio_file_id=None,
+            chat_id=None,
+            message_id=None,
+            send_telegram=False,
+            dry_run=dry_run,
+            default_currency=default_currency,
+            extraction_service=extraction_service
+        )
+
+    async def _orchestrate_impl(
+        self,
+        user_id: str,
+        text: Optional[str],
+        audio_file_id: Optional[str],
+        chat_id: Optional[int] = None,
+        message_id: Optional[int] = None,
+        send_telegram: bool = True,
+        dry_run: bool = False,
+        default_currency: Optional[str] = None,
+        extraction_service: Optional[ExtractionService] = None
+    ) -> dict:
         start_time = time.time()
         status = "success"
         response_text = ""
+        all_items = []
+        unified = None
         
         try:
             try:
                 user_uuid = UUID(user_id)
             except ValueError:
-                raise ValueError(f"Invalid user_id format: {user_id}")
+                if dry_run:
+                    import uuid as _uuid
+                    user_uuid = _uuid.UUID("00000000-0000-0000-0000-000000000001")
+                else:
+                    raise ValueError(f"Invalid user_id format: {user_id}")
 
             # 1. Process Audio if provided
             if audio_file_id:
@@ -581,16 +628,20 @@ class AIOrchestrator:
                         response_text = res
                     else:
                         # Unified Single-Call Classification & Extraction
-                        try:
-                            family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
-                            family_service = FamilyService()
-                            family_currency = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
-                        except Exception:
+                        if not dry_run:
+                            try:
+                                family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                family_service = FamilyService()
+                                family_currency = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
+                            except Exception:
+                                family_id = None
+                                family_currency = default_currency or "USD"
+                        else:
                             family_id = None
-                            family_currency = "USD"
+                            family_currency = default_currency or "USD"
 
                         # Track daily AI message usage for this workspace
-                        if family_id:
+                        if family_id and not dry_run:
                             try:
                                 with Session(engine) as d_sess:
                                     d_sess.execute(
@@ -602,7 +653,7 @@ class AIOrchestrator:
                             except Exception as d_err:
                                 logger.warning(f"Could not increment daily_tx_count: {d_err}")
 
-                        extraction_service = ExtractionService()
+                        extraction_service = extraction_service or ExtractionService()
                         override_tx_time = None
                         try:
                             if hasattr(extraction_service, "classify_and_extract"):
@@ -695,114 +746,153 @@ class AIOrchestrator:
                             # action == "log_transaction"
                             all_items = unified.get_all_items() if hasattr(unified, "get_all_items") else []
                             if len(all_items) > 1 or (len(all_items) == 1 and all_items[0].is_scheduled_bill):
-                                try:
-                                    user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
-                                    family_id = user_info["family_id"]
-                                except Exception as u_err:
-                                    logger.warning(f"Failed to get user info: {u_err}")
-                                    family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                if not dry_run:
+                                    try:
+                                        user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
+                                        family_id = user_info["family_id"]
+                                    except Exception as u_err:
+                                        logger.warning(f"Failed to get user info: {u_err}")
+                                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                        user_info = {"display_name": "User"}
+
+                                    try:
+                                        batch_results = await asyncio.to_thread(
+                                            self._persist_batch_items,
+                                            user_uuid=user_uuid,
+                                            family_id=family_id,
+                                            items=all_items,
+                                            family_currency=family_currency,
+                                            ref_time=datetime.datetime.now(datetime.timezone.utc)
+                                        )
+                                        batch_tx_ids = [r["id"] for r in batch_results if r.get("kind") == "transaction"]
+                                        if batch_tx_ids:
+                                            BatchTracker.set_last_batch(user_uuid, batch_tx_ids)
+                                    except Exception as e:
+                                        logger.error(f"Batch persistence failed for user {user_id}: {e}", exc_info=True)
+                                        status = "error"
+                                        response_text = "Failed to save transactions. Please try again later."
+                                        batch_results = []
+                                else:
                                     user_info = {"display_name": "User"}
-
-                                try:
-                                    batch_results = await asyncio.to_thread(
-                                        self._persist_batch_items,
-                                        user_uuid=user_uuid,
-                                        family_id=family_id,
-                                        items=all_items,
-                                        family_currency=family_currency,
-                                        ref_time=datetime.datetime.now(datetime.timezone.utc)
-                                    )
-                                    batch_tx_ids = [r["id"] for r in batch_results if r.get("kind") == "transaction"]
-                                    if batch_tx_ids:
-                                        BatchTracker.set_last_batch(user_uuid, batch_tx_ids)
-
-                                    is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares", "cobre", "cobré", "ingreso", "ingresos", "sueldo"])
-                                    bills = [r for r in batch_results if r["kind"] == "bill"]
-                                    txs = [r for r in batch_results if r["kind"] == "transaction"]
-
-                                    is_exchange = getattr(unified, "is_exchange", False) or (
-                                        len(txs) == 2 and
-                                        len(bills) == 0 and
-                                        any(t["tx_type"] == "expense" for t in txs) and
-                                        any(t["tx_type"] == "income" for t in txs) and
-                                        all(t["category"] == "Exchange" for t in txs)
-                                    )
-
-                                    if is_exchange:
-                                        sold = next(t for t in txs if t["tx_type"] == "expense")
-                                        recv = next(t for t in txs if t["tx_type"] == "income")
-                                        fmt_sold = _format_currency(sold["amount"], sold["currency"], show_sign=False)
-                                        fmt_recv = _format_currency(recv["amount"], recv["currency"], show_sign=False)
-                                        rate_val = getattr(unified, "exchange_rate", None)
-                                        if not rate_val and sold["amount"] > 0:
-                                            rate_val = round(recv["amount"] / sold["amount"], 4)
-
-                                        if is_spanish:
-                                            rate_line = f"\n• 📊 Cotización: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
-                                            response_text = (
-                                                f"💱 <b>Cambio de Moneda Registrado:</b>\n"
-                                                f"• 💸 Entregaste: -{fmt_sold}\n"
-                                                f"• 💰 Recibiste: +{fmt_recv}"
-                                                f"{rate_line}\n\n"
-                                                f"🏷️ <i>Categorizado bajo <b>Exchange</b> para no distorsionar ingresos o gastos operativos del mes.</i>"
-                                            )
+                                    batch_results = []
+                                    ref_now = datetime.datetime.now(datetime.timezone.utc)
+                                    for item in all_items:
+                                        curr = item.currency or family_currency or "USD"
+                                        cpt = item.concept.strip() if item.concept else "Expense"
+                                        cat = item.category or "Other"
+                                        amt = item.amount
+                                        tx_type = getattr(item, "type", "expense") or "expense"
+                                        item_date = item.to_datetime(ref_now) if hasattr(item, "to_datetime") else ref_now
+                                        if getattr(item, "is_scheduled_bill", False):
+                                            batch_results.append({
+                                                "kind": "bill",
+                                                "concept": cpt,
+                                                "amount": amt,
+                                                "currency": curr,
+                                                "due_date": item_date,
+                                                "category": cat,
+                                                "id": None
+                                            })
                                         else:
-                                            rate_line = f"\n• 📊 Rate: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
-                                            response_text = (
-                                                f"💱 <b>Currency Exchange Logged:</b>\n"
-                                                f"• 💸 Sold: -{fmt_sold}\n"
-                                                f"• 💰 Received: +{fmt_recv}"
-                                                f"{rate_line}\n\n"
-                                                f"🏷️ <i>Categorized under <b>Exchange</b> to keep operational income & expenses clean.</i>"
-                                            )
+                                            batch_results.append({
+                                                "kind": "transaction",
+                                                "concept": cpt,
+                                                "amount": amt,
+                                                "currency": curr,
+                                                "timestamp": item_date,
+                                                "category": cat,
+                                                "id": None,
+                                                "tx_type": tx_type
+                                            })
+
+                                is_spanish = any(w in raw_lower for w in ["gastos", "gasto", "gaste", "gasté", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares", "cobre", "cobré", "ingreso", "ingresos", "sueldo", "almacen", "almacén", "super", "súper", "verdu", "nafta", " y ", " en ", " de ", "para "])
+                                bills = [r for r in batch_results if r["kind"] == "bill"]
+                                txs = [r for r in batch_results if r["kind"] == "transaction"]
+
+                                is_exchange = getattr(unified, "is_exchange", False) or (
+                                    len(txs) == 2 and
+                                    len(bills) == 0 and
+                                    any(t["tx_type"] == "expense" for t in txs) and
+                                    any(t["tx_type"] == "income" for t in txs) and
+                                    all(t["category"] == "Exchange" for t in txs)
+                                )
+
+                                if is_exchange:
+                                    sold = next(t for t in txs if t["tx_type"] == "expense")
+                                    recv = next(t for t in txs if t["tx_type"] == "income")
+                                    fmt_sold = _format_currency(sold["amount"], sold["currency"], show_sign=False)
+                                    fmt_recv = _format_currency(recv["amount"], recv["currency"], show_sign=False)
+                                    rate_val = getattr(unified, "exchange_rate", None)
+                                    if not rate_val and sold["amount"] > 0:
+                                        rate_val = round(recv["amount"] / sold["amount"], 4)
+
+                                    if is_spanish:
+                                        rate_line = f"\n• 📊 Cotización: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
+                                        response_text = (
+                                            f"💱 <b>Cambio de Moneda Registrado:</b>\n"
+                                            f"• 💸 Entregaste: -{fmt_sold}\n"
+                                            f"• 💰 Recibiste: +{fmt_recv}"
+                                            f"{rate_line}\n\n"
+                                            f"🏷️ <i>Categorizado bajo <b>Exchange</b> para no distorsionar ingresos o gastos operativos del mes.</i>"
+                                        )
                                     else:
-                                        parts = []
-                                        if bills:
-                                            header = f"📋 <b>{len(bills)} Factura(s) Programada(s):</b>\n\n" if is_spanish else f"📋 <b>{len(bills)} Scheduled Bill(s):</b>\n\n"
-                                            parts.append(header)
-                                            for b in bills:
-                                                fmt_amt = _format_currency(b["amount"], b["currency"])
-                                                due_str = b["due_date"].strftime("%d/%m")
-                                                if is_spanish:
-                                                    day_name = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b["due_date"].weekday()]
-                                                    parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n")
-                                                else:
-                                                    day_name = b["due_date"].strftime("%a")
-                                                    parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n")
-
-                                            totals = {}
-                                            for b in bills:
-                                                totals[b["currency"]] = totals.get(b["currency"], 0.0) + b["amount"]
-                                            tot_str = " + ".join([_format_currency(amt, curr) for curr, amt in totals.items()])
+                                        rate_line = f"\n• 📊 Rate: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
+                                        response_text = (
+                                            f"💱 <b>Currency Exchange Logged:</b>\n"
+                                            f"• 💸 Sold: -{fmt_sold}\n"
+                                            f"• 💰 Received: +{fmt_recv}"
+                                            f"{rate_line}\n\n"
+                                            f"🏷️ <i>Categorized under <b>Exchange</b> to keep operational income & expenses clean.</i>"
+                                        )
+                                else:
+                                    parts = []
+                                    if bills:
+                                        header = f"📋 <b>{len(bills)} Factura(s) Programada(s):</b>\n\n" if is_spanish else f"📋 <b>{len(bills)} Scheduled Bill(s):</b>\n\n"
+                                        parts.append(header)
+                                        for b in bills:
+                                            fmt_amt = _format_currency(b["amount"], b["currency"])
+                                            due_str = b["due_date"].strftime("%d/%m")
                                             if is_spanish:
-                                                parts.append(f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}")
+                                                day_name = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b["due_date"].weekday()]
+                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n")
                                             else:
-                                                parts.append(f"\n📌 <b>Total pending to pay:</b> {tot_str}")
+                                                day_name = b["due_date"].strftime("%a")
+                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n")
 
-                                        if txs:
-                                            if parts:
-                                                parts.append("\n\n")
-                                            incomes = [t for t in txs if t.get("tx_type") == "income"]
-                                            expenses = [t for t in txs if t.get("tx_type") != "income"]
-                                            if len(incomes) > 0 and len(expenses) == 0:
-                                                header = f"📋 <b>{len(txs)} Ingreso(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Income(s) Logged:</b>\n\n"
-                                            elif len(expenses) > 0 and len(incomes) == 0:
-                                                header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
-                                            else:
-                                                header = f"📋 <b>{len(txs)} Transacciones Registradas:</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Transactions Logged:</b>\n\n"
-                                            parts.append(header)
-                                            for t in txs:
-                                                is_inc = t.get("tx_type") == "income"
-                                                icon = "💰" if is_inc else "💸"
-                                                fmt_amt = _format_currency(t["amount"], t["currency"], show_sign=is_inc)
-                                                parts.append(f"• {icon} <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
+                                        totals = {}
+                                        for b in bills:
+                                            totals[b["currency"]] = totals.get(b["currency"], 0.0) + b["amount"]
+                                        tot_str = " + ".join([_format_currency(amt, curr) for curr, amt in totals.items()])
+                                        if is_spanish:
+                                            parts.append(f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}")
+                                        else:
+                                            parts.append(f"\n📌 <b>Total pending to pay:</b> {tot_str}")
 
-                                        if bills:
-                                            tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'
-                                            parts.append(tip)
+                                    if txs:
+                                        if parts:
+                                            parts.append("\n\n")
+                                        incomes = [t for t in txs if t.get("tx_type") == "income"]
+                                        expenses = [t for t in txs if t.get("tx_type") != "income"]
+                                        if len(incomes) > 0 and len(expenses) == 0:
+                                            header = f"📋 <b>{len(txs)} Ingreso(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Income(s) Logged:</b>\n\n"
+                                        elif len(expenses) > 0 and len(incomes) == 0:
+                                            header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
+                                        else:
+                                            header = f"📋 <b>{len(txs)} Transacciones Registradas:</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Transactions Logged:</b>\n\n"
+                                        parts.append(header)
+                                        for t in txs:
+                                            is_inc = t.get("tx_type") == "income"
+                                            icon = "💰" if is_inc else "💸"
+                                            fmt_amt = _format_currency(t["amount"], t["currency"], show_sign=is_inc)
+                                            parts.append(f"• {icon} <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
 
-                                        response_text = "".join(parts)
+                                    if bills:
+                                        tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'
+                                        parts.append(tip)
 
+                                    response_text = "".join(parts)
+
+                                if not dry_run:
                                     for t in txs:
                                         try:
                                             create_logged_task(self._safe_mirror_to_notion(
@@ -818,10 +908,6 @@ class AIOrchestrator:
                                             ), name="mirror_to_notion")
                                         except Exception:
                                             pass
-                                except Exception as e:
-                                    logger.error(f"Batch persistence failed for user {user_id}: {e}", exc_info=True)
-                                    status = "error"
-                                    response_text = "Failed to save transactions. Please try again later."
 
                             elif unified.amount is None:
                                 is_spanish = any(w in raw_lower for w in ["pagué", "pague", "aboné", "abone", "tarjeta", "pesos", "factura", "prestamo", "préstamo", "cuentas", "luz", "gas", "agua"])
@@ -860,42 +946,59 @@ class AIOrchestrator:
                                 tx_category = unified.category or "Other"
                                 tx_type = unified.type or "expense"
 
-                                try:
-                                    # Persist Transaction
-                                    encrypted_amount = self.encryption_service.encrypt(f"{tx_amount} {tx_currency}")
-                                    encrypted_concept = self.encryption_service.encrypt(tx_concept)
-
-                                    tx_id = await asyncio.to_thread(
-                                        self._persist_transaction,
-                                        user_uuid=user_uuid,
-                                        amount=encrypted_amount,
-                                        concept=encrypted_concept,
-                                        category=tx_category,
-                                        timestamp=transaction_time,
-                                        tx_type=tx_type
-                                    )
-                                    if tx_id:
-                                        BatchTracker.set_last_batch(user_uuid, [tx_id])
-
+                                if not dry_run:
                                     try:
-                                        user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
-                                        family_id = user_info["family_id"]
-                                    except Exception as u_err:
-                                        logger.warning(f"Failed to get user info: {u_err}")
-                                        family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                        # Persist Transaction
+                                        encrypted_amount = self.encryption_service.encrypt(f"{tx_amount} {tx_currency}")
+                                        encrypted_concept = self.encryption_service.encrypt(tx_concept)
+
+                                        tx_id = await asyncio.to_thread(
+                                            self._persist_transaction,
+                                            user_uuid=user_uuid,
+                                            amount=encrypted_amount,
+                                            concept=encrypted_concept,
+                                            category=tx_category,
+                                            timestamp=transaction_time,
+                                            tx_type=tx_type
+                                        )
+                                        if tx_id:
+                                            BatchTracker.set_last_batch(user_uuid, [tx_id])
+
+                                        try:
+                                            user_info = await asyncio.to_thread(self._get_user_info, user_uuid)
+                                            family_id = user_info["family_id"]
+                                        except Exception as u_err:
+                                            logger.warning(f"Failed to get user info: {u_err}")
+                                            family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                            user_info = {"display_name": "User"}
+                                    except Exception as p_err:
+                                        logger.error(f"Persistence failed for user {user_id}: {p_err}", exc_info=True)
+                                        tx_id = None
                                         user_info = {"display_name": "User"}
+                                else:
+                                    tx_id = None
+                                    user_info = {"display_name": "User"}
 
                                     date_str = ""
                                     if getattr(unified, "transaction_date", None):
                                         date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"
 
                                     if tx_type == "income":
-                                        snapshot = await asyncio.to_thread(
-                                            self._get_monthly_cash_flow_snapshot,
-                                            family_id=family_id,
-                                            target_date=transaction_time,
-                                            primary_currency=tx_currency
-                                        )
+                                        if not dry_run and family_id:
+                                            snapshot = await asyncio.to_thread(
+                                                self._get_monthly_cash_flow_snapshot,
+                                                family_id=family_id,
+                                                target_date=transaction_time,
+                                                primary_currency=tx_currency
+                                            )
+                                        else:
+                                            snapshot = {
+                                                "month_name": transaction_time.strftime("%B"),
+                                                "total_in": tx_amount,
+                                                "total_out": 0.0,
+                                                "net_savings": tx_amount,
+                                                "savings_pct": 100
+                                            }
 
                                         safe_concept = html.escape(tx_concept)
                                         safe_cat = html.escape(tx_category)
@@ -922,16 +1025,18 @@ class AIOrchestrator:
                                         safe_cat = html.escape(tx_category)
                                         response_text = f"Saved {tx_amount} {tx_currency} for '{safe_concept}' under category '{safe_cat}'{date_str}."
 
-                                        # Check and settle matching pending bill
-                                        settlement = await asyncio.to_thread(
-                                            self._check_and_settle_bill,
-                                            family_id=family_id,
-                                            tx_concept=tx_concept,
-                                            tx_amount=tx_amount,
-                                            tx_currency=tx_currency,
-                                            tx_id=tx_id,
-                                            user_id=user_uuid
-                                        )
+                                        settlement = None
+                                        if not dry_run:
+                                            # Check and settle matching pending bill
+                                            settlement = await asyncio.to_thread(
+                                                self._check_and_settle_bill,
+                                                family_id=family_id,
+                                                tx_concept=tx_concept,
+                                                tx_amount=tx_amount,
+                                                tx_currency=tx_currency,
+                                                tx_id=tx_id,
+                                                user_id=user_uuid
+                                            )
                                         if settlement:
                                             matched_concept, remaining_pending = settlement
                                             is_spanish = any(w in raw_lower for w in ["pagué", "pague", "aboné", "abone", "tarjeta", "prestamo", "préstamo", "factura", "gastos", "pesos"])
@@ -940,25 +1045,22 @@ class AIOrchestrator:
                                             else:
                                                 response_text += f"\n\n✅ <b>Marked as paid!</b>\n💳 <b>{html.escape(matched_concept)}</b> recorded in your expenses.\n⏳ Remaining pending this month: <b>{remaining_pending}</b>"
 
-                                    # Trigger background notion mirroring safely without affecting transaction response
-                                    try:
-                                        create_logged_task(self._safe_mirror_to_notion(
-                                            family_id=family_id,
-                                            amount=tx_amount,
-                                            currency=tx_currency,
-                                            concept=tx_concept,
-                                            category=tx_category,
-                                            timestamp=transaction_time,
-                                            user_name=user_info["display_name"],
-                                            transaction_id=tx_id,
-                                            tx_type=tx_type
-                                        ), name="mirror_to_notion")
-                                    except Exception as mirror_err:
-                                        logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")
-                                except Exception as e:
-                                    logger.error(f"Persistence failed for user {user_id}. (Exception details omitted for security)", exc_info=True)
-                                    status = "error"
-                                    response_text = "Failed to save transaction. Please try again later."
+                                    if not dry_run:
+                                        # Trigger background notion mirroring safely without affecting transaction response
+                                        try:
+                                            create_logged_task(self._safe_mirror_to_notion(
+                                                family_id=family_id,
+                                                amount=tx_amount,
+                                                currency=tx_currency,
+                                                concept=tx_concept,
+                                                category=tx_category,
+                                                timestamp=transaction_time,
+                                                user_name=user_info["display_name"],
+                                                transaction_id=tx_id,
+                                                tx_type=tx_type
+                                            ), name="mirror_to_notion")
+                                        except Exception as mirror_err:
+                                            logger.warning(f"[Notion Mirror] Failed to dispatch background mirror task: {mirror_err}")
                 except Exception as e:
                     logger.error(f"Extraction or routing failed for user {user_id}. (Exception details omitted for security)", exc_info=True)
                     status = "error"
@@ -975,12 +1077,29 @@ class AIOrchestrator:
             response_text = "An unexpected error occurred while processing your request."
             
         # 3. Direct Reply via Telegram API
-        try:
-            telegram_service = TelegramService()
-            await telegram_service.send_message(chat_id=chat_id, text=response_text)
-        except Exception as e:
-            logger.error(f"Failed to send direct reply to Telegram: {e}")
+        if send_telegram and chat_id:
+            try:
+                telegram_service = TelegramService()
+                await telegram_service.send_message(chat_id=chat_id, text=response_text)
+            except Exception as e:
+                logger.error(f"Failed to send direct reply to Telegram: {e}")
             
         # 4. Log 3s Audit
         duration = time.time() - start_time
         logger.info(f"[3s Audit] Total pipeline orchestration took {duration:.2f} seconds (user_id: {user_id}, text_len: {len(text or '')})")
+
+        extracted_items = []
+        if all_items:
+            extracted_items = [i.model_dump() if hasattr(i, "model_dump") else i for i in all_items]
+        elif unified and getattr(unified, "action", None) == "log_transaction" and unified.amount is not None:
+            extracted_items = [unified.model_dump() if hasattr(unified, "model_dump") else unified]
+
+        return {
+            "status": status,
+            "user_message": text,
+            "bot_response": response_text,
+            "action": getattr(unified, "action", None) if unified else None,
+            "item_count": len(extracted_items),
+            "items": extracted_items,
+            "duration_seconds": round(duration, 3)
+        }

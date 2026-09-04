@@ -268,13 +268,14 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
     else:
         base_lines = lines
 
-    # Expand lines if multiple amounts are present separated by " y ", " and ", or ","
+    # Expand lines if multiple amounts are present separated by " y ", " and ", ",", or "."
     candidate_lines = []
     amount_token_regex = r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b'
     for line in base_lines:
-        parts = [p.strip() for p in re.split(r'\s+(?:y|and)\s+|,\s*', line) if p.strip()]
-        if len(parts) > 1 and all(re.search(amount_token_regex, p) for p in parts):
-            candidate_lines.extend(parts)
+        parts = [p.strip() for p in re.split(r'\s+(?:y|and|e|\+)\s+|,\s*|\.\s+', line) if p.strip()]
+        amount_parts = [p for p in parts if re.search(amount_token_regex, p)]
+        if len(amount_parts) > 1:
+            candidate_lines.extend(amount_parts)
         else:
             candidate_lines.append(line)
 

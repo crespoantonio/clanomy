@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 class OllamaProvider(BaseLLMProvider):
     """Local Ollama LLM provider with shared GPU concurrency management."""
 
-    def __init__(self, model: str = settings.OLLAMA_MODEL, host: str = settings.AI_BASE_URL):
-        self.model = model
-        self.host = host
+    def __init__(self, model: Optional[str] = None, host: Optional[str] = None):
+        self.model = model or settings.OLLAMA_MODEL
+        self.host = host or settings.OLLAMA_BASE_URL
         self.client = ollama.AsyncClient(host=self.host)
 
     @retry(
@@ -47,7 +47,7 @@ class OllamaProvider(BaseLLMProvider):
                         {"role": "user", "content": sanitized_user}
                     ],
                     format=schema.model_json_schema(),
-                    options={"temperature": temperature} if temperature > 0 else None
+                    options={"temperature": temperature, "num_predict": max_tokens}
                 ),
                 timeout=timeout
             )

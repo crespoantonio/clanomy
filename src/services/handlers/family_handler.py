@@ -18,12 +18,8 @@ async def handle_generate_invite(user_uuid: UUID, family_id: UUID) -> str:
     try:
         invite, link = await asyncio.to_thread(family_service.create_invite, family_id, user_uuid, bot_username)
         return f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 1 hour."
-    except PlanLimitExceededError:
-        return (
-            "⚠️ <b>Family Invites Require Family Pro</b>\n\n"
-            "Your workspace is currently on the <b>Solo Pro</b> tier (1 user limit). "
-            "To add family members and share a household ledger, please upgrade to <b>Family Pro</b> using /upgrade."
-        )
+    except PlanLimitExceededError as e:
+        return f"⚠️ <b>Member Limit Reached</b>\n\n{e}"
     except ValueError as ve:
         return f"⚠️ {ve}"
 

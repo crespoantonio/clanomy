@@ -28,7 +28,7 @@ def test_webhook_success_registration(app_client, mock_telegram, telegram_payloa
     assert len(mock_telegram.messages) == 1
     welcome = mock_telegram.messages[0]["text"]
     assert "Welcome to Clanomy" in welcome
-    assert "60-Day Family Pro Trial" in welcome
+    assert "60-Day Duo Pro Trial" in welcome
     assert "Send a voice note" in welcome
     assert "Type an expense" in welcome
     assert "Type an income" in welcome

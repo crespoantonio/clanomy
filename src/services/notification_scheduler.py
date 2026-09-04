@@ -78,16 +78,19 @@ def format_day_50_message(family: Family, tx_count: int, days_remaining: int) ->
     """
     tx_label = "1 transaction" if tx_count == 1 else f"{tx_count} transactions"
     return (
-        f"⏳ <b>Your 60-Day Clanomy Trial is Ending in {days_remaining} Days!</b>\n\n"
+        f"⏳ <b>Your 60-Day Clanomy Duo Trial is Ending in {days_remaining} Days!</b>\n\n"
         f"During your trial, your workspace has tracked <b>{tx_label}</b> and kept your finances organized!\n\n"
-        "To keep enjoying unlimited AI voice & text logging, real-time Notion sync, and multi-member collaboration without interruption, choose a plan:\n\n"
+        "To keep enjoying high-volume AI voice & text logging, real-time Notion sync, and multi-member collaboration without interruption, choose a plan:\n\n"
         "1️⃣ <b>Solo Pro ($4.99 / month)</b>\n"
-        "• Unlimited text & voice expense & income logging\n"
+        "• Unlimited text & voice expense & income logging (60 msgs/day)\n"
         "• Real-time Notion database mirroring\n"
         "• 1 User\n\n"
-        "2️⃣ <b>Family Pro ($9.99 / month)</b>\n"
+        "2️⃣ <b>Duo Pro ($7.99 / month)</b>\n"
         "• Everything in Solo Pro\n"
-        "• Up to 5 Family Members with shared ledger & Notion sync\n\n"
+        "• 2 Partners with shared ledger (120 msgs/day pool)\n\n"
+        "3️⃣ <b>Family Pro ($11.99 / month)</b>\n"
+        "• Everything in Duo Pro\n"
+        "• Up to 5 Family Members with shared ledger & Notion sync (300 msgs/day pool)\n\n"
         "Type /upgrade to choose your plan (or /upgrade annual to get 2 Months Free)!"
     )
 
@@ -95,7 +98,7 @@ def format_day_60_message(family: Optional[Family] = None) -> str:
     """
     Day 60 expired message sent once when trial ends.
     - Reassures user that all historical data, past Ask queries, and Notion sync remain 100% safe and intact.
-    - Clearly explains the Free tier limits: shared transaction logs/month across the workspace.
+    - Clearly explains the Free tier limits: shared transaction logs/month across up to 5 workspace members.
     - Provides a friendly /upgrade CTA.
     """
     return (
@@ -105,10 +108,10 @@ def format_day_60_message(family: Optional[Family] = None) -> str:
         "• All your historical transactions, past Ask queries, and Notion sync remain completely safe and intact.\n"
         "• Nothing has been deleted, and no family members have been removed.\n\n"
         "📋 <b>Free Tier Limits:</b>\n"
-        f"• {FREE_TIER_MONTHLY_LIMIT} free transaction logs per month shared across your workspace.\n"
+        f"• {FREE_TIER_MONTHLY_LIMIT} free transaction logs per month shared across up to 5 workspace members.\n"
         "• Unlimited use of all pre-built slash commands (/month, /today, /balance, /bills, /me, /undo, /export) forever at $0.\n"
         "• Full access to query and view all your historical records.\n\n"
-        "Want to unlock unlimited logs and features?\n"
+        "Want to unlock higher daily logs and features?\n"
         "Type /upgrade anytime to activate <b>Solo Pro</b> ($4.99/mo), <b>Duo Pro</b> ($7.99/mo), or <b>Family Pro</b> ($11.99/mo)!"
     )
 

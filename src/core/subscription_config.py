@@ -27,7 +27,7 @@ DAILY_FAIR_USE_LIMITS: Dict[str, int] = {
     "solo_pro": 60,
     "duo_pro": 120,
     "family_pro": 300,
-    "trial": 35,
+    "trial": 60,
     "lifetime_pro": 40
 }
 DEFAULT_DAILY_LIMIT: int = 25

@@ -108,19 +108,19 @@ def test_family_pro_and_trial_daily_pool_enforced():
     assert reason == "daily_limit"
     assert limit == 300
 
-    # 60-Day Trial receives 35/day
+    # 60-Day Trial receives 60/day
     from datetime import timedelta
     trial_fam = Family(
         name="Trial Household",
         plan_type="trial",
         subscription_status="active",
         trial_ends_at=datetime.now(timezone.utc) + timedelta(days=30),
-        daily_tx_count=35
+        daily_tx_count=60
     )
     allowed, reason, limit = check_transaction_allowance(trial_fam)
     assert allowed is False
     assert reason == "daily_limit"
-    assert limit == 35
+    assert limit == 60
 
 
 def test_reset_daily_quotas_preserves_free_tier_monthly_count(memory_session):

@@ -231,6 +231,8 @@ def handle_successful_payment(
 
     if target_plan == "solo_pro":
         family.max_members = 1
+    elif target_plan == "duo_pro":
+        family.max_members = 2
     elif target_plan == "family_pro":
         family.max_members = 5
 

@@ -48,7 +48,7 @@ class MessagingService:
             return user, family
 
         # Create new Family and User in one atomic operation
-        # If user has not consumed a trial, provision 60-day Family Pro trial
+        # If user has not consumed a trial, provision 60-day Duo Pro trial
         family_name = f"{full_name or username or 'User'}'s Family"
         plan_type = "trial"
         trial_ends_at = datetime.now(timezone.utc) + timedelta(days=60)
@@ -56,7 +56,8 @@ class MessagingService:
         family = Family(
             name=family_name,
             plan_type=plan_type,
-            trial_ends_at=trial_ends_at
+            trial_ends_at=trial_ends_at,
+            max_members=2
         )
         self.session.add(family)
         try:

@@ -166,7 +166,7 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
                 now_utc = datetime.now(timezone.utc)
                 trial_end = family.trial_ends_at if family.trial_ends_at.tzinfo else family.trial_ends_at.replace(tzinfo=timezone.utc)
                 days_left = max(0, (trial_end - now_utc).days)
-            plan_badge = f"⭐️ <b>60-Day Family Pro Trial:</b> {days_left} days remaining of unlimited logs &amp; family features!\n\n"
+            plan_badge = f"⭐️ <b>60-Day Duo Pro Trial:</b> {days_left} days remaining of shared logs (60/day pool for 2 partners) &amp; Notion sync!\n\n"
             command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for the fastest responses!"
         elif family.plan_type == "free":
             used = getattr(family, "monthly_tx_count", 0)
@@ -186,6 +186,13 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
     project_name = html.escape(getattr(settings, "PROJECT_NAME", "Clanomy"), quote=False)
     tz_name = html.escape(str(getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")), quote=False)
 
+    teamwork_bullet = "👥 <i>Teamwork: Use /invite to add your partner or household members.</i>"
+    if family:
+        if family.plan_type in ("trial", "duo_pro"):
+            teamwork_bullet = "👥 <i>Teamwork: Use /invite to add your partner (or upgrade to Family Pro for up to 5 members).</i>"
+        elif family.plan_type == "solo_pro":
+            teamwork_bullet = "👥 <i>Teamwork: Solo Pro is for 1 user. Upgrade to Duo Pro or Family Pro with /upgrade to invite members.</i>"
+
     return (
         f"👋 <b>Welcome to {project_name}, {user_display_name}!</b>\n\n"
         f"{plan_badge}"
@@ -201,7 +208,7 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
         "• 💬 <i>Type an expense:</i> \"Spent 45 on groceries\" or \"45 cena\"\n"
         "• 💰 <i>Type an income:</i> \"Got paid 3,000 salary\"\n"
         "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
-        "👥 <i>Household teamwork: Use /invite to add your partner or family.</i>\n"
+        f"{teamwork_bullet}\n"
         "Type /help anytime for Notion sync, family settings, and CSV/JSON export."
     )
 

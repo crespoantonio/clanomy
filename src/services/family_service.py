@@ -101,15 +101,18 @@ class FamilyService:
                 if not user.has_used_trial:
                     plan_type = "trial"
                     trial_ends_at = datetime.now(timezone.utc) + timedelta(days=60)
+                    max_members = 2
                     user.has_used_trial = True
                 else:
                     plan_type = "free"
                     trial_ends_at = None
+                    max_members = 5
 
                 new_family = Family(
                     name=name,
                     plan_type=plan_type,
-                    trial_ends_at=trial_ends_at
+                    trial_ends_at=trial_ends_at,
+                    max_members=max_members
                 )
                 session.add(new_family)
                 session.flush() # Get new_family.id without committing
@@ -139,15 +142,17 @@ class FamilyService:
                 raise ValueError("Workspace not found")
             if family.plan_type == "solo_pro":
                 raise PlanLimitExceededError("Solo Pro plan only supports 1 user. Please upgrade to Duo Pro or Family Pro using /upgrade to invite members.")
-            if family.plan_type == "duo_pro":
+            if family.plan_type in ("duo_pro", "trial"):
                 current_members = len(session.exec(select(User).where(User.family_id == family_id)).all())
-                if current_members >= 2:
-                    raise PlanLimitExceededError("Duo Pro plan only supports up to 2 partners. Please upgrade to Family Pro using /upgrade to invite more members.")
-            if family.plan_type in ("family_pro", "free", "trial"):
+                max_allowed = family.max_members or 2
+                if current_members >= max_allowed:
+                    plan_label = "Duo Pro" if family.plan_type == "duo_pro" else "Duo Trial"
+                    raise PlanLimitExceededError(f"{plan_label} only supports up to {max_allowed} members. Please upgrade to Family Pro using /upgrade to invite up to 5 members.")
+            if family.plan_type in ("family_pro", "free"):
                 current_members = len(session.exec(select(User).where(User.family_id == family_id)).all())
                 max_allowed = family.max_members or 5
                 if current_members >= max_allowed:
-                    plan_label = "Family Pro" if family.plan_type == "family_pro" else "Free/Trial"
+                    plan_label = "Family Pro" if family.plan_type == "family_pro" else "Free"
                     raise PlanLimitExceededError(f"{plan_label} plan has reached its limit of {max_allowed} members.")
 
             token = secrets.token_urlsafe(16)
@@ -206,17 +211,19 @@ class FamilyService:
                     self._log_3s_audit("join_family_via_invite", start_time)
                     return False, "⚠️ This workspace is on a Solo Pro plan (1 user limit) and cannot accept new members. The admin must upgrade to Duo Pro or Family Pro.", None
 
-                if target_family.plan_type == "duo_pro":
+                if target_family.plan_type in ("duo_pro", "trial"):
                     member_count = len(session.exec(select(User).where(User.family_id == target_family.id)).all())
-                    if member_count >= 2:
+                    max_allowed = target_family.max_members or 2
+                    if member_count >= max_allowed:
+                        plan_label = "Duo Pro" if target_family.plan_type == "duo_pro" else "Duo Trial"
                         self._log_3s_audit("join_family_via_invite", start_time)
-                        return False, "⚠️ This workspace has reached the Duo Pro limit of 2 members. The admin must upgrade to Family Pro to invite more members.", None
+                        return False, f"⚠️ This workspace has reached the {plan_label} limit of {max_allowed} members. The admin must upgrade to Family Pro using /upgrade to invite more members.", None
 
-                if target_family.plan_type in ("family_pro", "free", "trial"):
+                if target_family.plan_type in ("family_pro", "free"):
                     member_count = len(session.exec(select(User).where(User.family_id == target_family.id)).all())
                     max_allowed = target_family.max_members or 5
                     if member_count >= max_allowed:
-                        plan_label = "Family Pro" if target_family.plan_type == "family_pro" else "Free/Trial"
+                        plan_label = "Family Pro" if target_family.plan_type == "family_pro" else "Free"
                         self._log_3s_audit("join_family_via_invite", start_time)
                         return False, f"⚠️ This workspace has reached its limit of {max_allowed} members.", None
 

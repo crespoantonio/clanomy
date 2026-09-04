@@ -60,7 +60,10 @@ class TelegramService:
         parse_mode: Optional[str] = "HTML",
         reply_markup: Optional[dict] = None
     ) -> None:
-        """Sends a message back to the user via Telegram Bot API with retry on transient errors, optional reply_markup, and fallback on parse errors."""
+        if not text or not str(text).strip():
+            logger.warning(f"Refusing to send empty message to chat {chat_id}")
+            return
+
         try:
             payload = {"chat_id": chat_id, "text": text}
             if parse_mode:

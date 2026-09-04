@@ -973,12 +973,15 @@ class AIOrchestrator:
                                             user_info = {"display_name": "User"}
                                     except Exception as p_err:
                                         logger.error(f"Persistence failed for user {user_id}: {p_err}", exc_info=True)
+                                        status = "error"
+                                        response_text = "Failed to save transaction. Please try again later."
                                         tx_id = None
                                         user_info = {"display_name": "User"}
                                 else:
                                     tx_id = None
                                     user_info = {"display_name": "User"}
 
+                                if status != "error":
                                     date_str = ""
                                     if getattr(unified, "transaction_date", None):
                                         date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"

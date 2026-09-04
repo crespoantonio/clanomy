@@ -146,7 +146,7 @@ def test_telegram_webhook_callback_query_page_flip():
          patch("src.api.routes.telegram.TelegramService") as mock_ts_class:
 
         mock_ms = mock_ms_class.return_value
-        mock_ms.resolve_user_and_family.return_value = (mock_user, mock_family)
+        mock_ms.get_or_create_user_and_family.return_value = (mock_user, mock_family)
 
         mock_fs = mock_fs_class.return_value
         mock_fs.get_family_default_currency.return_value = "USD"
@@ -163,9 +163,6 @@ def test_telegram_webhook_callback_query_page_flip():
         ))
 
         assert result == {"status": "ok"}
-        # Execute any background tasks queued
-        for task in bg_tasks.tasks:
-            asyncio.run(task())
 
         mock_ts.edit_message_text.assert_called_once()
         call_kwargs = mock_ts.edit_message_text.call_args[1]
@@ -208,7 +205,7 @@ def test_telegram_webhook_callback_query_set_currency():
          patch("src.api.routes.telegram.TelegramService") as mock_ts_class:
 
         mock_ms = mock_ms_class.return_value
-        mock_ms.resolve_user_and_family.return_value = (mock_user, mock_family)
+        mock_ms.get_or_create_user_and_family.return_value = (mock_user, mock_family)
 
         mock_fs = mock_fs_class.return_value
         mock_fs.set_family_default_currency = MagicMock()
@@ -225,9 +222,6 @@ def test_telegram_webhook_callback_query_set_currency():
         ))
 
         assert result == {"status": "ok"}
-        # Execute any background tasks queued
-        for task in bg_tasks.tasks:
-            asyncio.run(task())
 
         mock_fs.set_family_default_currency.assert_called_once_with(mock_family.id, "EUR")
         mock_ts.edit_message_text.assert_called_once()
@@ -237,4 +231,5 @@ def test_telegram_webhook_callback_query_set_currency():
             callback_query_id="cb_456",
             text="Default currency set to EUR"
         )
+
 

@@ -126,90 +126,100 @@ async def telegram_webhook(
         from_user = cb.get("from", {})
         cb_message = cb.get("message", {})
         cb_chat = cb_message.get("chat", {})
-        chat_id = cb_chat.get("id")
+        chat_id = cb_chat.get("id") or from_user.get("id")
         message_id = cb_message.get("message_id")
         user_id = from_user.get("id")
 
         if not user_id or not chat_id:
             return {"status": "ok"}
 
-        if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
-            allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
-            user_uname = (from_user.get("username") or "").lower()
-            if user_uname not in allowed_list and str(user_id) not in allowed_list:
-                logger.warning(f"Unauthorized Telegram callback interaction from user: {user_uname} ({user_id})")
+        try:
+            if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
+                allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
+                user_uname = (from_user.get("username") or "").lower()
+                if user_uname not in allowed_list and str(user_id) not in allowed_list:
+                    logger.warning(f"Unauthorized Telegram callback interaction from user: {user_uname} ({user_id})")
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Unauthorized")
+                    return {"status": "ok"}
+
+            if cb_data == "noop":
                 if cb_id:
-                    background_tasks.add_task(telegram_service.answer_callback_query, callback_query_id=cb_id, text="Unauthorized")
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
                 return {"status": "ok"}
 
-        if cb_data == "noop":
+            if cb_data.startswith("curr_p:") or cb_data.startswith("curr_set:"):
+                service = MessagingService(session)
+                user_data = {
+                    "id": user_id,
+                    "telegram_id": user_id,
+                    "username": from_user.get("username"),
+                    "first_name": from_user.get("first_name"),
+                    "last_name": from_user.get("last_name")
+                }
+                user, family = service.get_or_create_user_and_family(user_data)
+                if not family:
+                    logger.warning(f"No family found for callback query user {user_id}")
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Household not found")
+                    return {"status": "ok"}
+
+                family_service = FamilyService()
+
+                if cb_data.startswith("curr_p:"):
+                    try:
+                        page = int(cb_data.split(":", 1)[1])
+                    except ValueError:
+                        page = 1
+                    active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family.id)
+                    menu_text = format_currency_menu_text(active_curr)
+                    keyboard = build_currency_keyboard(page=page, active_currency=active_curr)
+                    if message_id:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=menu_text,
+                            reply_markup=keyboard
+                        )
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                    return {"status": "ok"}
+
+                elif cb_data.startswith("curr_set:"):
+                    target_code = cb_data.split(":", 1)[1].upper()
+                    await asyncio.to_thread(family_service.set_family_default_currency, family.id, target_code)
+                    target_page = 1
+                    for idx, p_list in enumerate(CURRENCY_PAGES):
+                        if any(c[0] == target_code for c in p_list):
+                            target_page = idx + 1
+                            break
+                    keyboard = build_currency_keyboard(page=target_page, active_currency=target_code)
+                    success_text = format_currency_success_text(target_code)
+                    if message_id:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=success_text,
+                            reply_markup=keyboard
+                        )
+                    if cb_id:
+                        await telegram_service.answer_callback_query(
+                            callback_query_id=cb_id,
+                            text=f"Default currency set to {target_code}"
+                        )
+                    return {"status": "ok"}
+
             if cb_id:
-                background_tasks.add_task(telegram_service.answer_callback_query, callback_query_id=cb_id)
+                await telegram_service.answer_callback_query(callback_query_id=cb_id)
             return {"status": "ok"}
-
-        if cb_data.startswith("curr_p:") or cb_data.startswith("curr_set:"):
-            messaging_service = MessagingService()
-            user, family = await asyncio.to_thread(
-                messaging_service.resolve_user_and_family,
-                external_id=str(user_id),
-                channel="telegram",
-                telegram_user=from_user
-            )
-
-            if cb_data.startswith("curr_p:"):
+        except Exception as e:
+            logger.error(f"Error handling Telegram callback query for user {user_id}: {e}", exc_info=True)
+            if cb_id:
                 try:
-                    page = int(cb_data.split(":", 1)[1])
-                except ValueError:
-                    page = 1
-                family_service = FamilyService()
-                active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family.id)
-                menu_text = format_currency_menu_text(active_curr)
-                keyboard = build_currency_keyboard(page=page, active_currency=active_curr)
-                if message_id:
-                    background_tasks.add_task(
-                        telegram_service.edit_message_text,
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=menu_text,
-                        reply_markup=keyboard
-                    )
-                if cb_id:
-                    background_tasks.add_task(
-                        telegram_service.answer_callback_query,
-                        callback_query_id=cb_id
-                    )
-                return {"status": "ok"}
-
-            elif cb_data.startswith("curr_set:"):
-                target_code = cb_data.split(":", 1)[1].upper()
-                family_service = FamilyService()
-                await asyncio.to_thread(family_service.set_family_default_currency, family.id, target_code)
-                target_page = 1
-                for idx, p_list in enumerate(CURRENCY_PAGES):
-                    if any(c[0] == target_code for c in p_list):
-                        target_page = idx + 1
-                        break
-                keyboard = build_currency_keyboard(page=target_page, active_currency=target_code)
-                success_text = format_currency_success_text(target_code)
-                if message_id:
-                    background_tasks.add_task(
-                        telegram_service.edit_message_text,
-                        chat_id=chat_id,
-                        message_id=message_id,
-                        text=success_text,
-                        reply_markup=keyboard
-                    )
-                if cb_id:
-                    background_tasks.add_task(
-                        telegram_service.answer_callback_query,
-                        callback_query_id=cb_id,
-                        text=f"Default currency set to {target_code}"
-                    )
-                return {"status": "ok"}
-
-        if cb_id:
-            background_tasks.add_task(telegram_service.answer_callback_query, callback_query_id=cb_id)
-        return {"status": "ok"}
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Error processing selection.")
+                except Exception:
+                    pass
+            return {"status": "ok"}
 
     if "message" not in payload:
         logger.info(f"Ignoring non-message Telegram update (keys: {list(payload.keys())})")

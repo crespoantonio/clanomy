@@ -784,45 +784,41 @@ Users frequently log multiple financial events in a single conversational messag
 
 ---
 
-### 12. Merchant of Record (Lemon Squeezy) & Payout Architecture (Epic 17)
+---
 
-For the hosted SaaS deployment (`ENABLE_SUBSCRIPTIONS=true`), Clanomy operates on a **Merchant of Record (MoR)** pipeline via Lemon Squeezy:
+### 12. Decoupled Billing & Payment Architecture (Epic 17 Refactored)
+
+For the hosted SaaS deployment (`ENABLE_SUBSCRIPTIONS=true`), Clanomy employs a **decoupled, payment-agnostic subscription architecture** centered on [`BillingService`](src/services/billing/billing_service.py):
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Telegram User
-    participant Bot as Clanomy API
-    participant LS as Lemon Squeezy (MoR)
+    participant Bot as Clanomy API (BillingService)
     participant DB as PostgreSQL
-    participant Bank as DolarApp ACH (Lead Bank)
+    participant Pay as Processor (Under Evaluation: PayPal / Bot Offers)
 
-    User->>Bot: /upgrade
-    Bot->>LS: POST /v1/checkouts (custom: {family_id, chat_id})
-    LS-->>Bot: Checkout URL
-    Bot-->>User: Inline Button [💳 Upgrade to Pro]
-    User->>LS: Pays via Apple Pay / Credit Card
-    Note over LS: LS collects global VAT & issues customer invoice
-    LS->>Bot: POST /api/webhooks/lemonsqueezy (HMAC-SHA256 signature)
-    Bot->>Bot: Verify X-Signature with LEMONSQUEEZY_WEBHOOK_SECRET
-    Bot->>DB: UPDATE family SET plan_type='family_pro', subscription_status='active'
-    Bot->>User: Confirmation Message & Features Unlocked!
-    Note over LS,Bank: Payout Cycle: Domestic US ACH (0% fee) -> Lead Bank -> 100% USDc
+    User->>Bot: /upgrade (or /upgrade duo, /upgrade annual)
+    alt ENABLE_SUBSCRIPTIONS == false
+        Bot-->>User: Friendly Self-Hosted Unlocked Notice
+    else ENABLE_SUBSCRIPTIONS == true
+        Bot->>Bot: Build plan options & interactive deep link
+        Bot-->>User: Inline Menu [💳 Select Tier & Upgrade]
+        User->>Pay: Proceeds to checkout / subscription authorization
+        Pay-->>Bot: Payment / Subscription Activation Webhook
+        Bot->>DB: UPDATE family SET plan_type='duo_pro', subscription_status='active'
+        Bot-->>User: Confirmation Message & Features Unlocked!
+    end
 ```
 
-- **Database Model (Migration `0009_add_lemonsqueezy_fields.py`):**
-  - `Family.lemonsqueezy_customer_id`: Lemon Squeezy customer reference.
-  - `Family.lemonsqueezy_subscription_id`: Active subscription identifier.
-  - `Family.lemonsqueezy_variant_id`: Plan tier variant (`solo_pro` vs `family_pro`).
-- **Webhook Processing (`src/api/routes/lemonsqueezy.py`):**
-  - Verifies HMAC-SHA256 signature on the raw request body using `LEMONSQUEEZY_WEBHOOK_SECRET`.
-  - Dispatches events to `LemonSqueezyBillingService`:
-    - `subscription_created`: Activates subscription plan and saves subscription identifiers.
-    - `subscription_updated`: Synchronizes status changes, upgrades/downgrades.
-    - `subscription_cancelled`: Marks status as cancelled while honoring paid period.
-    - `subscription_resumed`, `subscription_paused`, `subscription_expired`.
-- **Customer Self-Service Portal:** Generates direct billing portal URLs via the Lemon Squeezy API, empowering customers to download tax receipts or cancel subscriptions without administrative support.
-- **Payout Sovereignty:** Lemon Squeezy executes domestic US ACH payouts directly to Tony's DolarApp US Lead Bank account, crediting in **USDc** with 0% payout fee, avoiding local banking intermediaries and forced currency pesification.
+- **Lemon Squeezy Retirement & Schema Decoupling (Migration `0011_remove_lemonsqueezy_fields.py`):**
+  - Lemon Squeezy was initially prototyped for MoR checkout, but was completely excised to eliminate third-party vendor lock-in and proprietary schema coupling.
+  - Alembic migration `0011_remove_lemonsqueezy_fields.py` dropped `lemonsqueezy_customer_id` and `lemonsqueezy_subscription_id` from the `Family` table.
+- **Pluggable Billing Service (`src/services/billing/billing_service.py`):**
+  - Abstracts plan tier presentation, upgrade command menus, role-aware admin checks (`is_family_admin`), and graduation logic.
+  - Generates deep links (`https://t.me/<bot>?start=upgrade_<plan>`) for seamless in-bot navigation.
+- **Active Processor Evaluation (PayPal & Telegram Bot Offers):**
+  - Tony is actively benchmarking **PayPal Subscriptions** and direct **Telegram Bot In-App Offers** to power automated billing without sacrificing architectural agility.
 
 ---
 
@@ -836,3 +832,59 @@ sequenceDiagram
   - Single provider class supporting Groq Cloud, OpenAI, Together AI, and Google Gemini via OpenAI-compatible endpoints.
   - **Static Prompt Caching Optimization:** System prompts and structured tool schemas maintain byte-level prefix invariance. This enables upstream LLM providers (e.g. Groq prompt cache, OpenAI cache) to hit existing prefix caches, slashing latency to <250ms and cutting operational token costs by up to 50%.
   - **Exponential Backoff with Jitter:** Robust retry decorator intercepts HTTP 429 (Rate Limit) and 5xx upstream transient errors, applying jittered exponential backoff before failing over to the deterministic regex engine.
+
+---
+
+### 14. Native Google Gemini Multimodal Provider (Epic 19)
+
+- **Native Provider Architecture (`src/core/llm/providers/gemini_provider.py`):**
+  - Dedicated `GeminiProvider` interfacing directly with the Google Generative AI REST and SDK APIs.
+  - **Direct Multimodal Audio Transcription:** Eliminates the requirement for local Faster-Whisper or cloud Whisper services. Audio voice notes are ingested directly by Gemini alongside the system prompt, slashing server RAM consumption (<150MB total container footprint) and lowering latency to <300ms.
+  - **Schema Translation & Structured Outputs:** Translates internal extraction tool schemas into Gemini `function_declarations` with strict JSON mode parsing and deterministic fallback handlers.
+  - **Automatic Discovery:** API keys with prefix `AIzaSy` automatically configure `AI_PROVIDER=gemini` and resolve default model to `gemini-2.5-flash-lite`.
+
+---
+
+### 15. Interactive Telegram UX & Callback Query Pipeline (Epic 20)
+
+- **Telegram Webhook Contract Expansion:**
+  - Expanded Telegram webhook ingress to process both `"message"` and `"callback_query"` events.
+  - Direct asynchronous event handling in `src/api/routes/telegram.py` routing callbacks to `TelegramService.answer_callback_query` and `TelegramService.edit_message_text`.
+- **Paginated Interactive Currency Picker (`src/services/handlers/currency_handler.py`):**
+  - Users typing `/currency` without arguments receive an interactive inline keyboard of popular global currencies.
+  - Supports dynamic in-place page navigation (`◀️ Prev`, `Next ▶️`) with instant callback acknowledgment (<100ms) without creating new chat messages.
+  - Direct command invocations (`/currency ARS`) bypass the inline keyboard for fast-path execution.
+
+---
+
+### 16. Three-Tier Subscription Governance & Daily Fair-Use Quotas (Epic 21)
+
+- **Centralized Subscription Registry (`src/core/subscription_config.py`):**
+  - Defines the formal 3-tier model:
+    - `solo_pro`: $4.99/mo ($49.99/yr), 1 member, 60 daily extractions.
+    - `duo_pro`: $7.99/mo ($79.99/yr), 2 members (partners/couples), 120 daily extractions.
+    - `family_pro`: $11.99/mo ($119.99/yr), 5 members, 300 daily extractions.
+    - `trial`: 60 days, 2 members (Duo), 60 daily extractions.
+- **Daily Usage Tracking (Alembic Migration `0010_add_family_daily_tx_count.py`):**
+  - Introduces `Family.daily_tx_count` to track daily consumption against `DAILY_FAIR_USE_LIMITS`.
+  - Quota checks in `SubscriptionService.can_log_transaction` enforce daily rate limits to protect cloud AI budgets.
+- **Internal Maintenance Job (`src/api/routes/internal_jobs.py`):**
+  - HTTP endpoint `/api/internal/jobs/trial-lifecycle` protected by constant-time verification of `CRON_SECRET` (`X-Job-Secret` or `Authorization: Bearer`).
+  - Triggered once daily via external scheduler (GCP Cloud Scheduler, pg_cron):
+    1. Resets `Family.daily_tx_count = 0` across all workspaces.
+    2. Sends Day 50 trial expiration warnings.
+    3. Handles Day 60 graceful trial-to-free transitions.
+
+---
+
+### 17. Message Simulation & Public Web Showcase (Epic 22)
+
+- **Authorized Simulation Endpoint (`src/api/routes/simulate.py`):**
+  - Exposes `POST /simulate/message` secured by `X-Simulation-Secret`.
+  - Enables offline end-to-end testing of extraction logic, prompt variations, and LLM responses without needing an active Telegram bot connection.
+- **E2E LLM Evaluation Harness (`scripts/run_llm_eval.py`):**
+  - Comprehensive test harness evaluating model extraction accuracy across multilingual datasets (`tests/data/llm_extraction_dataset.py`).
+- **Static Landing Page Infrastructure (`landing/`):**
+  - Responsive, bilingual (EN/ES) static landing page mounted at `/` in FastAPI (`src/main.py`).
+  - Showcases product features, interactive live demo simulator, transparent self-hosting documentation links, and privacy architecture.
+

@@ -645,6 +645,84 @@ For Telegram to send messages to your local FastAPI backend, you must expose por
 
 ---
 
+### 🧪 Test 19: Interactive Currency Selection & Pagination
+
+1. **Invoke Interactive Currency Picker:**
+   - Send:
+     ```text
+     /currency
+     ```
+   - **Expected Output:**
+     The bot returns an interactive inline keyboard displaying popular global currencies (USD, EUR, ARS, GBP, BRL, MXN, etc.) with pagination controls (`◀️ Prev`, `Next ▶️`):
+     > `Current default currency: USD`
+     > `Select a new currency from the list below:`
+2. **Navigate Pages:**
+   - Click `Next ▶️`.
+   - **Expected Output:**
+     The inline buttons update dynamically in place without creating a new message.
+3. **Select a Currency:**
+   - Click one of the currency buttons (e.g. `ARS - Argentine Peso`).
+   - **Expected Output:**
+     The message updates to confirm the household default currency has been updated:
+     > `✅ Default currency updated to ARS.`
+4. **Verify Direct Command Override:**
+   - Send `/currency USD`
+   - **Expected Output:**
+     Directly updates to USD without displaying the inline keyboard.
+
+---
+
+### 🧪 Test 20: Google Gemini Multimodal AI Verification
+
+1. **Verify Text Extraction with Gemini:**
+   - With `AI_PROVIDER=gemini` configured in `.env`, send:
+     ```text
+     Dinner with friends 45.50
+     ```
+   - **Expected Output:**
+     Bot records `45.50 USD for 'Dinner with friends' under category 'Food & Dining'` in < 500ms.
+2. **Verify Native Voice Audio Ingestion:**
+   - Send a voice note in Spanish: *"Compré medicamentos por 12000"*
+   - **Expected Output:**
+     Gemini processes the raw audio directly without requiring a separate Whisper container, recording the transaction accurately in < 1s.
+
+---
+
+### 🧪 Test 21: Message Simulation & Evaluation Route (`/simulate/message`)
+
+1. **Test Offline Extraction via HTTP:**
+   - Run the following `curl` command using the `SIMULATION_SECRET` from `.env`:
+     ```bash
+     curl -X POST "http://localhost:8000/simulate/message" \
+          -H "Content-Type: application/json" \
+          -H "X-Simulation-Secret: your_simulation_secret" \
+          -d '{"text": "Supermercado 35000 y nafta 20000", "default_currency": "ARS"}'
+     ```
+   - **Expected Output:**
+     HTTP `200 OK` with structured JSON:
+     ```json
+     {
+       "status": "success",
+       "user_message": "Supermercado 35000 y nafta 20000",
+       "bot_response": "✅ Recorded 2 transactions:\n• 35,000.00 ARS for 'Supermercado' (Groceries)\n• 20,000.00 ARS for 'Nafta' (Transportation)",
+       "action": "batch_logged",
+       "item_count": 2,
+       "provider": "gemini",
+       "duration_seconds": 0.35
+     }
+     ```
+2. **Verify Authentication Gate:**
+   - Omit the header or supply an invalid token:
+     ```bash
+     curl -X POST "http://localhost:8000/simulate/message" \
+          -H "Content-Type: application/json" \
+          -d '{"text": "Coffee 5"}'
+     ```
+   - **Expected Output:**
+     HTTP `403 Forbidden` (`{"detail": "Forbidden: Invalid or missing simulation secret token."}`).
+
+---
+
 ## Step 7: Database & Encryption Verification
 
 Verify that data was stored and encrypted using AES-256:

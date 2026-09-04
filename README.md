@@ -36,7 +36,7 @@ bills - View upcoming scheduled bills and due dates
 balance - Net cash flow and savings rate overview
 undo - Revert your latest recorded transaction or batch
 timezone - View or update household timezone (e.g. /timezone America/Argentina/Buenos_Aires)
-currency - View or update household default currency (e.g. /currency ARS)
+currency - Interactive selector or update household default currency (e.g. /currency or /currency ARS)
 family - Manage family members and shared ledger
 invite - Generate invite link for household members
 notion - Connect and mirror transactions to Notion

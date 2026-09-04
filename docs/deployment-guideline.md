@@ -64,7 +64,7 @@ bills - View upcoming scheduled bills and due dates
 balance - Net cash flow and savings rate overview
 undo - Revert your latest recorded transaction or batch
 timezone - View or update household timezone (e.g. /timezone America/Argentina/Buenos_Aires)
-currency - View or update household default currency (e.g. /currency ARS)
+currency - Interactive selector or update household default currency (e.g. /currency or /currency ARS)
 family - Manage family members and shared ledger
 invite - Generate invite link for household members
 notion - Connect and mirror transactions to Notion
@@ -96,8 +96,19 @@ postgresql+psycopg://postgres.hwdzwrvvekaogtqtvmia:9%40ka%21FfAA778Uo8%21Wd%2A%2
 > [!NOTE]
 > Supabase direct hostnames (`db.<ref>.supabase.co`) only resolve over IPv6. Using the **Connection Pooler URL** (`aws-0-[region].pooler.supabase.com:6543`) ensures full IPv4 compatibility with Render.
 ---
-## 🧠 Step 3: Get AI API Key (Groq / OpenAI Cloud)
-Groq provides sub-second LLM and Whisper transcription inference for free:
+## 🧠 Step 3: Get AI API Key (Google Gemini / Groq Cloud)
+
+Clanomy supports multiple high-speed cloud AI backends:
+
+### Option A: Google Gemini (Recommended — Google AI Studio)
+Google Gemini 2.5 Flash Lite provides ultra-fast (<250ms) inference and native multimodal audio transcription with zero RAM overhead.
+1. Go to [https://aistudio.google.com](https://aistudio.google.com) and sign in with your Google account.
+2. Click **Get API key** ➔ **Create API key**.
+3. Copy the key (starts with `AIzaSy`).
+4. Save this key as `AI_API_KEY`. (Keys starting with `AIzaSy` are automatically recognized as Gemini).
+
+### Option B: Groq Cloud
+Groq provides sub-second LLM and Whisper transcription inference:
 1. Go to [https://console.groq.com](https://console.groq.com) and log in.
 2. On the left sidebar, click **API Keys**.
 3. Click **Create API Key**, name it (e.g. `clanomy-selfhosted`), and copy the key (starts with `gsk_`).
@@ -147,11 +158,12 @@ Expand the **Environment Variables** section and add:
 | `TELEGRAM_BOT_TOKEN` | *(Your BotFather HTTP API token from Step 1)* | Telegram Bot API authentication |
 | `MESSAGING_WEBHOOK_SECRET` | *(Your 32-character secret from Step 4)* | Validates `X-Telegram-Bot-Api-Secret-Token` |
 | `ENABLE_SUBSCRIPTIONS` | `false` | Disables paywalls and unlocks all features for free |
-| `AI_API_KEY` | `gsk_...` *(From Step 3)* | Fast cloud AI extraction, queries & voice notes |
-| `WHISPER_PROVIDER` | `groq` | Cloud speech-to-text via Groq Whisper Large v3 |
+| `AI_PROVIDER` | `gemini` *(or `groq`)* | Recommended: `gemini` for direct multimodal audio |
+| `AI_API_KEY` | `AIzaSy_...` *(or `gsk_...`)* | API key from Step 3 |
 | `DEFAULT_CURRENCY` | `USD` | Base fallback currency (e.g. `USD`, `ARS`, `EUR`, `MXN`) |
 | `DEFAULT_TIMEZONE` | `UTC` | Household default timezone (e.g. `America/Argentina/Buenos_Aires`) |
 | `ALLOWED_TELEGRAM_USERS` | `""` *(or comma-separated IDs)* | Restrict bot access to your Telegram ID(s) |
+| `SIMULATION_SECRET` | `""` *(optional)* | Secret token to test extractions via `/simulate/message` |
 | `ENABLE_DOCS` | `false` | Disables public `/docs` swagger page |
 
 7. Click **Deploy Web Service**.

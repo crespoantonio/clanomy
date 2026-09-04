@@ -1,5 +1,5 @@
 # generated: 2026-05-09
-# last_updated: 2026-09-01 13:20:00
+# last_updated: 2026-09-04 12:00:00
 # project: Clanomy
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-09-01 13:20:00
+last_updated: 2026-09-04 12:00:00
 project: Clanomy
 tracking_system: file-system
 story_location: { implementation_artifacts }
@@ -163,3 +163,26 @@ development_status:
   18-2-openai-compatible-provider-and-gemini-support: done
   18-3-static-prompt-caching-and-exponential-backoff-resilience: done
   epic-18-retrospective: optional
+
+  epic-19: done
+  19-1-dedicated-gemini-provider-implementation: done
+  19-2-direct-native-audio-transcription: done
+  19-3-automatic-key-detection-and-model-resolution: done
+  epic-19-retrospective: optional
+
+  epic-20: done
+  20-1-telegram-webhook-callback-query-processing: done
+  20-2-paginated-currency-inline-keyboard: done
+  epic-20-retrospective: optional
+
+  epic-21: done
+  21-1-centralized-subscription-tier-configuration-registry: done
+  21-2-60-day-duo-trial-experience: done
+  21-3-daily-transaction-quotas-and-internal-maintenance-cron: done
+  epic-21-retrospective: optional
+
+  epic-22: done
+  22-1-public-bilingual-landing-page-web-application: done
+  22-2-authorized-message-simulation-route: done
+  22-3-multilingual-llm-evaluation-harness-and-dataset: done
+  epic-22-retrospective: optional

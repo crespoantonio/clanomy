@@ -63,11 +63,20 @@ FR42: Users can configure and view household timezone via `/timezone` and `/sett
 FR43: Dynamic timezone-aware relative date query resolution and scheduled bill due dates strictly in family's local timezone.
 FR44: Compound batch extraction parsing multiple discrete transactions from single conversational inputs into `BatchTransactionExtractionResult`.
 FR45: Compound transaction rollback via `BatchTracker` enabling atomic multi-item `/undo`.
-FR46: Lemon Squeezy Merchant of Record hosted checkout generation with custom passthrough metadata (`family_id`, `chat_id`).
-FR47: Lemon Squeezy HMAC-SHA256 signed webhook processing for real-time subscription lifecycle management.
-FR48: Self-service customer billing portal URL generation for subscription management and invoice downloads.
+FR46: Pluggable billing abstraction layer (`BillingService`) generating interactive deep-link upgrade options (`https://t.me/<bot>?start=upgrade_<plan>`).
+FR47: Decoupled database schema (Alembic migration `0011_remove_lemonsqueezy_fields.py`) and processor evaluation (PayPal & Telegram bot offers).
+FR48: Self-service billing commands (`/upgrade`, `/upgrade duo`, `/upgrade annual`) with role-aware admin verification and family graduation logic.
 FR49: Universal Speech-to-Text multi-provider engine supporting local Faster-Whisper, Groq Whisper API, and OpenAI Whisper.
 FR50: Multi-provider LLM inference (Groq, OpenAI, Google Gemini, Ollama) featuring static prompt caching and exponential backoff retry with jitter.
+FR51: Native Google Gemini Multimodal Provider (`GeminiProvider`) with direct audio voice transcription, token usage logging, and schema translation.
+FR52: Automatic detection of Gemini API keys (`AIzaSy`) with auto-configuration of `gemini-2.5-flash-lite`.
+FR53: Interactive Telegram Currency Selection with paginated inline keyboards (`◀️ Prev`, `Next ▶️`) via `callback_query` webhook ingress.
+FR54: Three-tier subscription architecture (`SubscriptionTier`) supporting Solo Pro ($4.99/mo), Duo Pro ($7.99/mo), and Family Pro ($11.99/mo) with annual savings.
+FR55: 60-day Duo Trial experience providing full Pro features for up to 2 members.
+FR56: Daily fair-use quota tracking via `Family.daily_tx_count` (migration `0010_add_family_daily_tx_count.py`) and tier limits enforcement.
+FR57: Internal scheduled maintenance cron job (`/api/internal/jobs/trial-lifecycle`) protected by `CRON_SECRET` for daily quota reset and trial alerts.
+FR58: Authorized message simulation and evaluation route (`/simulate/message`) protected by `SIMULATION_SECRET`.
+FR59: Public bilingual landing page web app mounted at `/` in FastAPI.
 
 ### NonFunctional Requirements
 
@@ -87,6 +96,7 @@ NFR13: Offline regex engine achieves 100% fallback reliability during AI outages
 NFR14: Financial boundary aggregations resolve against configured household timezone before UTC query projection. (Timezone Boundary Consistency)
 NFR15: Inbound billing webhooks cryptographically verify HMAC-SHA256 signatures before processing payloads. (Cryptographic Webhook Verification)
 NFR16: System prompts and tool definitions maintain prefix invariance to maximize upstream LLM prompt caching. (Prompt Caching Invariance)
+NFR17: Interactive UI callback acknowledgment and in-place message update completed in < 1.0s. (Callback Query Latency)
 
 ### Additional Requirements
 
@@ -1150,11 +1160,11 @@ So that my ledger is restored to its exact previous state without needing repeat
 
 ---
 
-## Epic 17: Merchant of Record (Lemon Squeezy) Subscription Engine & Cloud Billing Integration
+## Epic 17: Decoupled Billing Architecture & Processor Abstraction (Refactored)
 
-Replace prototype Telegram Stars with Lemon Squeezy Merchant of Record (MoR) hosted checkout, HMAC-SHA256 signed webhook processing, customer portal URLs, database migration `0009`, and domestic US ACH payouts direct to DolarApp USDc accounts.
+*Note: Initially prototyped with Lemon Squeezy Merchant of Record (Stories 17.1–17.4), this epic was refactored in September 2026 to eliminate third-party vendor lock-in. Alembic migration `0011_remove_lemonsqueezy_fields.py` dropped proprietary Lemon Squeezy columns from the database, and billing discovery was abstracted into `BillingService` (`src/services/billing/billing_service.py`) generating deep links (`https://t.me/<bot>?start=upgrade_<plan>`) with ongoing evaluation of PayPal and Telegram bot subscription offers.*
 
-### Story 17.1: Database Schema & Migration for Lemon Squeezy
+### Story 17.1: Database Schema & Migration for Lemon Squeezy (Superseded by Migration 0011)
 As a Developer,
 I want the database to store Lemon Squeezy customer and subscription identifiers,
 So that subscription lifecycles can be matched and managed deterministically.
@@ -1163,8 +1173,9 @@ So that subscription lifecycles can be matched and managed deterministically.
 **Given** Alembic migration `0009_add_lemonsqueezy_fields.py`
 **When** applied to the database
 **Then** it adds `lemonsqueezy_customer_id`, `lemonsqueezy_subscription_id`, and `lemonsqueezy_variant_id` to the `family` table.
+*(Superseded: Migration `0011_remove_lemonsqueezy_fields.py` removed these fields to restore schema portability).*
 
-### Story 17.2: Lemon Squeezy Billing Service & Checkout Generation
+### Story 17.2: Lemon Squeezy Billing Service & Checkout Generation (Refactored into Pluggable BillingService)
 As a SaaS User,
 I want to type `/upgrade` and receive a dynamic hosted checkout link with Apple Pay / Credit Card,
 So that I can upgrade without entering cryptocurrency tokens or navigating complex checkout flows.
@@ -1174,8 +1185,9 @@ So that I can upgrade without entering cryptocurrency tokens or navigating compl
 **When** `LemonSqueezyBillingService.create_checkout_url()` is called
 **Then** it requests a checkout from Lemon Squeezy with custom metadata (`family_id`, `chat_id`).
 **And** returns an inline button with the secure payment URL.
+*(Refactored: Replaced by `BillingService.handle_upgrade_command()` generating interactive Telegram deep links).*
 
-### Story 17.3: Lemon Squeezy Webhook Verification & Subscription Lifecycle
+### Story 17.3: Lemon Squeezy Webhook Verification & Subscription Lifecycle (Decommissioned)
 As a System Administrator,
 I want inbound webhooks from Lemon Squeezy to verify HMAC-SHA256 signatures and synchronize subscription states in real time,
 So that user accounts are automatically activated, renewed, or cancelled securely.
@@ -1235,4 +1247,146 @@ So that operating costs are minimized and transient provider outages do not disr
 **When** messages are sent to OpenAI-compatible endpoints
 **Then** static system prompt prefixes maintain byte invariance to maximize prompt cache hits.
 **And** upstream HTTP 429 and 5xx errors trigger jittered exponential backoff retries before falling back to deterministic regex extraction.
+
+---
+
+## Epic 19: Native Google Gemini Multimodal Provider & Direct Audio Engine
+
+Introduce a dedicated `GeminiProvider` interfacing directly with the Google Generative AI REST and SDK APIs, providing direct multimodal voice note transcription (eliminating the need for Faster-Whisper or cloud Whisper services), token usage logging, and structured schema mapping.
+
+### Story 19.1: Dedicated Gemini Provider Implementation
+As an AI Engineer,
+I want a native Google Gemini provider that translates internal tool definitions into Gemini function declarations and parses responses cleanly,
+So that we have first-class support for Google's latest models without intermediary OpenAI-compatibility layers.
+
+**Acceptance Criteria:**
+**Given** `AI_PROVIDER=gemini` and a valid `AI_API_KEY`
+**When** `GeminiProvider.extract_transaction()` is executed
+**Then** it dispatches calls to the Google Generative AI API with structured function calling.
+**And** logs token consumption (`prompt_tokens`, `candidates_tokens`, `total_tokens`).
+
+### Story 19.2: Direct Native Audio Transcription
+As a Self-Hoster or SaaS Operator,
+I want voice notes processed directly by Gemini without running a local Whisper container or external speech-to-text API,
+So that server memory consumption remains <150MB and voice note transcription latency is reduced to <300ms.
+
+**Acceptance Criteria:**
+**Given** an incoming `.ogg` voice note from Telegram
+**When** `GeminiProvider` processes the audio payload
+**Then** it encodes the audio directly in the multimodal prompt content.
+**And** extracts financial transactions in a single inference pass without invoking Faster-Whisper or Groq Whisper.
+
+### Story 19.3: Automatic Key Detection & Model Resolution
+As a System Administrator,
+I want API keys starting with `AIzaSy` to automatically configure the Gemini provider and resolve default models to `gemini-2.5-flash-lite`,
+So that setup friction is minimized.
+
+**Acceptance Criteria:**
+**Given** `AI_API_KEY` starting with `AIzaSy` and unset `AI_PROVIDER`
+**When** `Settings.resolve_ai_defaults()` runs
+**Then** `AI_PROVIDER` automatically resolves to `"gemini"`.
+**And** `AI_MODEL` and `AI_WHISPER_MODEL` default to `"gemini-2.5-flash-lite"`.
+
+---
+
+## Epic 20: Interactive Telegram Currency Selection & Callback Query Pipeline
+
+Enhance Telegram user experience with interactive inline keyboards, paginated navigation, and Telegram webhook expansion to process `callback_query` updates.
+
+### Story 20.1: Telegram Webhook Callback Query Processing
+As a Backend Developer,
+I want the Telegram webhook endpoint to receive and process `callback_query` updates,
+So that users can interact with inline buttons without experiencing silent timeouts.
+
+**Acceptance Criteria:**
+**Given** an incoming webhook payload containing a `callback_query` object
+**When** received at `/api/v1/telegram/webhook`
+**Then** `TelegramService.answer_callback_query` acknowledges the callback within <1.0 second.
+**And** the action is routed to the corresponding handler.
+
+### Story 20.2: Paginated Currency Inline Keyboard
+As a User,
+I want to type `/currency` and select my household currency from an interactive paginated menu,
+So that I don't have to memorize or look up three-letter ISO currency codes.
+
+**Acceptance Criteria:**
+**Given** a user typing `/currency` without arguments
+**When** `CurrencyHandler.handle_currency_command()` executes
+**Then** it responds with an inline keyboard showing popular global currencies (USD, EUR, ARS, GBP, BRL, MXN, etc.) with `◀️ Prev` and `Next ▶️` buttons.
+**And** clicking a currency updates the household default currency immediately and edits the message in place.
+
+---
+
+## Epic 21: Three-Tier Pricing Architecture, 60-Day Duo Trial & Daily Fair-Use Quotas
+
+Implement a structured 3-tier subscription model (Solo Pro, Duo Pro, Family Pro), introduce an automatic 60-day Duo Trial for new workspaces, and enforce daily fair-use transaction limits via database tracking and internal maintenance cron jobs.
+
+### Story 21.1: Centralized Subscription Tier Configuration Registry
+As a Product Manager,
+I want all subscription tier specifications (pricing, member limits, quotas, features) centralized in code,
+So that pricing logic is consistent across `/upgrade` menus, landing page displays, and quota validation.
+
+**Acceptance Criteria:**
+**Given** `src/core/subscription_config.py`
+**When** queried for `solo_pro`, `duo_pro`, or `family_pro`
+**Then** it returns structured `SubscriptionTier` objects defining USD prices ($4.99, $7.99, $11.99), annual rates (17% savings), member caps (1, 2, 5), and daily limits (60, 120, 300).
+
+### Story 21.2: 60-Day Duo Trial Experience
+As a New User,
+I want my new workspace to automatically receive a 60-day Duo trial for up to 2 members,
+So that I can test shared budgeting with my partner before deciding to subscribe.
+
+**Acceptance Criteria:**
+**Given** a newly registered family workspace in SaaS mode
+**When** created by `FamilyService`
+**Then** `plan_type` is set to `"trial"` with `trial_ends_at = now() + 60 days`.
+**And** allows up to 2 members to join the shared ledger.
+
+### Story 21.3: Daily Transaction Quotas & Internal Maintenance Cron
+As a Platform Operator,
+I want daily transaction counts tracked per workspace and reset at midnight via an authenticated internal HTTP endpoint,
+So that runaway loops or abuse are throttled and trial lifecycles are monitored.
+
+**Acceptance Criteria:**
+**Given** Alembic migration `0010_add_family_daily_tx_count.py` adding `daily_tx_count` to `family`
+**When** a user logs a transaction, `daily_tx_count` increments.
+**And** when `POST /api/internal/jobs/trial-lifecycle` is triggered with `CRON_SECRET`, it resets all counts to 0 and dispatches Day 50 / Day 60 notifications.
+
+---
+
+## Epic 22: Landing Page Web App, Simulation Endpoint & E2E LLM Evaluation Suite
+
+Deploy a public bilingual landing page served by FastAPI, expose an authorized offline message simulation route for testing without Telegram webhooks, and provide an automated LLM evaluation suite.
+
+### Story 22.1: Public Bilingual Landing Page Web Application
+As a Visitor,
+I want to visit the Clanomy web URL and explore its features, live interactive demo, pricing, and self-hosting documentation in English and Spanish,
+So that I understand the value proposition before initiating the Telegram bot.
+
+**Acceptance Criteria:**
+**Given** a web browser visiting `/` on the Clanomy FastAPI server
+**When** the root route responds
+**Then** it serves `landing/index.html` with responsive styles (`landing/styles.css`), dynamic demo script (`landing/script.js`), and bilingual translations (`landing/translations.js`).
+
+### Story 22.2: Authorized Message Simulation Route
+As an AI Engineer or Self-Hoster,
+I want an HTTP endpoint to test natural language message extraction without configuring Telegram webhooks,
+So that I can verify my AI provider configuration and debug prompt handling offline.
+
+**Acceptance Criteria:**
+**Given** `POST /simulate/message` with a valid `X-Simulation-Secret` header
+**When** a payload with `{"text": "Lunch 15 USD"}` is submitted
+**Then** it returns structured JSON with the extraction result, bot response, and execution duration.
+**And** unauthorized requests are rejected with HTTP 403.
+
+### Story 22.3: Multilingual LLM Evaluation Harness & Dataset
+As a Quality Engineer,
+I want an automated evaluation script that tests extraction accuracy across standard financial inputs,
+So that we can benchmark LLM providers and detect extraction regressions.
+
+**Acceptance Criteria:**
+**Given** `scripts/run_llm_eval.py` and `tests/data/llm_extraction_dataset.py`
+**When** executed against a configured LLM provider
+**Then** it benchmarks accuracy across expenses, incomes, multi-currency inputs, and compound batches, reporting overall pass rates and token latency.
+
 

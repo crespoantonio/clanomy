@@ -66,11 +66,15 @@ MESSAGING_WEBHOOK_SECRET=a_very_long_secure_random_string
 DEFAULT_CURRENCY=USD
 DEFAULT_TIMEZONE=UTC
 
-# Speech-to-Text backend: local (Faster-Whisper), groq, or openai
-WHISPER_PROVIDER=local
+# AI Engine Configuration (Recommended: Gemini)
+AI_PROVIDER=gemini
+AI_API_KEY=AIzaSy_your_gemini_api_key_here
 
 # Guarantee 100% unlocked self-hosted instance (never requires payment or license key)
 ENABLE_SUBSCRIPTIONS=false
+
+# (Optional) Local message simulation endpoint secret
+SIMULATION_SECRET=
 
 # (Optional) Origin Shielding token if placing behind Cloudflare proxy/tunnel
 CLOUDFLARE_ORIGIN_SECRET=
@@ -81,37 +85,44 @@ ENABLE_DOCS=false
 
 ### 4. Choose Your AI Inference Mode
 
-Clanomy features a unified modular LLM provider layer (`src/core/llm/`). You can choose between **100% Local Inference** or **Lightweight Cloud Inference**:
+Clanomy features a unified modular LLM provider layer (`src/core/llm/`). You can choose between **Google Gemini (Recommended)**, **Groq / OpenAI Cloud**, or **100% Local Inference**:
 
-#### Option A: 100% Local Inference (Ollama + Local Whisper)
-- Keeps all audio and text processing completely on your own hardware.
-- Requires ~8GB RAM for running LLaMA3 and Whisper locally.
+#### Option A: Google Gemini (Recommended — Native Multimodal Audio & Free Tier)
+- **Zero Local Hardware Requirement**: Direct native multimodal audio transcription — runs with <150MB total container RAM because you do **not** need a local Whisper or GPU instance.
+- **Ultra-Fast & Generous Free Tier**: Uses `gemini-2.5-flash-lite` via Google AI Studio for fast (<300ms) bilingual extraction.
 - Configuration in `.env`:
   ```env
-  WHISPER_PROVIDER=local
-  OLLAMA_BASE_URL=http://ollama:11434
-  AI_MODEL=llama3
+  AI_PROVIDER=gemini
+  AI_API_KEY=AIzaSy_your_google_gemini_api_key_here
   ```
+  *(Note: Keys starting with `AIzaSy` are automatically detected and configured).*
 
-#### Option B: Lightweight Cloud Inference (Groq Cloud / OpenAI / Gemini)
-- Extremely low memory footprint (<500MB RAM total), perfect for cheap $3–$5/month cloud VPS (e.g., Hetzner, DigitalOcean, Linode) or free tiers (Render).
-- Sub-second inference (<300ms) with zero GPU overhead.
-- Leverages upstream prompt caching and retry with jitter.
+#### Option B: Lightweight Cloud Inference (Groq Cloud / OpenAI)
+- Extremely low memory footprint (<300MB RAM), ideal for free or cheap cloud VPS (Render, Hetzner, Fly.io).
+- Uses Groq Whisper Large v3 or OpenAI Whisper-1 for audio transcription, and Llama 3.3 70B or GPT-4o-mini for text extraction.
 - Configuration in `.env`:
   ```env
-  # Fast cloud speech-to-text (Groq Whisper Large v3 or OpenAI Whisper-1)
-  WHISPER_PROVIDER=groq
-
-  # Unified OpenAI-compatible cloud LLM (Groq, OpenAI, Google Gemini)
+  AI_PROVIDER=groq
   AI_API_KEY=gsk_your_groq_api_key_here
   AI_BASE_URL=https://api.groq.com/openai/v1
   AI_MODEL=llama-3.3-70b-versatile
   ```
 
+#### Option C: 100% Local Inference (Ollama + Local Faster-Whisper)
+- Keeps all audio and text processing completely private on your own local hardware.
+- Requires ~8GB RAM for running LLaMA3 and Whisper locally.
+- Configuration in `.env`:
+  ```env
+  AI_PROVIDER=ollama
+  WHISPER_PROVIDER=local
+  OLLAMA_BASE_URL=http://ollama:11434
+  AI_MODEL=llama3
+  ```
+
 ---
 
 ### 5. Start the Stack
-Spin up the containers in detached mode:
+Spin up the containers in detached mode using Podman (recommended) or Docker:
 ```bash
 # If using Podman (Recommended)
 podman compose up -d --build
@@ -120,29 +131,53 @@ podman compose up -d --build
 docker compose up -d --build
 ```
 
-*(If using Option A with local Ollama, pull the LLaMA3 model once the containers start: `podman compose exec ollama ollama pull llama3` or `docker compose exec ollama ollama pull llama3`).*
+*(If using Option C with local Ollama, pull the LLaMA3 model once the containers start: `podman compose exec ollama ollama pull llama3` or `docker compose exec ollama ollama pull llama3`).*
 
 ---
 
 ### 6. Connect Telegram to Your Server
-Telegram needs to know where to send your messages. You must expose port `8000` to the internet (e.g., via Cloudflare Tunnels: `https://famfin.yourdomain.com`).
+Telegram needs to know where to send your messages and button clicks. You must expose port `8000` to the internet (e.g., via Cloudflare Tunnels: `https://clanomy.yourdomain.com`).
 
-Once exposed, register your webhook with Telegram by running this `curl` command:
+> [!IMPORTANT]
+> You **must** specify `"allowed_updates": ["message", "callback_query"]` when registering your webhook. The `callback_query` update type is required for interactive inline keyboards (such as the interactive `/currency` command).
+
+Register your webhook with Telegram:
+
+**Option A: Linux / macOS / Bash**
 ```bash
-curl -F "url=https://YOUR_DOMAIN.COM/api/v1/telegram/webhook" \
-     -F "secret_token=YOUR_MESSAGING_WEBHOOK_SECRET_FROM_ENV" \
-     https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook
+curl -X POST "https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "url": "https://YOUR_DOMAIN.COM/api/v1/telegram/webhook",
+       "secret_token": "YOUR_MESSAGING_WEBHOOK_SECRET_FROM_ENV",
+       "allowed_updates": ["message", "callback_query"]
+     }'
 ```
+
+**Option B: Windows PowerShell**
+```powershell
+curl.exe -X POST "https://api.telegram.org/bot<YOUR_TELEGRAM_BOT_TOKEN>/setWebhook" `
+     -H "Content-Type: application/json" `
+     -d '{
+       "url": "https://YOUR_DOMAIN.COM/api/v1/telegram/webhook",
+       "secret_token": "YOUR_MESSAGING_WEBHOOK_SECRET_FROM_ENV",
+       "allowed_updates": [\"message\", \"callback_query\"]
+     }'
+```
+
+---
 
 ### 7. Zero Limits Out-of-the-Box
 In self-hosted mode (`ENABLE_SUBSCRIPTIONS=false`, default), Clanomy runs completely unrestricted:
-- **Unlimited transaction logging** (voice & text, including compound batches)
-- **Instant fast-path slash commands** (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/timezone`) with <40ms response time
-- **Unlimited multi-member family workspaces**
-- **Notion real-time ledger synchronization**
-- **Natural language conversational cash-flow queries & exports (CSV/JSON)**
-- **Zero subscription paywalls, artificial quotas, or trial timeouts**
+- **Unlimited transaction logging** (voice & text, including compound batch logging).
+- **Instant fast-path slash commands** (`/month`, `/me`, `/today`, `/bills`, `/balance`, `/undo`, `/timezone`, `/currency`) with <40ms response time.
+- **Interactive `/currency` picker**: Paginated Telegram inline keyboard allows browsing and selecting currencies interactively.
+- **Unlimited multi-member family workspaces** with shared ledger access and member attribution.
+- **Notion real-time ledger synchronization**.
+- **Natural language conversational cash-flow queries & exports (CSV/JSON)**.
+- **Zero subscription paywalls, artificial quotas, or trial timeouts**.
 
+---
 
 ### 8. Hardening Your Bot & User Allowlisting (Recommended)
 By default in Telegram, any bot created via BotFather is globally searchable. If a stranger searches for your bot handle, they could send messages or voice notes to it.
@@ -160,23 +195,33 @@ To prevent unauthorized users from using your GPU/CPU compute, AI inference, or 
 2. **Ingress Resource Abuse Guardrails (Pre-Inference Gatekeeping):**
    Clanomy prevents resource exhaustion by inspecting metadata before downloading audio or invoking AI inference models:
    ```env
-   # Maximum voice note duration in seconds (default: 60)
-   MAX_VOICE_DURATION_SECONDS=60
+   # Maximum voice note duration in seconds (default: 35)
+   MAX_VOICE_DURATION_SECONDS=35
 
    # Maximum text message length in characters (default: 350)
    MAX_TEXT_LENGTH=350
    ```
-   * **Voice Duration Cap:** Voice recordings exceeding `MAX_VOICE_DURATION_SECONDS` are rejected synchronously before downloading or transcribing with Whisper.
-   * **Text Length Cap:** Text inputs exceeding `MAX_TEXT_LENGTH` are rejected immediately before invoking Ollama.
+   * **Voice Duration Cap:** Voice recordings exceeding `MAX_VOICE_DURATION_SECONDS` are rejected synchronously before downloading or transcribing.
+   * **Text Length Cap:** Text inputs exceeding `MAX_TEXT_LENGTH` are rejected immediately before invoking the LLM.
    * **Strict Media Filter:** Documents (PDFs), images, videos, audio files, and stickers are rejected early with friendly feedback, ensuring only native voice notes and text are processed.
 
-3. **Harden Privacy via BotFather:**
+3. **Verify AI Extraction Offline via Simulation Route (`/simulate/message`):**
+   To test that your AI provider is extracting transactions correctly without needing to send a message via Telegram, configure `SIMULATION_SECRET` in `.env`:
+   ```bash
+   curl -X POST "http://localhost:8000/simulate/message" \
+        -H "Content-Type: application/json" \
+        -H "X-Simulation-Secret: your_simulation_secret" \
+        -d '{"text": "Spent 15 on lunch at cafe", "default_currency": "USD"}'
+   ```
+   This returns the structured JSON extraction result, duration, and formatted bot response directly.
+
+4. **Harden Privacy via BotFather:**
    - Open `@BotFather` on Telegram.
    - Send `/mybots` > Select your bot > **Bot Settings**.
    - **Group Privacy:** Ensure it is **Enabled** so the bot only reads messages directed at it if added to a group.
    - **Allow Groups? / `join_groups`:** Set to **Turn groups off** if you only plan to use private chats with your household.
 
-4. **Origin Shielding & Stealth API:**
+5. **Origin Shielding & Stealth API:**
    - Set `CLOUDFLARE_ORIGIN_SECRET` if using Cloudflare Tunnels/Proxy to prevent direct port-8000 access.
    - Keep `ENABLE_DOCS=false` to prevent automated scanners from introspecting `/docs` or `/openapi.json`.
 

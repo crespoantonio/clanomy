@@ -167,7 +167,7 @@ curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
      -d '{
        "url": "https://<YOUR_RENDER_URL>/api/v1/telegram/webhook",
        "secret_token": "<MESSAGING_WEBHOOK_SECRET>",
-       "allowed_updates": ["message"]
+       "allowed_updates": ["message", "callback_query"]
      }'
 ```
 ### Option B: Windows PowerShell
@@ -177,7 +177,7 @@ curl.exe -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" `
      -d '{
        "url": "https://<YOUR_RENDER_URL>/api/v1/telegram/webhook",
        "secret_token": "<MESSAGING_WEBHOOK_SECRET>",
-       "allowed_updates": ["message"]
+       "allowed_updates": ["message", "callback_query"]
      }'
 ```
 *(Replace `<TELEGRAM_BOT_TOKEN>`, `<YOUR_RENDER_URL>`, and `<MESSAGING_WEBHOOK_SECRET>` with your actual values).*

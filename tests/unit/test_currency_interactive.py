@@ -233,3 +233,52 @@ def test_telegram_webhook_callback_query_set_currency():
         )
 
 
+def test_ensure_webhook_allowed_updates_adds_callback_query():
+    """When Telegram allowed_updates is ['message'], ensure_webhook_allowed_updates updates it."""
+    import asyncio
+    from src.services.telegram_service import TelegramService
+
+    svc = TelegramService()
+    svc.bot_token = "fake_token_123"
+
+    mock_webhook_info = {
+        "url": "https://clanomy-api.onrender.com/api/v1/telegram/webhook",
+        "allowed_updates": ["message"]
+    }
+
+    with patch.object(svc, "get_webhook_info", AsyncMock(return_value=mock_webhook_info)), \
+         patch.object(svc, "_post_with_retry", AsyncMock()) as mock_post:
+
+        updated = asyncio.run(svc.ensure_webhook_allowed_updates(["message", "callback_query"]))
+
+        assert updated is True
+        mock_post.assert_called_once()
+        endpoint, payload_kwargs = mock_post.call_args[0][0], mock_post.call_args[1]["json"]
+        assert endpoint == "setWebhook"
+        assert set(payload_kwargs["allowed_updates"]) == {"message", "callback_query"}
+        assert payload_kwargs["url"] == "https://clanomy-api.onrender.com/api/v1/telegram/webhook"
+
+
+def test_ensure_webhook_allowed_updates_skips_when_already_allowed():
+    """When Telegram already has callback_query in allowed_updates, setWebhook is not called."""
+    import asyncio
+    from src.services.telegram_service import TelegramService
+
+    svc = TelegramService()
+    svc.bot_token = "fake_token_123"
+
+    mock_webhook_info = {
+        "url": "https://clanomy-api.onrender.com/api/v1/telegram/webhook",
+        "allowed_updates": ["message", "callback_query"]
+    }
+
+    with patch.object(svc, "get_webhook_info", AsyncMock(return_value=mock_webhook_info)), \
+         patch.object(svc, "_post_with_retry", AsyncMock()) as mock_post:
+
+        updated = asyncio.run(svc.ensure_webhook_allowed_updates(["message", "callback_query"]))
+
+        assert updated is True
+        mock_post.assert_not_called()
+
+
+

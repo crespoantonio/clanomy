@@ -42,6 +42,15 @@ async def lifespan(app: FastAPI):
         
     # Initialize HTTP client pool
     HTTPClientManager().init()
+
+    # Ensure Telegram webhook is configured to receive callback_query updates
+    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_BOT_TOKEN.strip() and not os.environ.get("PYTEST_CURRENT_TEST"):
+        try:
+            from src.services.telegram_service import TelegramService
+            ts = TelegramService()
+            await ts.ensure_webhook_allowed_updates()
+        except Exception as e:
+            logger.warning(f"Could not verify Telegram webhook allowed_updates on startup: {e}")
     
     # In SaaS/cloud mode, external triggers (e.g. GCP Cloud Scheduler) invoke /api/internal/jobs/trial-lifecycle.
     # In-process scheduler is only started if explicitly enabled via ENABLE_INTERNAL_SCHEDULER.

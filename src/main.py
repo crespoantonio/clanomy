@@ -26,7 +26,6 @@ logger = logging.getLogger("clanomy")
 async def lifespan(app: FastAPI):
     # Startup validation: Fail fast if SaaS mode is configured without Cloud AI credentials in non-test environments
     if settings.ENABLE_SUBSCRIPTIONS and not (settings.AI_API_KEY and settings.AI_API_KEY.strip()):
-        import os
         if not os.environ.get("PYTEST_CURRENT_TEST") and not settings.DATABASE_URL.startswith("sqlite"):
             logger.critical("Startup aborted: Commercial SaaS mode (ENABLE_SUBSCRIPTIONS=true) requires AI_API_KEY for cloud inference.")
             raise RuntimeError("Startup aborted: Missing AI_API_KEY for Groq Cloud deployment.")
@@ -42,15 +41,6 @@ async def lifespan(app: FastAPI):
         
     # Initialize HTTP client pool
     HTTPClientManager().init()
-
-    # Ensure Telegram webhook is configured to receive callback_query updates
-    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_BOT_TOKEN.strip() and not os.environ.get("PYTEST_CURRENT_TEST"):
-        try:
-            from src.services.telegram_service import TelegramService
-            ts = TelegramService()
-            await ts.ensure_webhook_allowed_updates()
-        except Exception as e:
-            logger.warning(f"Could not verify Telegram webhook allowed_updates on startup: {e}")
     
     # In SaaS/cloud mode, external triggers (e.g. GCP Cloud Scheduler) invoke /api/internal/jobs/trial-lifecycle.
     # In-process scheduler is only started if explicitly enabled via ENABLE_INTERNAL_SCHEDULER.

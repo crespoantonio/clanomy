@@ -240,62 +240,6 @@ class TelegramService:
             
         return "UnknownBot"
 
-    async def get_webhook_info(self) -> dict:
-        """Retrieves current webhook status from Telegram."""
-        if not self.bot_token or not self.bot_token.strip():
-            return {}
-        try:
-            client = get_http_client()
-            resp = await client.get(f"{self.api_url}/getWebhookInfo")
-            resp.raise_for_status()
-            data = resp.json()
-            return data.get("result", {})
-        except Exception as e:
-            logger.error(f"Failed to get Telegram webhook info: {e}")
-            return {}
-
-    async def ensure_webhook_allowed_updates(self, required_updates: Optional[list] = None) -> bool:
-        """
-        Ensures the Telegram webhook receives callback_query updates in addition to messages.
-        If allowed_updates was explicitly restricted (e.g. ['message']) and does not include
-        callback_query, re-registers setWebhook preserving the existing URL and secret_token.
-        """
-        if not self.bot_token or not self.bot_token.strip():
-            return False
-        if required_updates is None:
-            required_updates = ["message", "callback_query"]
-
-        try:
-            info = await self.get_webhook_info()
-            url = info.get("url")
-            if not url:
-                logger.warning("Telegram webhook URL is empty, skipping auto-update of allowed_updates.")
-                return False
-
-            allowed = info.get("allowed_updates")
-            # If allowed_updates is specified and missing any required updates, update it
-            if allowed is not None:
-                missing = [u for u in required_updates if u not in allowed]
-                if not missing:
-                    return True
-                new_allowed = list(set(allowed + required_updates))
-            else:
-                # None means Telegram sends all updates (except chat_member) by default
-                return True
-
-            logger.info(f"Updating Telegram webhook allowed_updates to include: {new_allowed}...")
-            payload = {
-                "url": url,
-                "allowed_updates": new_allowed
-            }
-            if settings.MESSAGING_WEBHOOK_SECRET:
-                payload["secret_token"] = settings.MESSAGING_WEBHOOK_SECRET
-            await self._post_with_retry("setWebhook", json=payload)
-            logger.info("Successfully updated Telegram webhook allowed_updates to include callback_query.")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to ensure Telegram webhook allowed_updates: {e}")
-            return False
 
 
 

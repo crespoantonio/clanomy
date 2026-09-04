@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import ollama
-from typing import Type
+from typing import Optional, Type
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 

@@ -201,7 +201,7 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
         f"{command_bullet}\n"
         "• ↩️ <b>Mistake?</b> Type /undo anytime to instantly revert your last entry.\n\n"
         "💡 <b>Quick Setup:</b>\n"
-        "• 💵 <b>Currency:</b> Set your default currency with <code>/currency USD</code> <i>(or ARS, EUR, MXN, etc.)</i>\n"
+        "• 💵 <b>Currency:</b> Set your household default currency with /currency\n"
         f"• 🌐 <b>Timezone:</b> Defaults to <b>{tz_name}</b>. Calibrate anytime with /timezone or by sharing your location pin (📎 ➔ Location).\n\n"
         "<b>Try sending me something right now:</b>\n"
         "• 🎙️ <i>Send a voice note:</i> \"Coffee 4\"\n"

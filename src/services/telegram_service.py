@@ -81,6 +81,61 @@ class TelegramService:
         except Exception as e:
             logger.error(f"Failed to send telegram message to {chat_id}: {e}")
 
+    async def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        parse_mode: Optional[str] = "HTML",
+        reply_markup: Optional[dict] = None
+    ) -> bool:
+        """Edits an existing text message and/or reply markup."""
+        if not text or not str(text).strip():
+            return False
+
+        try:
+            payload = {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text
+            }
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
+            if reply_markup is not None:
+                payload["reply_markup"] = reply_markup
+            await self._post_with_retry("editMessageText", json=payload)
+            return True
+        except httpx.HTTPStatusError as e:
+            if parse_mode and e.response.status_code == 400 and "can't parse entities" in e.response.text:
+                logger.warning(f"Telegram HTML parse error editing message {message_id} in {chat_id}: {e.response.text}. Retrying plain.")
+                return await self.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode=None, reply_markup=reply_markup)
+            if "message is not modified" in getattr(getattr(e, "response", None), "text", "").lower():
+                return True
+            logger.error(f"Failed to edit telegram message {message_id} in {chat_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to edit telegram message {message_id} in {chat_id}: {e}")
+            return False
+
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: Optional[str] = None,
+        show_alert: bool = False
+    ) -> bool:
+        """Answers a callback query to dismiss loading state on button press."""
+        try:
+            payload = {"callback_query_id": callback_query_id}
+            if text:
+                payload["text"] = text
+            if show_alert:
+                payload["show_alert"] = True
+            await self._post_with_retry("answerCallbackQuery", json=payload)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to answer callback query {callback_query_id}: {e}")
+            return False
+
     async def delete_message(self, chat_id: int, message_id: int) -> bool:
         """Deletes a message from a Telegram chat."""
         try:

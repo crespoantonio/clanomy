@@ -23,6 +23,13 @@ from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
 from src.services.billing.billing_service import BillingService
 from src.services.handlers.command_handler import CommandHandler
+from src.services.handlers.currency_handler import (
+    handle_manage_currency,
+    build_currency_keyboard,
+    format_currency_menu_text,
+    format_currency_success_text,
+    CURRENCY_PAGES
+)
 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 from src.services.subscription_service import (
     can_log_transaction,
@@ -111,6 +118,98 @@ async def telegram_webhook(
     payload = await request.json()
     telegram_service = TelegramService()
     billing_service = BillingService(telegram_service)
+
+    if "callback_query" in payload:
+        cb = payload["callback_query"]
+        cb_id = cb.get("id")
+        cb_data = cb.get("data", "")
+        from_user = cb.get("from", {})
+        cb_message = cb.get("message", {})
+        cb_chat = cb_message.get("chat", {})
+        chat_id = cb_chat.get("id")
+        message_id = cb_message.get("message_id")
+        user_id = from_user.get("id")
+
+        if not user_id or not chat_id:
+            return {"status": "ok"}
+
+        if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
+            allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
+            user_uname = (from_user.get("username") or "").lower()
+            if user_uname not in allowed_list and str(user_id) not in allowed_list:
+                logger.warning(f"Unauthorized Telegram callback interaction from user: {user_uname} ({user_id})")
+                if cb_id:
+                    background_tasks.add_task(telegram_service.answer_callback_query, callback_query_id=cb_id, text="Unauthorized")
+                return {"status": "ok"}
+
+        if cb_data == "noop":
+            if cb_id:
+                background_tasks.add_task(telegram_service.answer_callback_query, callback_query_id=cb_id)
+            return {"status": "ok"}
+
+        if cb_data.startswith("curr_p:") or cb_data.startswith("curr_set:"):
+            messaging_service = MessagingService()
+            user, family = await asyncio.to_thread(
+                messaging_service.resolve_user_and_family,
+                external_id=str(user_id),
+                channel="telegram",
+                telegram_user=from_user
+            )
+
+            if cb_data.startswith("curr_p:"):
+                try:
+                    page = int(cb_data.split(":", 1)[1])
+                except ValueError:
+                    page = 1
+                family_service = FamilyService()
+                active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family.id)
+                menu_text = format_currency_menu_text(active_curr)
+                keyboard = build_currency_keyboard(page=page, active_currency=active_curr)
+                if message_id:
+                    background_tasks.add_task(
+                        telegram_service.edit_message_text,
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=menu_text,
+                        reply_markup=keyboard
+                    )
+                if cb_id:
+                    background_tasks.add_task(
+                        telegram_service.answer_callback_query,
+                        callback_query_id=cb_id
+                    )
+                return {"status": "ok"}
+
+            elif cb_data.startswith("curr_set:"):
+                target_code = cb_data.split(":", 1)[1].upper()
+                family_service = FamilyService()
+                await asyncio.to_thread(family_service.set_family_default_currency, family.id, target_code)
+                target_page = 1
+                for idx, p_list in enumerate(CURRENCY_PAGES):
+                    if any(c[0] == target_code for c in p_list):
+                        target_page = idx + 1
+                        break
+                keyboard = build_currency_keyboard(page=target_page, active_currency=target_code)
+                success_text = format_currency_success_text(target_code)
+                if message_id:
+                    background_tasks.add_task(
+                        telegram_service.edit_message_text,
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=success_text,
+                        reply_markup=keyboard
+                    )
+                if cb_id:
+                    background_tasks.add_task(
+                        telegram_service.answer_callback_query,
+                        callback_query_id=cb_id,
+                        text=f"Default currency set to {target_code}"
+                    )
+                return {"status": "ok"}
+
+        if cb_id:
+            background_tasks.add_task(telegram_service.answer_callback_query, callback_query_id=cb_id)
+        return {"status": "ok"}
 
     if "message" not in payload:
         logger.info(f"Ignoring non-message Telegram update (keys: {list(payload.keys())})")
@@ -256,6 +355,16 @@ async def telegram_webhook(
                 "/help": lambda u, f, *a: cmd_handler.handle_help(u, f),
                 "/ayuda": lambda u, f, *a: cmd_handler.handle_help(u, f),
             }
+
+            if clean_cmd in ("/currency", "/moneda"):
+                menu_text, keyboard = await handle_manage_currency(user.id, family.id, cmd_args)
+                background_tasks.add_task(
+                    telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=menu_text,
+                    reply_markup=keyboard
+                )
+                return {"status": "ok"}
 
             if clean_cmd in dispatch_map:
                 res_text = await dispatch_map[clean_cmd](user, family, cmd_args)

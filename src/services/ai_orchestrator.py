@@ -471,7 +471,12 @@ class AIOrchestrator:
 
         elif intent_str == IntentType.MANAGE_CURRENCY or intent_str == "manage_currency":
             family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
-            return await handle_manage_currency(user_uuid, family_id, raw_text)
+            menu_text, keyboard = await handle_manage_currency(user_uuid, family_id, raw_text)
+            if chat_id:
+                telegram_service = TelegramService()
+                await telegram_service.send_message(chat_id=chat_id, text=menu_text, reply_markup=keyboard)
+                return None
+            return menu_text
 
         return "I couldn't process your request."
 

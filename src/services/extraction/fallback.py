@@ -270,8 +270,13 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
 
     # Expand lines if multiple amounts are present separated by " y ", " and ", ",", or "."
     candidate_lines = []
-    amount_token_regex = r'[\$€£]?\s*\b\d+(?:[.,]\d+)?\b'
+    # Amounts must not be part of a date fraction (e.g. 18/09 or 09-18)
+    amount_token_regex = r'(?<![/\d-])[\$€£]?\s*\b\d+(?:[.,]\d+)?\b(?![/\d-])'
+    bill_indicator_regex = r'(?:(?:con\s+)?(?:vencim(?:iento|ento)|vence|vto\.?|venc\.?)|due\s+(?:on|date))'
     for line in base_lines:
+        if re.search(bill_indicator_regex, line, re.IGNORECASE):
+            candidate_lines.append(line)
+            continue
         parts = [p.strip() for p in re.split(r'\s+(?:y|and|e|\+)\s+|,\s*|\.\s+', line) if p.strip()]
         amount_parts = [p for p in parts if re.search(amount_token_regex, p)]
         if len(amount_parts) > 1:

@@ -91,9 +91,38 @@ def format_currency_success_text(new_currency: str) -> str:
 
 async def handle_manage_currency(user_uuid: UUID, family_id: UUID, raw_text: str = "") -> Tuple[str, Dict[str, Any]]:
     """
-    Handles the /currency command by returning the interactive menu and Page 1 inline keyboard.
+    Handles the /currency command:
+    - If a target currency argument is supplied (e.g. "/currency ARS" or "ARS"), updates the default currency directly and returns confirmation text with updated keyboard.
+    - If called bare (e.g. "/currency"), returns the interactive selection menu and Page 1 inline keyboard.
     """
     family_service = FamilyService()
+    target_curr = None
+    if raw_text:
+        parts = raw_text.split()
+        if len(parts) >= 2 and parts[1].lower() not in ["help", "info", "a", "to", "es"]:
+            target_curr = parts[-1].strip().upper()
+        elif len(parts) >= 3 and parts[1].lower() in ["a", "to", "es"]:
+            target_curr = parts[2].strip().upper()
+        elif len(parts) == 1 and parts[0].startswith("/currency") and len(parts[0]) > 9:
+            target_curr = parts[0][9:].strip().upper()
+        elif len(parts) == 1 and len(parts[0]) == 3 and parts[0].isalpha():
+            target_curr = parts[0].strip().upper()
+
+    if target_curr:
+        try:
+            new_curr = await asyncio.to_thread(family_service.set_family_default_currency, family_id, target_curr)
+            target_page = 1
+            for idx, p_list in enumerate(CURRENCY_PAGES):
+                if any(c[0] == new_curr for c in p_list):
+                    target_page = idx + 1
+                    break
+            keyboard = build_currency_keyboard(page=target_page, active_currency=new_curr)
+            return format_currency_success_text(new_curr), keyboard
+        except ValueError as ve:
+            active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
+            keyboard = build_currency_keyboard(page=1, active_currency=active_curr)
+            return f"⚠️ {ve}", keyboard
+
     active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
     text = format_currency_menu_text(active_curr)
     keyboard = build_currency_keyboard(page=1, active_currency=active_curr)

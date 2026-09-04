@@ -143,7 +143,7 @@ def test_duo_pro_member_capacity_enforcement(tier_test_session):
     # 3. Attempting to create a new invite when at capacity (2) must be blocked
     with pytest.raises(PlanLimitExceededError) as exc_info:
         fam_service.create_invite(family.id, user1.id)
-    assert "Duo Pro plan only supports up to 2 partners" in str(exc_info.value)
+    assert "Duo Pro only supports up to 2 members" in str(exc_info.value)
 
     # 4. Attempting to join with an existing invite token when workspace is full must be rejected
     invite2 = FamilyInvite(family_id=family.id, created_by_user_id=user1.id, token="bypass_token", expires_at=invite.expires_at)

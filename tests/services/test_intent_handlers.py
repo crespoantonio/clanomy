@@ -80,7 +80,7 @@ async def test_handle_generate_invite_limit_exceeded():
         mock_ts.get_bot_username = AsyncMock(return_value="ClanomyBot")
 
         res = await handle_generate_invite(user_uuid, family_id)
-        assert "Family Invites Require Family Pro" in res
+        assert "Member Limit Reached" in res
 
 
 @pytest.mark.anyio
@@ -92,7 +92,8 @@ async def test_handle_manage_currency():
         mock_fs.set_family_default_currency.return_value = "EUR"
 
         res = await handle_manage_currency(user_uuid, family_id, "/currency EUR")
-        assert "Default Currency Updated to EUR!" in res
+        res_text = res[0] if isinstance(res, tuple) else res
+        assert "Default Currency Updated to EUR!" in res_text
 
 
 @pytest.mark.anyio

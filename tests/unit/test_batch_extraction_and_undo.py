@@ -365,9 +365,13 @@ def test_inline_batch_fallback_expenses():
 
 
 @pytest.mark.anyio
+@pytest.mark.ollama
+@pytest.mark.live_ai
 async def test_inline_batch_live_ollama_ai():
     """Live AI test running against real local Ollama (e.g. llama3) if reachable."""
     import os
+    if os.environ.get("CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true":
+        pytest.skip("Ollama is not available in GitHub Actions CI environment.")
     if os.environ.get("RUN_LIVE_AI") != "true":
         pytest.skip("Skipping live AI test during fast unit test runs. Set RUN_LIVE_AI=true to execute.")
 

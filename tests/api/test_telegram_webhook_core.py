@@ -1,4 +1,5 @@
 import pytest
+from src.core.config import settings
 
 def test_webhook_invalid_secret(app_client, telegram_payload_factory):
     """[P0] Webhook should reject requests with invalid secret token."""
@@ -508,7 +509,7 @@ def test_webhook_rejects_excessive_voice_duration(app_client, mock_telegram, tel
     assert len(mock_telegram.messages) == 1
     alert_msg = mock_telegram.messages[0]["text"]
     assert "Voice Note Too Long" in alert_msg
-    assert "60 seconds" in alert_msg
+    assert f"{settings.MAX_VOICE_DURATION_SECONDS} seconds" in alert_msg
 
 def test_webhook_rejects_excessive_voice_file_size(app_client, mock_telegram, telegram_payload_factory):
     """[P0] Webhook fast-fails when voice file size exceeds MAX_AUDIO_SIZE_BYTES before download."""

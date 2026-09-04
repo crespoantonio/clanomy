@@ -48,7 +48,8 @@ def mock_llm_responses(monkeypatch):
 
         text_lower = (text or '').lower()
         amount_match = re.search(r'\b\d+(?:\.\d{1,2})?\b', text)
-        is_query = any(kw in text_lower for kw in ["how", "what", "show", "tell", "summary", "breakdown", "total", "query", "compare", "list"])
+        query_kws = ["how", "what", "show", "tell", "summary", "breakdown", "total", "query", "compare", "list", "export", "delete", "account", "invite", "family", "notion"]
+        is_query = any(kw in text_lower for kw in query_kws)
         if is_query and not amount_match:
             return UnifiedResult(action="query", amount=None)
 

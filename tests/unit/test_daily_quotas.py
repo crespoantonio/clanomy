@@ -108,19 +108,19 @@ def test_family_pro_and_trial_daily_pool_enforced():
     assert reason == "daily_limit"
     assert limit == 300
 
-    # 60-Day Trial also receives 300/day
+    # 60-Day Trial receives 35/day
     from datetime import timedelta
     trial_fam = Family(
         name="Trial Household",
         plan_type="trial",
         subscription_status="active",
         trial_ends_at=datetime.now(timezone.utc) + timedelta(days=30),
-        daily_tx_count=300
+        daily_tx_count=35
     )
     allowed, reason, limit = check_transaction_allowance(trial_fam)
     assert allowed is False
     assert reason == "daily_limit"
-    assert limit == 300
+    assert limit == 35
 
 
 def test_reset_daily_quotas_preserves_free_tier_monthly_count(memory_session):
@@ -157,3 +157,45 @@ def test_reset_daily_quotas_preserves_free_tier_monthly_count(memory_session):
 
     # Free family monthly count is 100% PRESERVED!
     assert free_fam.monthly_tx_count == 18
+
+
+def test_daily_limit_enforced_when_subscriptions_disabled():
+    """Verifies that daily fair-use limits are enforced even in self-hosted / subscriptions-disabled mode."""
+    original = settings.ENABLE_SUBSCRIPTIONS
+    try:
+        settings.ENABLE_SUBSCRIPTIONS = False
+
+        family = Family(
+            name="Self-Hosted Workspace",
+            plan_type="solo_pro",
+            subscription_status="active",
+            daily_tx_count=59
+        )
+
+        # Under limit: allowed
+        allowed, reason, limit = check_transaction_allowance(family)
+        assert allowed is True
+        assert reason is None
+        assert limit == 60
+
+        # At/Over limit: blocked by daily_limit even though ENABLE_SUBSCRIPTIONS=False
+        family.daily_tx_count = 60
+        allowed, reason, limit = check_transaction_allowance(family)
+        assert allowed is False
+        assert reason == "daily_limit"
+        assert limit == 60
+
+        # Free tier workspace in self-hosted mode also respects default daily limit (25)
+        free_fam = Family(
+            name="Free Self-Hosted",
+            plan_type="free",
+            subscription_status="active",
+            daily_tx_count=25
+        )
+        allowed, reason, limit = check_transaction_allowance(free_fam)
+        assert allowed is False
+        assert reason == "daily_limit"
+        assert limit == 25
+    finally:
+        settings.ENABLE_SUBSCRIPTIONS = original
+

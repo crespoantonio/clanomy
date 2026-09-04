@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     ENABLE_DOCS: bool = False  # Set to True to expose Swagger/OpenAPI docs (/docs, /redoc, /openapi.json)
     USER_COOLDOWN_SECONDS: float = 0.5
     ALLOWED_TELEGRAM_USERS: str = ""  # Comma-separated list of allowed Telegram usernames or IDs (empty = open to all)
-    MAX_VOICE_DURATION_SECONDS: int = 60  # Maximum allowable voice note duration in seconds before fast-fail rejection
+    MAX_VOICE_DURATION_SECONDS: int = 35  # Maximum allowable voice note duration in seconds before fast-fail rejection
     MAX_AUDIO_SIZE_BYTES: int = 3 * 1024 * 1024  # Maximum allowable voice/audio file size in bytes (3 MB) before fast-fail rejection
     MAX_TEXT_LENGTH: int = 350  # Maximum allowable text message length in characters before fast-fail rejection
     FAMILY_INVITE_TTL_HOURS: int = 1  # Family invite link expiration window in hours

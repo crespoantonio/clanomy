@@ -115,18 +115,21 @@ def check_transaction_allowance(
       - "monthly_limit": Free tier exceeded monthly limit
       - "daily_limit": Pro/Trial tier exceeded daily fair-use pool
     """
-    if not settings.ENABLE_SUBSCRIPTIONS:
-        return True, None, 0
+    # 1. Universal Daily Fair-Use Pool (Applies whether ENABLE_SUBSCRIPTIONS is True or False)
+    daily_limit = get_daily_fair_use_limit(family.plan_type)
+    current_daily = getattr(family, "daily_tx_count", 0) or 0
+    if current_daily >= daily_limit:
+        return False, "daily_limit", daily_limit
 
-    # 1. Pro / Trial / Paid workspaces: check daily pool
-    if has_unlimited_access(family, now=current_date):
-        daily_limit = get_daily_fair_use_limit(family.plan_type)
-        current_daily = getattr(family, "daily_tx_count", 0) or 0
-        if current_daily >= daily_limit:
-            return False, "daily_limit", daily_limit
+    # 2. Self-hosted / Subscriptions disabled: everything within daily pool is allowed
+    if not settings.ENABLE_SUBSCRIPTIONS:
         return True, None, daily_limit
 
-    # 2. Free tier logic: check monthly quota
+    # 3. Pro / Trial / Paid workspaces: daily pool was already validated above
+    if has_unlimited_access(family, now=current_date):
+        return True, None, daily_limit
+
+    # 4. Free tier logic (SaaS mode): check monthly quota
     check_and_reset_monthly_quota(family, current_date=current_date)
     if family.monthly_tx_count < limit:
         return True, None, limit

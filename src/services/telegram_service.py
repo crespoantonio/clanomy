@@ -73,7 +73,8 @@ class TelegramService:
                 logger.warning(f"Telegram HTML parse error for chat {chat_id}: {e.response.text}. Retrying as plain text.")
                 await self.send_message(chat_id=chat_id, text=text, parse_mode=None, reply_markup=reply_markup)
             else:
-                logger.error(f"Failed to send telegram message to {chat_id}: {e}")
+                resp_text = getattr(getattr(e, "response", None), "text", "")
+                logger.error(f"Failed to send telegram message to {chat_id}: {e} | Response: {resp_text}")
         except Exception as e:
             logger.error(f"Failed to send telegram message to {chat_id}: {e}")
 

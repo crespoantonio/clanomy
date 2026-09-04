@@ -10,7 +10,7 @@ import httpx
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
 from src.core.config import settings
-from src.core.http_client import get_http_client
+from src.core.http_client import get_http_client, make_timeout
 from src.core.security import sanitize_exception_message
 
 logger = logging.getLogger("clanomy.whisper")
@@ -100,7 +100,7 @@ class WhisperService:
         if audio_url is not None:
             try:
                 client = get_http_client()
-                response = await client.get(audio_url)
+                response = await client.get(audio_url, timeout=make_timeout(10.0, connect=3.0, pool=3.0))
                 response.raise_for_status()
                 
                 # Prevent DoS/OOM on huge files
@@ -147,7 +147,7 @@ class WhisperService:
                         headers=headers,
                         files=files,
                         data=data,
-                        timeout=30.0
+                        timeout=make_timeout(30.0, connect=5.0, pool=5.0)
                     )
                     if resp.status_code == 429 and attempt < max_whisper_attempts:
                         retry_after = 1.5
@@ -302,7 +302,7 @@ class WhisperService:
         for attempt in range(1, max_attempts + 1):
             try:
                 inference_start_time = time.perf_counter()
-                resp = await client.post(url, headers=headers, json=payload, timeout=30.0)
+                resp = await client.post(url, headers=headers, json=payload, timeout=make_timeout(30.0, connect=5.0, pool=5.0))
                 if resp.status_code == 429 and attempt < max_attempts:
                     retry_after = 1.5
                     try:

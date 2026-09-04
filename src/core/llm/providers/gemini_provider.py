@@ -5,10 +5,10 @@ from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, retry_if_exception
 
 from src.core.config import settings
-from src.core.http_client import get_http_client
+from src.core.http_client import get_http_client, make_timeout
 from src.core.ai_client import sanitize_prompt_input
 from src.core.llm.base import BaseLLMProvider, PayloadTruncatedError
-from src.core.llm.providers.openai_provider import OpenAIRateLimitWait, is_retryable_provider_error
+from src.core.llm.retry import is_retryable_provider_error, ProviderRateLimitWait
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class GeminiProvider(BaseLLMProvider):
 
     @retry(
         stop=stop_after_attempt(settings.AI_MAX_RETRIES),
-        wait=OpenAIRateLimitWait(min_wait=settings.AI_RETRY_BACKOFF_MIN, max_wait=30.0),
+        wait=ProviderRateLimitWait(min_wait=settings.AI_RETRY_BACKOFF_MIN, max_wait=30.0),
         retry=retry_if_exception(is_retryable_provider_error),
         reraise=True
     )
@@ -157,7 +157,7 @@ class GeminiProvider(BaseLLMProvider):
         }
 
         logger.info(f"Calling native Gemini model {self.model}...")
-        response = await client.post(url, headers=headers, json=payload, timeout=timeout)
+        response = await client.post(url, headers=headers, json=payload, timeout=make_timeout(timeout, default_read=30.0))
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
@@ -190,7 +190,7 @@ class GeminiProvider(BaseLLMProvider):
 
     @retry(
         stop=stop_after_attempt(settings.AI_MAX_RETRIES),
-        wait=OpenAIRateLimitWait(min_wait=settings.AI_RETRY_BACKOFF_MIN, max_wait=30.0),
+        wait=ProviderRateLimitWait(min_wait=settings.AI_RETRY_BACKOFF_MIN, max_wait=30.0),
         retry=retry_if_exception(is_retryable_provider_error),
         reraise=True
     )
@@ -223,7 +223,7 @@ class GeminiProvider(BaseLLMProvider):
         }
 
         logger.info(f"Calling native Gemini model {self.model} for text...")
-        response = await client.post(url, headers=headers, json=payload, timeout=timeout)
+        response = await client.post(url, headers=headers, json=payload, timeout=make_timeout(timeout, default_read=30.0))
         response.raise_for_status()
         data = response.json()
 

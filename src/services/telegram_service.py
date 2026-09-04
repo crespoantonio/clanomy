@@ -4,7 +4,7 @@ import httpx
 import logging
 import re
 from src.core.config import settings
-from src.core.http_client import get_http_client
+from src.core.http_client import get_http_client, make_timeout
 
 from typing import Optional
 
@@ -18,9 +18,10 @@ class TelegramService:
     async def _post_with_retry(self, endpoint: str, max_attempts: int = 3, **kwargs) -> httpx.Response:
         """Low-level POST with automatic retry on transient network errors and Telegram 429s."""
         client = get_http_client()
+        timeout = kwargs.pop("timeout", make_timeout(30.0, connect=5.0, pool=5.0))
         for attempt in range(1, max_attempts + 1):
             try:
-                response = await client.post(f"{self.api_url}/{endpoint}", **kwargs)
+                response = await client.post(f"{self.api_url}/{endpoint}", timeout=timeout, **kwargs)
                 if response.status_code == 429:
                     retry_after = 1.5
                     try:
@@ -155,7 +156,7 @@ class TelegramService:
     async def get_file_download_url(self, file_id: str) -> str:
         """Resolves a Telegram file_id to a direct download URL."""
         client = get_http_client()
-        response = await client.get(f"{self.api_url}/getFile?file_id={file_id}")
+        response = await client.get(f"{self.api_url}/getFile?file_id={file_id}", timeout=make_timeout(15.0, connect=5.0, pool=5.0))
         response.raise_for_status()
         data = response.json()
         if not data.get("ok") or "result" not in data or "file_path" not in data["result"]:
@@ -168,17 +169,26 @@ class TelegramService:
         file_path = result["file_path"]
         return f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
 
-    async def download_file_bytes(self, file_id: str) -> bytes:
-        """Downloads a Telegram file directly into bytes."""
+    async def download_file_bytes(self, file_id: str, max_attempts: int = 3) -> bytes:
+        """Downloads a Telegram file directly into bytes with retry on transient network errors."""
         download_url = await self.get_file_download_url(file_id)
         client = get_http_client()
-        response = await client.get(download_url)
-        response.raise_for_status()
-        content = response.content
-        max_size = getattr(settings, "MAX_AUDIO_SIZE_BYTES", 3 * 1024 * 1024)
-        if len(content) > max_size:
-            raise ValueError(f"Downloaded file size ({len(content)} bytes) exceeds limit ({max_size} bytes)")
-        return content
+        timeout = make_timeout(30.0, connect=5.0, pool=5.0)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = await client.get(download_url, timeout=timeout)
+                response.raise_for_status()
+                content = response.content
+                max_size = getattr(settings, "MAX_AUDIO_SIZE_BYTES", 3 * 1024 * 1024)
+                if len(content) > max_size:
+                    raise ValueError(f"Downloaded file size ({len(content)} bytes) exceeds limit ({max_size} bytes)")
+                return content
+            except (httpx.TimeoutException, httpx.ConnectError, ConnectionError, OSError) as net_err:
+                if attempt == max_attempts:
+                    raise
+                backoff = 0.5 * (2 ** (attempt - 1))
+                logger.warning(f"[Telegram Download Err] {net_err}. Retrying in {backoff:.2f}s (attempt {attempt}/{max_attempts})...")
+                await asyncio.sleep(backoff)
 
 
     async def send_document(self, chat_id: int, file_path: str, caption: str | None = None) -> None:
@@ -193,7 +203,8 @@ class TelegramService:
                 response = await client.post(
                     f"{self.api_url}/sendDocument",
                     data=data,
-                    files={"document": f}
+                    files={"document": f},
+                    timeout=make_timeout(60.0, connect=5.0, pool=5.0)
                 )
                 response.raise_for_status()
         except Exception as e:
@@ -206,7 +217,8 @@ class TelegramService:
             client = get_http_client()
             response = await client.get(
                 f"{self.api_url}/getFile",
-                params={"file_id": file_id}
+                params={"file_id": file_id},
+                timeout=make_timeout(15.0, connect=5.0, pool=5.0)
             )
             response.raise_for_status()
             data = response.json()

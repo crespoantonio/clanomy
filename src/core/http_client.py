@@ -1,9 +1,26 @@
 import httpx
 import logging
-from typing import Optional
+from typing import Optional, Union
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+def make_timeout(
+    timeout: Optional[Union[float, httpx.Timeout]] = None,
+    connect: float = 5.0,
+    pool: float = 5.0,
+    write: float = 10.0,
+    default_read: float = 30.0,
+) -> httpx.Timeout:
+    """
+    Constructs an httpx.Timeout preserving fast connect and pool timeouts.
+    Prevents connection pool starvation from causing event loop delays.
+    """
+    if isinstance(timeout, httpx.Timeout):
+        return timeout
+    read_timeout = timeout if timeout is not None else default_read
+    return httpx.Timeout(read_timeout, connect=connect, pool=pool, write=write)
+
 
 class HTTPClientManager:
     """

@@ -36,7 +36,6 @@ def test_parse_amount_string():
 
 @pytest.fixture
 def query_service():
-    QueryService._instance = None
     with patch("src.core.llm.providers.ollama_provider.ollama.AsyncClient"), \
          patch("src.services.query.service.EncryptionService") as mock_enc:
         service = QueryService()

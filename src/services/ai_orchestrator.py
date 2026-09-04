@@ -92,7 +92,11 @@ class _BoundedLockStore:
         lock = asyncio.Lock()
         self._locks[key] = lock
         if len(self._locks) > self._max:
-            self._locks.popitem(last=False)
+            # Evict the oldest unlocked lock to prevent evicting an active in-flight lock
+            for candidate_key, candidate_lock in list(self._locks.items()):
+                if not candidate_lock.locked() and candidate_key != key:
+                    del self._locks[candidate_key]
+                    break
         return lock
 
 class AIOrchestrator:

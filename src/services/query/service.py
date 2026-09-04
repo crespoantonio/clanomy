@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import threading
 import time
 import html
 import re
@@ -57,24 +56,14 @@ from src.services.query.formatters import (
 logger = logging.getLogger(__name__)
 
 class QueryService:
-    _instance: Optional['QueryService'] = None
-    _lock = threading.Lock()
+    def __init__(
+        self,
+        provider: Optional[BaseLLMProvider] = None,
+        encryption_service: Optional[EncryptionService] = None
+    ):
+        self.provider = provider or get_llm_provider()
+        self.encryption_service = encryption_service or EncryptionService()
 
-    def __new__(cls, provider: Optional[BaseLLMProvider] = None) -> 'QueryService':
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super(QueryService, cls).__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-
-    def __init__(self, provider: Optional[BaseLLMProvider] = None):
-        if not self._initialized:
-            self.provider = provider or get_llm_provider()
-            self.encryption_service = EncryptionService()
-            self._initialized = True
-        elif provider is not None:
-            self.provider = provider
 
     def _resolve_date_range(self, timeframe: str, start_date_str: Optional[str], end_date_str: Optional[str], reference_time: Optional[datetime] = None, tz_name: Optional[str] = None, future_inclusive: bool = False) -> tuple[Optional[datetime], Optional[datetime]]:
         return resolve_date_range(timeframe, start_date_str, end_date_str, reference_time, tz_name, future_inclusive=future_inclusive)
@@ -260,7 +249,10 @@ class QueryService:
                 intent = ParsedQueryIntent.model_validate_json(intent_json)
                 return intent
             except (ValidationError, ValueError) as val_err:
-                logger.warning(f"Query intent LLM parsing failed validation ({val_err}). Falling back to deterministic intent.")
+                logger.warning(
+                    f"Query intent LLM parsing failed validation ({val_err}) | "
+                    f"Raw LLM output: {intent_json!r}. Falling back to deterministic intent."
+                )
                 return ParsedQueryIntent(
                     intent="spending_summary",
                     timeframe="this_month",

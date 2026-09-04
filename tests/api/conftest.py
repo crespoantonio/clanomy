@@ -115,14 +115,6 @@ def mock_llm_responses(monkeypatch):
     monkeypatch.setattr("src.services.extraction.ExtractionService.classify_and_extract", mock_extract)
     monkeypatch.setattr("src.services.query.QueryService.parse_intent", mock_parse_intent)
 
-@pytest.fixture(autouse=True)
-def reset_singletons():
-    """Reset singletons to avoid state bleed between tests."""
-    QueryService._instance = None
-    ExtractionService._instance = None
-    yield
-    QueryService._instance = None
-    ExtractionService._instance = None
 
 @pytest.fixture
 def app_client(monkeypatch):

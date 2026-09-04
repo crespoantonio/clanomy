@@ -27,10 +27,8 @@ def setup_db(monkeypatch):
     monkeypatch.setattr("src.services.handlers.notion_handler.engine", test_engine)
     monkeypatch.setattr("src.services.query.service.engine", test_engine)
     FamilyService._instance = None
-    QueryService._instance = None
     yield test_engine
     FamilyService._instance = None
-    QueryService._instance = None
 
 def test_fallback_regex_classify_zero_amount_payment():
     res = fallback_regex_classify("Pagué la tarjeta visa", default_currency="ARS")

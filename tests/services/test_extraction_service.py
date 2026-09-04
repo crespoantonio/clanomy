@@ -15,8 +15,6 @@ def mock_ollama_client():
 
 @pytest.fixture
 def service(mock_ollama_client):
-    # Reset singleton for testing
-    ExtractionService._instance = None
     return ExtractionService()
 
 @pytest.mark.anyio
@@ -284,7 +282,6 @@ async def test_fallback_regex_extract_dual_intent(service, mock_ollama_client):
 @pytest.mark.anyio
 async def test_extract_via_cloud_ai_success(monkeypatch):
     monkeypatch.setattr(settings, "AI_API_KEY", "gsk_test_12345")
-    ExtractionService._instance = None
     service = ExtractionService()
     
     mock_resp = MagicMock()

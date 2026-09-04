@@ -1,6 +1,5 @@
 import time
 import logging
-import threading
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
@@ -22,23 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 class ExtractionService:
-    _instance: Optional['ExtractionService'] = None
-    _lock = threading.Lock()
-
-    def __new__(cls, provider: Optional[BaseLLMProvider] = None) -> 'ExtractionService':
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super(ExtractionService, cls).__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-
     def __init__(self, provider: Optional[BaseLLMProvider] = None):
-        if not self._initialized:
-            self.provider = provider or get_llm_provider()
-            self._initialized = True
-        elif provider is not None:
-            self.provider = provider
+        self.provider = provider or get_llm_provider()
+
 
     def _fallback_regex_extract(self, text: str, default_currency: Optional[str] = None) -> ExtractionResult:
         return fallback_regex_extract(text, default_currency=default_currency)
@@ -87,7 +72,10 @@ class ExtractionService:
                 result = UnifiedResult.model_validate_json(content)
                 return result
             except ValidationError as ve:
-                logger.warning(f"Pydantic validation failed on UnifiedResult output: {ve}. Attempting fallback regex parser.")
+                logger.warning(
+                    f"Pydantic validation failed on UnifiedResult output: {ve} | "
+                    f"Raw LLM output: {content!r}. Attempting fallback regex parser."
+                )
                 return self._fallback_regex_classify(text, default_currency=effective_default_currency)
         except Exception as e:
             logger.error(f"AI provider error in classify_and_extract: {e}. Attempting fallback regex parser.")
@@ -140,7 +128,10 @@ class ExtractionService:
                 result = ExtractionResult.model_validate_json(content)
                 return result
             except ValidationError as ve:
-                logger.warning(f"Pydantic validation failed on LLM output: {ve}. Attempting fallback regex parser.")
+                logger.warning(
+                    f"Pydantic validation failed on LLM output: {ve} | "
+                    f"Raw LLM output: {content!r}. Attempting fallback regex parser."
+                )
                 return self._fallback_regex_extract(text, default_currency=effective_default_currency)
         except Exception as e:
             logger.error(f"Extraction error: {e}. Attempting fallback regex parser.")

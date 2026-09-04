@@ -7,15 +7,60 @@ from src.services.extraction.models import ExtractionResult, UnifiedResult, Extr
 
 logger = logging.getLogger(__name__)
 
+
+def _parse_amount_str(raw: str) -> float:
+    """
+    Parses numeric amount from string handling both standard (1,250.50)
+    and European / Latin American (1.250,50 or 1,50) decimal conventions.
+    """
+    s = raw.strip().lstrip("$€£").strip()
+    if not s:
+        raise ValueError("Empty amount string")
+
+    # Case 1: Both comma and dot present (e.g. 1,250.50 or 1.250,50)
+    if ',' in s and '.' in s:
+        if s.rfind(',') > s.rfind('.'):
+            # Comma is the decimal separator: 1.250,50 -> 1250.50
+            clean = s.replace('.', '').replace(',', '.')
+        else:
+            # Dot is the decimal separator: 1,250.50 -> 1250.50
+            clean = s.replace(',', '')
+        return float(clean)
+
+    # Case 2: Only comma present (e.g. 1,50 or 1,5 or 1,000)
+    if ',' in s:
+        parts = s.split(',')
+        # If there is exactly one comma and the right part has 1 or 2 digits, it's a decimal (e.g. 1,5 or 12,50)
+        if len(parts) == 2 and len(parts[1]) in (1, 2):
+            return float(s.replace(',', '.'))
+        else:
+            # Multiple commas (1,000,000) or 3 digits (1,000) -> thousands separator
+            return float(s.replace(',', ''))
+
+    # Case 3: Only dot present or integer (e.g. 15.50, 1000)
+    if '.' in s:
+        parts = s.split('.')
+        # If multiple dots (1.000.000) or single dot with 3 digits and no decimals (e.g. 1.000)
+        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3 and int(parts[0]) >= 1):
+            return float(s.replace('.', ''))
+        return float(s)
+
+    return float(s)
+
+
 def fallback_regex_extract(text: str, default_currency: Optional[str] = None) -> ExtractionResult:
     """Attempt to extract amount, type, category, and concept via regex and keyword heuristics as a last resort."""
-    amount_match = re.search(r'\b(\d+(?:[.,]\d{1,2})?)\b', text.replace(',', ''))
+    amount_pattern = r'(?<![/\d-])[\$€£]?\s*\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?|\d+)\b(?![/\d-])'
+    amount_match = re.search(amount_pattern, text)
     if not amount_match:
-        amount_match = re.search(r'[$€£](\d+(?:[.,]\d{1,2})?)', text.replace(',', ''))
+        amount_match = re.search(r'[$€£]\s*(\d+(?:[.,]\d{1,2})?)', text)
         if not amount_match:
             raise ExtractionError("Fallback failed: No amount found in text.")
-    
-    amount = float(amount_match.group(1).replace(',', ''))
+
+    try:
+        amount = _parse_amount_str(amount_match.group(1))
+    except Exception as parse_err:
+        raise ExtractionError(f"Fallback failed to parse amount: {parse_err}") from parse_err
     
     effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
     currency = effective_default_currency
@@ -126,8 +171,8 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
         re.search(r'\b(?:delete|remove|elimina|eliminar|borra|borrar)\s+(?:el\s+ingreso|el\s+gasto|la\s+transacci[oó]n|el\s+sueldo|the\s+income|the\s+expense)\b', text_lower)
     )
     if undo_match:
-        target_amt_match = re.search(r'\b(\d+(?:[.,]\d+)?)\b', text.replace(',', ''))
-        target_amt = float(target_amt_match.group(1)) if target_amt_match else None
+        target_amt_match = re.search(r'(?<![/\d-])[\$€£]?\s*\b(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?|\d+)\b(?![/\d-])', text)
+        target_amt = _parse_amount_str(target_amt_match.group(1)) if target_amt_match else None
         target_curr = None
         if re.search(r'\b(?:d[oó]lar(?:es)?|usd)\b', text_lower):
             target_curr = "USD"
@@ -140,7 +185,7 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
     if curr_corr_match:
         raw_amt = curr_corr_match.group(1)
         raw_curr = curr_corr_match.group(2).lower()
-        target_amt = float(raw_amt.replace(',', '')) if raw_amt else None
+        target_amt = _parse_amount_str(raw_amt) if raw_amt else None
         new_curr = "USD" if "dolar" in raw_curr or raw_curr == "usd" else ("EUR" if raw_curr == "eur" else (effective_default_currency if "peso" in raw_curr else raw_curr.upper()))
         return UnifiedResult(
             action="edit_last",
@@ -160,9 +205,9 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
 
     if fx_amount_match:
         verb = fx_amount_match.group(1).lower()
-        amt1 = float(fx_amount_match.group(2).replace(',', ''))
+        amt1 = _parse_amount_str(fx_amount_match.group(2))
         curr1 = _parse_curr_token(fx_amount_match.group(3), "USD" if "dolar" in fx_amount_match.group(3).lower() else effective_default_currency)
-        amt2 = float(fx_amount_match.group(4).replace(',', ''))
+        amt2 = _parse_amount_str(fx_amount_match.group(4))
         curr2 = _parse_curr_token(fx_amount_match.group(5), effective_default_currency if curr1 == "USD" else "USD")
 
         is_buy = any(b in verb for b in ["compr", "bought", "buy"])
@@ -197,9 +242,9 @@ def fallback_regex_classify(text: str, default_currency: Optional[str] = None) -
         )
 
     elif fx_rate_match:
-        amt1 = float(fx_rate_match.group(2).replace(',', ''))
+        amt1 = _parse_amount_str(fx_rate_match.group(2))
         curr1 = "USD"
-        rate = float(fx_rate_match.group(4).replace(',', ''))
+        rate = _parse_amount_str(fx_rate_match.group(4))
         amt2 = round(amt1 * rate, 2)
         curr2 = effective_default_currency
 

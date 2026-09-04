@@ -195,9 +195,9 @@ async def health_check(response: Response, session: Session = Depends(get_sessio
     # Lightweight probe for self-hosted Ollama backend
     if not settings.AI_API_KEY:
         try:
-            from src.core.http_client import get_http_client
+            from src.core.http_client import get_http_client, make_timeout
             client = get_http_client()
-            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=make_timeout(3.0, connect=1.5, pool=1.5))
             health["ollama"] = "connected" if r.status_code == 200 else "degraded"
         except Exception:
             health["ollama"] = "unreachable"

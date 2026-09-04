@@ -21,7 +21,7 @@ from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
-from src.services.billing.lemonsqueezy_billing import LemonSqueezyBillingService
+from src.services.billing.billing_service import BillingService
 from src.services.handlers.command_handler import CommandHandler
 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 from src.services.subscription_service import (
@@ -110,7 +110,7 @@ async def telegram_webhook(
 
     payload = await request.json()
     telegram_service = TelegramService()
-    billing_service = LemonSqueezyBillingService(telegram_service)
+    billing_service = BillingService(telegram_service)
 
     if "message" not in payload:
         logger.info(f"Ignoring non-message Telegram update (keys: {list(payload.keys())})")

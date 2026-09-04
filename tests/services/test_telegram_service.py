@@ -55,7 +55,7 @@ async def test_send_message_with_reply_markup(telegram_service):
 
         reply_markup = {
             "inline_keyboard": [
-                [{"text": "Upgrade", "url": "https://checkout.lemonsqueezy.com/buy/123"}]
+                [{"text": "Upgrade", "url": "https://checkout.example.com/buy/123"}]
             ]
         }
         await telegram_service.send_message(

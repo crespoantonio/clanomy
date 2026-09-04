@@ -11,7 +11,6 @@ from src.core.config import settings
 from src.core.http_client import HTTPClientManager
 from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
-from src.api.routes.lemonsqueezy import router as lemonsqueezy_router
 from src.api.routes.internal_jobs import router as internal_jobs_router
 from src.api.routes.simulate import router as simulate_router
 
@@ -96,11 +95,10 @@ async def security_and_origin_middleware(request: Request, call_next):
     logger.info(f"Incoming HTTP {request.method} {request.url.path} from {client_ip}")
 
     # 1. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
-    # Allows /health probe, Telegram webhook, Lemon Squeezy webhook, and internal cron jobs pass-through
+    # Allows /health probe, Telegram webhook, and internal cron jobs pass-through
     if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in (
         "/health",
         "/api/v1/telegram/webhook",
-        "/api/webhooks/lemonsqueezy",
         "/api/internal/jobs/trial-lifecycle"
     ):
         origin_header = request.headers.get("X-Origin-Verify-Secret") or request.headers.get("X-Clanomy-Origin-Key")
@@ -130,7 +128,6 @@ _LANDING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
 app.include_router(simulate_router, prefix="/api/v1")
-app.include_router(lemonsqueezy_router)
 app.include_router(internal_jobs_router)
 
 @app.get("/", include_in_schema=False)

@@ -42,18 +42,23 @@ def mock_llm_responses(monkeypatch):
     Deterministically mock LLM responses so tests run fast and don't fail due to 
     LLM output variance.
     """
-    async def mock_extract(self, text: str, user_id=None, raw_timestamp=None, primary_currency="USD"):
+    async def mock_extract(self, text: str, *args, default_currency="USD", primary_currency=None, **kwargs):
         from src.services.extraction.models import UnifiedResult
         import re
-        amount = 25.50
+
+        text_lower = (text or '').lower()
         amount_match = re.search(r'\b\d+(?:\.\d{1,2})?\b', text)
+        is_query = any(kw in text_lower for kw in ["how", "what", "show", "tell", "summary", "breakdown", "total", "query", "compare", "list"])
+        if is_query and not amount_match:
+            return UnifiedResult(action="query", amount=None)
+
+        amount = 25.50
         if amount_match:
             amount = float(amount_match.group(0))
             
         concept = text
         tx_type = "expense"
         category = "Food/Drink"
-        text_lower = (text or '').lower()
         if "salary" in text_lower or "earned" in text_lower or "got paid" in text_lower or "income" in text_lower or "freelance" in text_lower:
             tx_type = "income"
             category = "Salary" if "salary" in text_lower or "got paid" in text_lower else "Freelance"
@@ -64,11 +69,12 @@ def mock_llm_responses(monkeypatch):
             concept = "groceries at Walmart"
             
         return UnifiedResult(
+            action="log_transaction",
             type=tx_type,
             amount=amount,
             category=category,
             concept=concept,
-            currency=primary_currency or "USD"
+            currency=primary_currency or default_currency or "USD"
         )
 
     async def mock_parse_intent(self, text: str, reference_time=None):
@@ -105,6 +111,7 @@ def mock_llm_responses(monkeypatch):
             return ParsedQueryIntent(intent="spending_summary", timeframe="this_month")
 
     monkeypatch.setattr("src.services.extraction.ExtractionService.extract", mock_extract)
+    monkeypatch.setattr("src.services.extraction.ExtractionService.classify_and_extract", mock_extract)
     monkeypatch.setattr("src.services.query.QueryService.parse_intent", mock_parse_intent)
 
 @pytest.fixture(autouse=True)
@@ -156,15 +163,10 @@ def mock_telegram(monkeypatch):
         pass
         
     try:
-        monkeypatch.setattr("src.services.billing.lemonsqueezy_billing.TelegramService", lambda: mock_instance)
-    except AttributeError:
+        monkeypatch.setattr("src.services.billing.billing_service.TelegramService", lambda: mock_instance)
+    except (AttributeError, ModuleNotFoundError):
         pass
 
-    try:
-        from src.api.routes import lemonsqueezy
-        lemonsqueezy.billing_service.telegram_service = mock_instance
-    except Exception:
-        pass
 
     try:
         monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", lambda: mock_instance)

@@ -9,7 +9,6 @@ from src.core.config import settings
 from src.core.subscription_config import (
     SUBSCRIPTION_TIERS,
     get_tier_config,
-    get_tier_by_variant_id,
 )
 from src.db.models import Family, User, FamilyInvite
 from src.services.subscription_service import (
@@ -18,8 +17,7 @@ from src.services.subscription_service import (
     has_unlimited_access,
 )
 from src.services.family_service import FamilyService, PlanLimitExceededError
-from src.services.billing.lemonsqueezy_billing import LemonSqueezyBillingService
-from src.templates.telegram_messages import DUO_PRO_CONFIRMATION
+from src.services.billing.billing_service import BillingService
 
 
 class MockTelegramService:
@@ -75,13 +73,11 @@ def test_subscription_tiers_registry():
     assert duo.price_usd_cents == 799
     assert duo.max_members == 2
     assert duo.internal_plan == "duo_pro"
-    assert duo.variant_id_setting_name == "LEMON_SQUEEZY_DUO_PRO_VARIANT_ID"
 
     duo_ann = SUBSCRIPTION_TIERS["duo_pro_annual"]
     assert duo_ann.price_usd_cents == 7999
     assert duo_ann.max_members == 2
     assert duo_ann.duration_days == 365
-    assert duo_ann.variant_id_setting_name == "LEMON_SQUEEZY_DUO_PRO_ANNUAL_VARIANT_ID"
 
     # Family Pro
     fam = SUBSCRIPTION_TIERS["family_pro"]
@@ -168,81 +164,13 @@ def test_duo_pro_member_capacity_enforcement(tier_test_session):
     assert "reached the Duo Pro limit of 2 members" in msg3
 
 
-def test_duo_pro_webhook_activation(tier_test_session, monkeypatch):
-    """Verify that Lemon Squeezy webhook for duo_pro upgrades workspace to max_members=2 and sends confirmation."""
-    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
-    monkeypatch.setattr(settings, "LEMON_SQUEEZY_STORE_ID", "store_999")
-    monkeypatch.setattr(settings, "LEMON_SQUEEZY_DUO_PRO_VARIANT_ID", "var_duo_123")
-
-    family = Family(name="Test Duo Family", plan_type="free", max_members=5)
-    tier_test_session.add(family)
-    tier_test_session.commit()
-    tier_test_session.refresh(family)
-
-    user = User(telegram_id=5555, family_id=family.id, is_admin=True)
-    tier_test_session.add(user)
-    tier_test_session.commit()
-
-    mock_telegram = MagicMock()
-    mock_telegram.send_message = AsyncMock()
-
-    billing_service = LemonSqueezyBillingService(mock_telegram)
-
-    webhook_payload = {
-        "meta": {
-            "event_name": "subscription_created",
-            "custom_data": {
-                "family_id": str(family.id),
-                "chat_id": "5555"
-            }
-        },
-        "data": {
-            "id": "sub_duo_001",
-            "attributes": {
-                "store_id": "store_999",
-                "customer_id": "cust_duo_001",
-                "variant_id": "var_duo_123",
-                "status": "active",
-                "renews_at": "2027-01-01T00:00:00Z",
-                "urls": {
-                    "customer_portal": "https://billing.lemonsqueezy.com/portal/duo"
-                }
-            }
-        }
-    }
-
-    mock_bg = MagicMock()
-    res = billing_service.handle_webhook_event(
-        session=tier_test_session,
-        event_name="subscription_created",
-        payload=webhook_payload,
-        background_tasks=mock_bg
-    )
-
-    assert res["status"] == "upgraded"
-    assert res["plan"] == "duo_pro"
-
-    # Verify family state
-    tier_test_session.refresh(family)
-    assert family.plan_type == "duo_pro"
-    assert family.max_members == 2
-    assert family.subscription_status == "active"
-    assert family.customer_portal_url == "https://billing.lemonsqueezy.com/portal/duo"
-
-    # Verify confirmation message was scheduled
-    mock_bg.add_task.assert_called_with(
-        mock_telegram.send_message,
-        chat_id=5555,
-        text=DUO_PRO_CONFIRMATION
-    )
-
-
 @pytest.mark.anyio
 async def test_handle_upgrade_command_shows_all_three_tiers():
     """Verify /upgrade displays all 3 tiers with updated pricing in the inline keyboard."""
     mock_telegram = MagicMock()
     mock_telegram.send_message = AsyncMock()
-    billing_service = LemonSqueezyBillingService(mock_telegram)
+    mock_telegram.get_bot_username = AsyncMock(return_value="TestClanomyBot")
+    billing_service = BillingService(mock_telegram)
 
     family_id = uuid4()
     family = Family(id=family_id, name="Demo Family", plan_type="free")
@@ -250,7 +178,7 @@ async def test_handle_upgrade_command_shows_all_three_tiers():
     mock_bg = MagicMock()
 
     with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
-         patch.object(billing_service, "create_checkout_url", AsyncMock(side_effect=lambda f, c, plan, **kw: f"https://checkout.test/{plan}")):
+         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan: f"https://checkout.test/{plan}")):
         
         await billing_service.handle_upgrade_command(
             background_tasks=mock_bg,
@@ -277,7 +205,8 @@ async def test_handle_upgrade_command_shows_all_three_tiers():
 async def test_handle_upgrade_annual_shows_all_three_tiers():
     """Verify /upgrade annual displays all 3 annual tiers with updated pricing."""
     mock_telegram = MagicMock()
-    billing_service = LemonSqueezyBillingService(mock_telegram)
+    mock_telegram.get_bot_username = AsyncMock(return_value="TestClanomyBot")
+    billing_service = BillingService(mock_telegram)
 
     family_id = uuid4()
     family = Family(id=family_id, name="Demo Family", plan_type="free")
@@ -285,7 +214,7 @@ async def test_handle_upgrade_annual_shows_all_three_tiers():
     mock_bg = MagicMock()
 
     with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
-         patch.object(billing_service, "create_checkout_url", AsyncMock(side_effect=lambda f, c, plan, **kw: f"https://checkout.test/{plan}")):
+         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan: f"https://checkout.test/{plan}")):
         
         await billing_service.handle_upgrade_command(
             background_tasks=mock_bg,
@@ -310,7 +239,8 @@ async def test_handle_upgrade_annual_shows_all_three_tiers():
 async def test_handle_upgrade_duo_specific():
     """Verify /upgrade duo generates a direct checkout for Duo Pro."""
     mock_telegram = MagicMock()
-    billing_service = LemonSqueezyBillingService(mock_telegram)
+    mock_telegram.get_bot_username = AsyncMock(return_value="TestClanomyBot")
+    billing_service = BillingService(mock_telegram)
 
     family_id = uuid4()
     family = Family(id=family_id, name="Demo Family", plan_type="free")
@@ -318,7 +248,7 @@ async def test_handle_upgrade_duo_specific():
     mock_bg = MagicMock()
 
     with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
-         patch.object(billing_service, "create_checkout_url", AsyncMock(return_value="https://checkout.test/duo_pro")):
+         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(return_value="https://checkout.test/duo_pro")):
         
         await billing_service.handle_upgrade_command(
             background_tasks=mock_bg,

@@ -307,7 +307,7 @@ def test_webhook_billing_command(app_client, mock_telegram, telegram_payload_fac
     with Session(engine) as session:
         user = session.exec(select(User).where(User.telegram_id == user_id)).first()
         family = session.get(Family, user.family_id)
-        family.customer_portal_url = "https://app.lemonsqueezy.com/portal/test-cust-9005"
+        family.customer_portal_url = "https://billing.example.com/portal/test-cust-9005"
         session.add(family)
         session.commit()
 
@@ -322,151 +322,8 @@ def test_webhook_billing_command(app_client, mock_telegram, telegram_payload_fac
     assert len(mock_telegram.messages) == 1
     msg = mock_telegram.messages[0]
     assert "Manage Your Subscription" in msg["text"]
-    assert msg["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://app.lemonsqueezy.com/portal/test-cust-9005"
+    assert msg["reply_markup"]["inline_keyboard"][0][0]["url"] == "https://billing.example.com/portal/test-cust-9005"
 
-def test_lemonsqueezy_webhook_subscription_created(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
-    """[P0] Lemon Squeezy webhook provisions subscription and updates Family model."""
-    import hmac
-    import hashlib
-    import json
-    from src.core.config import settings
-    from src.db.session import engine
-    from sqlmodel import Session, select
-    from src.db.models import Family, User
-
-    secret = "test_webhook_secret_key"
-    monkeypatch.setattr(settings, "LEMON_SQUEEZY_WEBHOOK_SECRET", secret)
-    user_id = 9101
-
-    app_client.post(
-        "/api/v1/telegram/webhook",
-        json=telegram_payload_factory(text="/start", user_id=user_id),
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-    mock_telegram.messages.clear()
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        fam_id = str(user.family_id)
-
-    payload_dict = {
-        "meta": {
-            "event_name": "subscription_created",
-            "custom_data": {
-                "family_id": fam_id,
-                "chat_id": user_id,
-                "plan_type": "solo_pro"
-            }
-        },
-        "data": {
-            "id": "sub_ls_999",
-            "attributes": {
-                "customer_id": 888,
-                "renews_at": "2026-10-01T00:00:00Z",
-                "urls": {
-                    "customer_portal": "https://app.lemonsqueezy.com/my-orders/portal-token-999"
-                }
-            }
-        }
-    }
-    raw_body = json.dumps(payload_dict).encode("utf-8")
-    sig = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-
-    response = app_client.post(
-        "/api/webhooks/lemonsqueezy",
-        content=raw_body,
-        headers={"X-Signature": sig, "Content-Type": "application/json"}
-    )
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        family = session.get(Family, user.family_id)
-        assert family.plan_type == "solo_pro"
-        assert family.subscription_status == "active"
-        assert family.max_members == 1
-        assert family.lemonsqueezy_subscription_id == "sub_ls_999"
-        assert family.lemonsqueezy_customer_id == "888"
-        assert family.customer_portal_url == "https://app.lemonsqueezy.com/my-orders/portal-token-999"
-
-    assert len(mock_telegram.messages) == 1
-    welcome = mock_telegram.messages[0]["text"]
-    assert "Welcome to Clanomy Solo Pro" in welcome
-
-def test_lemonsqueezy_webhook_protects_lifetime_pro(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
-    """[P0] Lemon Squeezy webhook protects lifetime_pro workspaces from modification."""
-    import hmac
-    import hashlib
-    import json
-    from src.core.config import settings
-    from src.db.session import engine
-    from sqlmodel import Session, select
-    from src.db.models import Family, User
-
-    secret = "test_webhook_secret_key"
-    monkeypatch.setattr(settings, "LEMON_SQUEEZY_WEBHOOK_SECRET", secret)
-    user_id = 9301
-
-    app_client.post(
-        "/api/v1/telegram/webhook",
-        json=telegram_payload_factory(text="/start", user_id=user_id),
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        family = session.get(Family, user.family_id)
-        family.plan_type = "lifetime_pro"
-        family.subscription_status = "active"
-        session.add(family)
-        session.commit()
-        fam_id = str(family.id)
-
-    mock_telegram.messages.clear()
-
-    payload_dict = {
-        "meta": {
-            "event_name": "subscription_created",
-            "custom_data": {
-                "family_id": fam_id,
-                "chat_id": user_id,
-                "plan_type": "solo_pro"
-            }
-        },
-        "data": {
-            "id": "sub_ls_lifetime_test",
-            "attributes": {"customer_id": 111}
-        }
-    }
-    raw_body = json.dumps(payload_dict).encode("utf-8")
-    sig = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-
-    response = app_client.post(
-        "/api/webhooks/lemonsqueezy",
-        content=raw_body,
-        headers={"X-Signature": sig, "Content-Type": "application/json"}
-    )
-    assert response.status_code == 200
-    assert response.json()["result"]["status"] == "ignored_lifetime"
-
-    with Session(engine) as session:
-        user = session.exec(select(User).where(User.telegram_id == user_id)).first()
-        family = session.get(Family, user.family_id)
-        assert family.plan_type == "lifetime_pro"
-        assert family.subscription_status == "active"
-
-    assert len(mock_telegram.messages) == 0
-
-def test_lemonsqueezy_webhook_oversized_payload_rejected(app_client):
-    """[Security] Lemon Squeezy webhook rejects oversized payloads (>256KB) with HTTP 413."""
-    oversized_body = b"X" * 300000
-    response = app_client.post(
-        "/api/webhooks/lemonsqueezy",
-        content=oversized_body,
-        headers={"X-Signature": "dummy", "Content-Type": "application/json", "Content-Length": str(len(oversized_body))}
-    )
-    assert response.status_code == 413
 
 def test_webhook_lifecycle_renewal(app_client):
     """[P0] Webhook processes renewal and extends current_period_end."""

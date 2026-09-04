@@ -31,8 +31,12 @@ class HTTPClientManager:
     async def close(self):
         """Gracefully closes the shared AsyncClient."""
         if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+            try:
+                await self._client.aclose()
+            except Exception:
+                pass
+            finally:
+                self._client = None
             logger.info("Closed global HTTP client pool")
 
     @property

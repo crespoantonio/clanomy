@@ -32,8 +32,8 @@ const TRANSLATIONS = {
     "trust.notion_desc": "Direct two-way database mirroring",
     "trust.multi_title": "Multi-Member Ledgers",
     "trust.multi_desc": "Per-member attribution & privacy",
-    "trust.mor_title": "Merchant of Record",
-    "trust.mor_desc": "Secure checkout via Lemon Squeezy",
+    "trust.mor_title": "Secure Payments",
+    "trust.mor_desc": "Encrypted global checkout",
 
     // Features Grid
     "features.badge": "Designed for Simplicity",
@@ -172,7 +172,7 @@ const TRANSLATIONS = {
 
     // Fulfillment Box
     "fulfill.title": "Instant Automated Delivery",
-    "fulfill.desc": "Subscriptions are sold via our authorized Merchant of Record, <b>Lemon Squeezy</b>. Upon completing checkout, your plan is instantly activated via real-time webhooks linked directly to your Telegram workspace. No license keys to enter—just open <code>@clanomy_bot</code> to enjoy unlimited access immediately.",
+    "fulfill.desc": "Upon completing subscription checkout, your plan is instantly activated via real-time confirmation linked directly to your Telegram workspace. No license keys to enter—just open <code>@clanomy_bot</code> to enjoy unlimited access immediately.",
 
     // Disclaimer
     "disclaimer.title": "Regulatory & Software Classification Notice",
@@ -198,7 +198,7 @@ const TRANSLATIONS = {
     "faq.q8": "Can a third party host Clanomy and charge money for it?",
     "faq.a8": "<p><b>No.</b> Under our <b>Business Source License 1.1 (BSL 1.1)</b>, self-hosting is free for personal, non-commercial, and family use. However, third parties are legally prohibited from offering Clanomy on a commercial, hosted, managed, or Software-as-a-Service (SaaS) basis, or charging users for access. Commercial SaaS rights are reserved exclusively to Clanomy Authors.</p>",
     "faq.q9": "How do I cancel or manage my subscription?",
-    "faq.a9": "<p>You can manage your subscription at any time by typing <code>/upgrade</code> in the bot and clicking \"Manage Billing\". This opens your Lemon Squeezy Customer Portal where you can cancel, update your payment method, or view invoices with one click.</p>",
+    "faq.a9": "<p>You can manage your subscription at any time by typing <code>/billing</code> in the bot. This opens your secure customer portal where you can cancel, update your payment method, or view invoices with one click.</p>",
     "faq.q10": "What are the AI message limits per tier?",
     "faq.a10": "<p>AI message limits are shared across all members in your workspace and reset monthly (Pro tiers reset daily). Each tier's monthly allowance:</p><ul><li><b>Free:</b> 20 AI messages/month (shared)</li><li><b>Solo Pro:</b> 60 AI messages/day (1 user)</li><li><b>Duo Pro:</b> 120 AI messages/day (shared pool between 2 members)</li><li><b>Family Pro:</b> 300 AI messages/day (shared pool across up to 5 members)</li></ul><p>Slash commands (<code>/month</code>, <code>/balance</code>, <code>/bills</code>, etc.) do <b>not</b> consume AI messages—they are always free and instant.</p>",
 
@@ -208,13 +208,15 @@ const TRANSLATIONS = {
     "footer.support": "Support Contact:",
     "footer.kofi": "Support Project on Ko-fi",
     "footer.kofi_link": "Support on Ko-fi ☕",
+    "footer.github": "GitHub",
+    "footer.github_link": "GitHub Repository ↗",
     "footer.product_heading": "Product",
     "footer.legal_heading": "Legal & Compliance",
     "footer.terms": "Terms of Service",
     "footer.privacy": "Privacy Policy",
     "footer.refund": "Refund & Cancellation Policy",
     "footer.launch_bot": "Launch Telegram Bot",
-    "footer.copyright": "© 2026 Clanomy. All rights reserved. Payments securely processed by Lemon Squeezy (Merchant of Record).",
+    "footer.copyright": "© 2026 Clanomy. All rights reserved. Payments securely processed.",
     "footer.close_btn": "Close"
   },
 
@@ -249,8 +251,8 @@ const TRANSLATIONS = {
     "trust.notion_desc": "Reflejo directo bidireccional de base de datos",
     "trust.multi_title": "Libros Multimiembro",
     "trust.multi_desc": "Atribución individual y privacidad por miembro",
-    "trust.mor_title": "Merchant of Record",
-    "trust.mor_desc": "Pago seguro global vía Lemon Squeezy",
+    "trust.mor_title": "Pagos Seguros",
+    "trust.mor_desc": "Pago seguro global encriptado",
 
     // Features Grid
     "features.badge": "Diseñado para la Simplicidad",
@@ -389,7 +391,7 @@ const TRANSLATIONS = {
 
     // Fulfillment Box
     "fulfill.title": "Activación Instantánea y Automatizada",
-    "fulfill.desc": "Las suscripciones se comercializan a través de nuestro Merchant of Record autorizado, <b>Lemon Squeezy</b>. Al finalizar la compra, tu plan se activa de inmediato mediante webhooks vinculados a tu espacio de Telegram. Sin claves de licencia que ingresar: solo abre <code>@clanomy_bot</code> para disfrutar de acceso ilimitado.",
+    "fulfill.desc": "Al completar tu suscripción, tu plan se activa de inmediato mediante confirmación en tiempo real vinculada a tu espacio de Telegram. Sin claves de licencia que ingresar: solo abre <code>@clanomy_bot</code> para disfrutar de acceso ilimitado.",
 
     // Disclaimer
     "disclaimer.title": "Aviso Regulatorio y Clasificación de Software",
@@ -415,7 +417,7 @@ const TRANSLATIONS = {
     "faq.q8": "¿Puede un tercero hospedar Clanomy y cobrar por el servicio?",
     "faq.a8": "<p><b>No.</b> Bajo nuestra <b>Business Source License 1.1 (BSL 1.1)</b>, el auto-alojamiento es gratuito para uso personal, no comercial y familiar. Sin embargo, se prohíbe legalmente a terceros ofrecer Clanomy sobre una base comercial, alojada, gestionada o como Software como Servicio (SaaS), o cobrar a usuarios por el acceso. Los derechos comerciales de SaaS están reservados exclusivamente a los Autores de Clanomy.</p>",
     "faq.q9": "¿Cómo cancelo o gestiono mi suscripción?",
-    "faq.a9": "<p>Puedes administrar tu suscripción en cualquier momento escribiendo <code>/upgrade</code> en el bot y presionando \"Gestionar Facturación\". Esto abrirá tu Portal de Cliente de Lemon Squeezy, donde podrás cancelar, actualizar tu método de pago o consultar tus facturas con un solo clic.</p>",
+    "faq.a9": "<p>Puedes administrar tu suscripción en cualquier momento escribiendo <code>/billing</code> en el bot. Esto abrirá tu portal de cliente seguro, donde podrás cancelar, actualizar tu método de pago o consultar tus facturas con un solo clic.</p>",
     "faq.q10": "¿Cuáles son los límites de mensajes de IA por plan?",
     "faq.a10": "<p>Los mensajes de IA se comparten entre todos los integrantes del espacio. El plan Gratis se reinicia mensualmente; los planes Pro se reinician diariamente. Cuota de cada plan:</p><ul><li><b>Gratis:</b> 20 mensajes IA/mes (compartidos)</li><li><b>Solo Pro:</b> 60 mensajes IA/día (1 usuario)</li><li><b>Duo Pro:</b> 120 mensajes IA/día (grupo compartido entre 2 integrantes)</li><li><b>Family Pro:</b> 300 mensajes IA/día (grupo compartido entre hasta 5 integrantes)</li></ul><p>Los comandos slash (<code>/month</code>, <code>/balance</code>, <code>/bills</code>, etc.) <b>no</b> consumen mensajes de IA: son siempre gratuitos e instantáneos.</p>",
 
@@ -425,13 +427,15 @@ const TRANSLATIONS = {
     "footer.support": "Contacto de Soporte:",
     "footer.kofi": "Apoyar Proyecto en Ko-fi",
     "footer.kofi_link": "Apoyar en Ko-fi ☕",
+    "footer.github": "GitHub",
+    "footer.github_link": "Repositorio GitHub ↗",
     "footer.product_heading": "Producto",
     "footer.legal_heading": "Legal y Cumplimiento",
     "footer.terms": "Términos de Servicio",
     "footer.privacy": "Política de Privacidad",
     "footer.refund": "Política de Cancelación y Reembolso",
     "footer.launch_bot": "Abrir Bot en Telegram",
-    "footer.copyright": "© 2026 Clanomy. Todos los derechos reservados. Pagos procesados de forma segura por Lemon Squeezy (Merchant of Record).",
+    "footer.copyright": "© 2026 Clanomy. Todos los derechos reservados. Pagos procesados de forma segura.",
     "footer.close_btn": "Cerrar"
   }
 };

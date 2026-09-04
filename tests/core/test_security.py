@@ -108,20 +108,6 @@ def test_sanitize_exception_message():
     assert "secret123" not in sanitized
     assert "postgres:***@db.supabase.co:5432/postgres" in sanitized
 
-def test_sanitize_auth_tokens_lemonsqueezy_secrets(monkeypatch):
-    from src.core.security import sanitize_auth_tokens
-    
-    test_key = "ls_api_key_secret_998877665544"
-    test_sec = "ls_wh_signing_secret_1122334455"
-    monkeypatch.setattr(settings, "LEMON_SQUEEZY_API_KEY", test_key)
-    monkeypatch.setattr(settings, "LEMON_SQUEEZY_WEBHOOK_SECRET", test_sec)
-    
-    sample_text = f"API call failed: Authorization: Bearer {test_key} with secret {test_sec}"
-    sanitized = sanitize_auth_tokens(sample_text)
-    
-    assert test_key not in sanitized
-    assert test_sec not in sanitized
-    assert "[LEMON_SQUEEZY_KEY_REDACTED]" in sanitized or "Bearer [REDACTED]" in sanitized
-    assert "[LEMON_SQUEEZY_SECRET_REDACTED]" in sanitized
+
 
 

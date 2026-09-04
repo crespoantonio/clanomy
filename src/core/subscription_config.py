@@ -5,7 +5,7 @@ from typing import Dict, Optional
 class SubscriptionTier:
     """
     Unified specification for a subscription plan tier.
-    Centralizes pricing (USD), duration (monthly/yearly), member limits, and Lemon Squeezy variant mapping.
+    Centralizes pricing (USD), duration (monthly/yearly), member limits, and features.
     """
     code: str                         # e.g. "solo_pro", "solo_pro_annual", "family_pro", "family_pro_annual"
     internal_plan: str                # Target DB plan_type on Family model: "solo_pro" or "family_pro"
@@ -14,10 +14,9 @@ class SubscriptionTier:
     price_display: str                # Display price string (e.g. "$4.99 / month")
     price_usd_cents: int              # Price in USD cents (e.g. 499 for $4.99)
     duration_days: int                # Period duration in days (e.g. 30 for monthly, 365 for annual)
-    max_members: int                  # Workspace member capacity (1 for Solo, 5 for Family)
+    max_members: int                  # Workspace member capacity (1 for Solo, 2 for Duo, 5 for Family)
     notion_enabled: bool              # Whether Notion database mirroring is enabled
     billing_period_name: str          # "month" or "year"
-    variant_id_setting_name: str      # Name of settings attribute holding the Lemon Squeezy variant ID
 
 # Global Free Tier & Trial Constants
 FREE_TIER_MONTHLY_LIMIT: int = 20
@@ -45,8 +44,7 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
         duration_days=30,
         max_members=1,
         notion_enabled=True,
-        billing_period_name="month",
-        variant_id_setting_name="LEMON_SQUEEZY_SOLO_PRO_VARIANT_ID"
+        billing_period_name="month"
     ),
     "duo_pro": SubscriptionTier(
         code="duo_pro",
@@ -58,8 +56,7 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
         duration_days=30,
         max_members=2,
         notion_enabled=True,
-        billing_period_name="month",
-        variant_id_setting_name="LEMON_SQUEEZY_DUO_PRO_VARIANT_ID"
+        billing_period_name="month"
     ),
     "family_pro": SubscriptionTier(
         code="family_pro",
@@ -71,8 +68,7 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
         duration_days=30,
         max_members=5,
         notion_enabled=True,
-        billing_period_name="month",
-        variant_id_setting_name="LEMON_SQUEEZY_FAMILY_PRO_VARIANT_ID"
+        billing_period_name="month"
     ),
     "solo_pro_annual": SubscriptionTier(
         code="solo_pro_annual",
@@ -84,8 +80,7 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
         duration_days=365,
         max_members=1,
         notion_enabled=True,
-        billing_period_name="year",
-        variant_id_setting_name="LEMON_SQUEEZY_SOLO_PRO_ANNUAL_VARIANT_ID"
+        billing_period_name="year"
     ),
     "duo_pro_annual": SubscriptionTier(
         code="duo_pro_annual",
@@ -97,8 +92,7 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
         duration_days=365,
         max_members=2,
         notion_enabled=True,
-        billing_period_name="year",
-        variant_id_setting_name="LEMON_SQUEEZY_DUO_PRO_ANNUAL_VARIANT_ID"
+        billing_period_name="year"
     ),
     "family_pro_annual": SubscriptionTier(
         code="family_pro_annual",
@@ -110,23 +104,10 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
         duration_days=365,
         max_members=5,
         notion_enabled=True,
-        billing_period_name="year",
-        variant_id_setting_name="LEMON_SQUEEZY_FAMILY_PRO_ANNUAL_VARIANT_ID"
+        billing_period_name="year"
     )
 }
 
 def get_tier_config(code: str) -> Optional[SubscriptionTier]:
     """Retrieve tier config by code."""
     return SUBSCRIPTION_TIERS.get(code)
-
-def get_tier_by_variant_id(variant_id: str | int | None) -> Optional[SubscriptionTier]:
-    """Retrieve tier config by resolving configured Lemon Squeezy variant ID."""
-    if not variant_id:
-        return None
-    from src.core.config import settings
-    str_vid = str(variant_id).strip()
-    for tier in SUBSCRIPTION_TIERS.values():
-        configured_vid = getattr(settings, tier.variant_id_setting_name, None)
-        if configured_vid and str(configured_vid).strip() == str_vid:
-            return tier
-    return None

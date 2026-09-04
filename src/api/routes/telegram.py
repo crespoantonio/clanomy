@@ -188,25 +188,25 @@ async def telegram_webhook(
                 elif cb_data.startswith("curr_set:"):
                     target_code = cb_data.split(":", 1)[1].upper()
                     await asyncio.to_thread(family_service.set_family_default_currency, family.id, target_code)
-                    target_page = 1
-                    for idx, p_list in enumerate(CURRENCY_PAGES):
-                        if any(c[0] == target_code for c in p_list):
-                            target_page = idx + 1
-                            break
-                    keyboard = build_currency_keyboard(page=target_page, active_currency=target_code)
                     success_text = format_currency_success_text(target_code)
-                    if message_id:
-                        await telegram_service.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            text=success_text,
-                            reply_markup=keyboard
-                        )
+
                     if cb_id:
                         await telegram_service.answer_callback_query(
                             callback_query_id=cb_id,
                             text=f"Default currency set to {target_code}"
                         )
+
+                    if message_id:
+                        deleted = await telegram_service.delete_message(chat_id=chat_id, message_id=message_id)
+                        if not deleted:
+                            await telegram_service.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text="<i>Currency selection completed.</i>",
+                                reply_markup={"inline_keyboard": []}
+                            )
+
+                    await telegram_service.send_message(chat_id=chat_id, text=success_text)
                     return {"status": "ok"}
 
             if cb_id:

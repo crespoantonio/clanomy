@@ -139,12 +139,10 @@ class TelegramService:
     async def delete_message(self, chat_id: int, message_id: int) -> bool:
         """Deletes a message from a Telegram chat."""
         try:
-            client = get_http_client()
-            response = await client.post(
-                f"{self.api_url}/deleteMessage",
+            await self._post_with_retry(
+                "deleteMessage",
                 json={"chat_id": chat_id, "message_id": message_id}
             )
-            response.raise_for_status()
             return True
         except Exception as e:
             logger.warning(f"Failed to delete message {message_id} in chat {chat_id}: {e}")

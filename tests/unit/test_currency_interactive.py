@@ -211,7 +211,8 @@ def test_telegram_webhook_callback_query_set_currency():
         mock_fs.set_family_default_currency = MagicMock()
 
         mock_ts = mock_ts_class.return_value
-        mock_ts.edit_message_text = AsyncMock()
+        mock_ts.delete_message = AsyncMock(return_value=True)
+        mock_ts.send_message = AsyncMock()
         mock_ts.answer_callback_query = AsyncMock()
 
         result = asyncio.run(telegram_webhook(
@@ -224,9 +225,11 @@ def test_telegram_webhook_callback_query_set_currency():
         assert result == {"status": "ok"}
 
         mock_fs.set_family_default_currency.assert_called_once_with(mock_family.id, "EUR")
-        mock_ts.edit_message_text.assert_called_once()
-        edit_kwargs = mock_ts.edit_message_text.call_args[1]
-        assert "Default Currency Updated to EUR" in edit_kwargs["text"]
+        mock_ts.delete_message.assert_called_once_with(chat_id=8888, message_id=555)
+        mock_ts.send_message.assert_called_once()
+        send_kwargs = mock_ts.send_message.call_args[1]
+        assert send_kwargs["chat_id"] == 8888
+        assert "Default Currency Updated to EUR" in send_kwargs["text"]
         mock_ts.answer_callback_query.assert_called_once_with(
             callback_query_id="cb_456",
             text="Default currency set to EUR"

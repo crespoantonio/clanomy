@@ -1,5 +1,5 @@
 import html
-from typing import Optional, List
+from typing import Optional, List, Tuple, Dict, Any
 from datetime import datetime, timezone
 from uuid import UUID
 import logging
@@ -199,6 +199,14 @@ class CommandHandler:
 
         tf_label = "Next Month" if timeframe == "next_month" else "This Month"
         return format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz)
+
+    async def handle_bills_interactive(self, user: User, family: Family, args: str = "", page: int = 1) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """
+        /bills or /bills next (interactive)
+        Shows upcoming pending scheduled bills with inline buttons for 1-tap settlement and pagination.
+        """
+        from src.services.handlers.bill_handler import handle_bills_interactive
+        return await handle_bills_interactive(user, family, args=args, page=page)
 
     async def handle_balance(self, user: User, family: Family, args: str = "") -> str:
         """

@@ -8,19 +8,24 @@ from pydantic import BaseModel
 from typing import Optional
 import time
 import uuid
+from uuid import UUID
 import logging
 import asyncio
+import re
+import html
 from collections import OrderedDict
 from sqlmodel import Session, select
 
 from src.core.config import settings
 from src.core.security import verify_messaging_secret
-from src.db.session import get_session
-from src.db.models import User, Family
+from src.core.encryption import EncryptionService
+from src.db.session import get_session, engine
+from src.db.models import User, Family, ScheduledBill
 from src.services.messaging_service import MessagingService
 from src.services.ai_orchestrator import AIOrchestrator
 from src.services.telegram_service import TelegramService
 from src.services.family_service import FamilyService
+from src.services.whisper_service import WhisperService
 from src.services.billing.billing_service import BillingService
 from src.services.handlers.command_handler import CommandHandler
 from src.services.handlers.currency_handler import (
@@ -29,6 +34,12 @@ from src.services.handlers.currency_handler import (
     format_currency_menu_text,
     format_currency_success_text,
     CURRENCY_PAGES
+)
+from src.services.handlers.bill_handler import (
+    build_bills_keyboard,
+    build_bill_settlement_card,
+    settle_bill_by_id,
+    handle_bills_interactive
 )
 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
 from src.services.subscription_service import (
@@ -209,6 +220,132 @@ async def telegram_webhook(
                     await telegram_service.send_message(chat_id=chat_id, text=success_text)
                     return {"status": "ok"}
 
+                elif cb_data.startswith("bills_p:"):
+                    parts = cb_data.split(":")
+                    page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                    tf_code = parts[2] if len(parts) > 2 else "this"
+                    cmd_args = "next" if tf_code == "next" else ""
+                    cmd_handler = CommandHandler()
+                    menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, args=cmd_args, page=page)
+                    if message_id:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=menu_text,
+                            reply_markup=keyboard
+                        )
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                    return {"status": "ok"}
+
+                elif cb_data.startswith("bill_v:"):
+                    parts = cb_data.split(":")
+                    try:
+                        target_bill_id = UUID(parts[1])
+                    except (ValueError, IndexError):
+                        target_bill_id = None
+
+                    if target_bill_id:
+                        ret_page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+                        tf_code = parts[3] if len(parts) > 3 else "this"
+                        timeframe = "next_month" if tf_code == "next" else "this_month"
+                        is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                        card_text, card_keyboard = build_bill_settlement_card(
+                            bill_id=target_bill_id,
+                            family_id=family.id,
+                            return_page=ret_page,
+                            timeframe=timeframe,
+                            is_spanish=is_spanish
+                        )
+                        if message_id:
+                            await telegram_service.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text=card_text,
+                                reply_markup=card_keyboard
+                            )
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                    return {"status": "ok"}
+
+                elif cb_data.startswith("bill_pay:"):
+                    parts = cb_data.split(":")
+                    try:
+                        target_bill_id = UUID(parts[1])
+                    except (ValueError, IndexError):
+                        target_bill_id = None
+
+                    tf_code = parts[2] if len(parts) > 2 else "this"
+                    if target_bill_id:
+                        is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                        success, res_msg = settle_bill_by_id(
+                            bill_id=target_bill_id,
+                            user_id=user.id,
+                            family_id=family.id,
+                            is_spanish=is_spanish
+                        )
+                        back_btn = "🔙 Volver a Facturas" if is_spanish else "🔙 Back to Bills"
+                        back_kb = {"inline_keyboard": [[{"text": back_btn, "callback_data": f"bills_p:1:{tf_code}"}]]}
+                        if message_id:
+                            await telegram_service.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text=res_msg,
+                                reply_markup=back_kb
+                            )
+                        if cb_id:
+                            toast = "¡Factura pagada!" if (is_spanish and success) else "Bill marked as paid!" if success else "Error"
+                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
+                    else:
+                        if cb_id:
+                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Invalid bill")
+                    return {"status": "ok"}
+
+                elif cb_data.startswith("bill_edit:"):
+                    parts = cb_data.split(":")
+                    try:
+                        target_bill_id = UUID(parts[1])
+                    except (ValueError, IndexError):
+                        target_bill_id = None
+
+                    if target_bill_id:
+                        with Session(engine) as s:
+                            b = s.get(ScheduledBill, target_bill_id)
+                            enc_s = EncryptionService()
+                            cpt = (enc_s.decrypt(b.concept) if b else None) or "Bill"
+
+                        is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                        if is_spanish:
+                            prompt = (
+                                f"✏️ <b>Pagar '{html.escape(cpt)}'</b>\n\n"
+                                f"Responde a este mensaje con el monto pagado (ej: <code>45.50</code>) "
+                                f"o envía un audio.\n\n"
+                                f"<i>(Escribe 'cancel' para abortar)</i>\n"
+                                f"[Bill ID: {target_bill_id}]"
+                            )
+                            toast = "Responde con el nuevo monto"
+                        else:
+                            prompt = (
+                                f"✏️ <b>Settle '{html.escape(cpt)}'</b>\n\n"
+                                f"Reply to this message with the exact amount paid (e.g. <code>45.50</code>) "
+                                f"or send a voice note.\n\n"
+                                f"<i>(Send 'cancel' to abort)</i>\n"
+                                f"[Bill ID: {target_bill_id}]"
+                            )
+                            toast = "Reply with the new amount"
+
+                        await telegram_service.send_message(
+                            chat_id=chat_id,
+                            text=prompt,
+                            reply_markup={"force_reply": True, "selective": True}
+                        )
+                        if cb_id:
+                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
+                    else:
+                        if cb_id:
+                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Invalid bill")
+                    return {"status": "ok"}
+
             if cb_id:
                 await telegram_service.answer_callback_query(callback_query_id=cb_id)
             return {"status": "ok"}
@@ -325,6 +462,70 @@ async def telegram_webhook(
             return {"status": "ok"}
 
 
+        # Handle ForceReply response for bill settlement amount override
+        reply_to = message.get("reply_to_message")
+        if reply_to and "[Bill ID: " in reply_to.get("text", ""):
+            match = re.search(r'\[Bill ID:\s*([a-f0-9\-]+)\]', reply_to.get("text", ""), re.IGNORECASE)
+            if match:
+                bill_id_str = match.group(1)
+                try:
+                    target_bill_id = UUID(bill_id_str)
+                except ValueError:
+                    target_bill_id = None
+
+                if target_bill_id:
+                    user_lang = (from_user.get("language_code") or "").lower()
+                    is_spanish = user_lang.startswith("es")
+
+                    # Check if user cancelled
+                    if text and text.strip().lower() in ("cancel", "cancelar", "/cancel", "abort"):
+                        cancel_msg = "❌ Pago de factura cancelado. La factura sigue pendiente." if is_spanish else "❌ Bill payment cancelled. The bill remains pending."
+                        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=cancel_msg)
+                        return {"status": "ok"}
+
+                    input_text = text
+                    if not input_text and voice:
+                        try:
+                            audio_file_id = voice.get("file_id")
+                            audio_bytes = await telegram_service.download_file_bytes(audio_file_id)
+                            whisper_service = WhisperService()
+                            transcribed, _ = await whisper_service.transcribe(audio_bytes=audio_bytes)
+                            input_text = transcribed
+                        except Exception as e:
+                            logger.error(f"Error transcribing voice note for bill override: {e}")
+                            input_text = None
+
+                    override_amt = None
+                    if input_text:
+                        clean_num_str = input_text.replace(",", ".")
+                        m_num = re.search(r'(\d+(?:\.\d{1,2})?)', clean_num_str)
+                        if m_num:
+                            try:
+                                val = float(m_num.group(1))
+                                if val > 0:
+                                    override_amt = val
+                            except ValueError:
+                                pass
+
+                    if override_amt is not None:
+                        success, settle_msg = settle_bill_by_id(
+                            bill_id=target_bill_id,
+                            user_id=user.id,
+                            family_id=family.id,
+                            override_amount=override_amt,
+                            is_spanish=is_spanish
+                        )
+                        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=settle_msg)
+                        return {"status": "ok"}
+                    else:
+                        err_msg = (
+                            "⚠️ No pude reconocer un monto válido. Por favor responde con un número (ej: 45.50) o escribe 'cancel'."
+                            if is_spanish else
+                            "⚠️ Could not recognize a valid amount. Please reply with a number (e.g. 45.50) or type 'cancel'."
+                        )
+                        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=err_msg)
+                        return {"status": "ok"}
+
         # Handle /start command
         if text and text.startswith("/start"):
             parts = text.split(maxsplit=1)
@@ -354,8 +555,6 @@ async def telegram_webhook(
                 "/yo": cmd_handler.handle_me,
                 "/today": cmd_handler.handle_today,
                 "/hoy": cmd_handler.handle_today,
-                "/bills": cmd_handler.handle_bills,
-                "/vencimientos": cmd_handler.handle_bills,
                 "/balance": cmd_handler.handle_balance,
                 "/saldo": cmd_handler.handle_balance,
                 "/timezone": cmd_handler.handle_timezone,
@@ -368,6 +567,16 @@ async def telegram_webhook(
 
             if clean_cmd in ("/currency", "/moneda"):
                 menu_text, keyboard = await handle_manage_currency(user.id, family.id, cmd_args)
+                background_tasks.add_task(
+                    telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=menu_text,
+                    reply_markup=keyboard
+                )
+                return {"status": "ok"}
+
+            if clean_cmd in ("/bills", "/vencimientos"):
+                menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, cmd_args)
                 background_tasks.add_task(
                     telegram_service.send_message,
                     chat_id=chat_id,

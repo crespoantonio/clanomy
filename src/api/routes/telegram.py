@@ -5,7 +5,7 @@ Provides HTTP ingress for Telegram Bot webhook updates, lifecycle callbacks, and
 
 from fastapi import APIRouter, Header, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
 import time
 import uuid
 from uuid import UUID
@@ -86,6 +86,7 @@ class BoundedCooldownStore:
 
 _cooldown_store = BoundedCooldownStore()
 _tz_finder = None
+_pending_bill_edits: Dict[int, Dict[str, Any]] = {}
 
 
 def get_timezone_finder():
@@ -314,23 +315,29 @@ async def telegram_webhook(
                             enc_s = EncryptionService()
                             cpt = (enc_s.decrypt(b.concept) if b else None) or "Bill"
 
+                        _pending_bill_edits[user_id] = {
+                            "bill_id": target_bill_id,
+                            "concept": cpt,
+                            "timestamp": time.time()
+                        }
+
                         is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
                         if is_spanish:
                             prompt = (
+                                f'<a href="tg://bill/{target_bill_id}">&#8203;</a>'
                                 f"✏️ <b>Pagar '{html.escape(cpt)}'</b>\n\n"
-                                f"Responde a este mensaje con el monto pagado (ej: <code>45.50</code>) "
-                                f"o envía un audio.\n\n"
-                                f"<i>(Escribe 'cancel' para abortar)</i>\n"
-                                f"[Bill ID: {target_bill_id}]"
+                                f"Responde con el monto pagado (ej: <code>45.50</code>) — <i>100% gratis</i>,\n"
+                                f"o envía un audio <i>(consume 1 crédito de IA 🎙️)</i>.\n\n"
+                                f"<i>(Escribe 'cancel' para abortar)</i>"
                             )
                             toast = "Responde con el nuevo monto"
                         else:
                             prompt = (
+                                f'<a href="tg://bill/{target_bill_id}">&#8203;</a>'
                                 f"✏️ <b>Settle '{html.escape(cpt)}'</b>\n\n"
-                                f"Reply to this message with the exact amount paid (e.g. <code>45.50</code>) "
-                                f"or send a voice note.\n\n"
-                                f"<i>(Send 'cancel' to abort)</i>\n"
-                                f"[Bill ID: {target_bill_id}]"
+                                f"Reply with the exact amount paid (e.g. <code>45.50</code>) — <i>100% free</i>,\n"
+                                f"or send a voice note <i>(uses 1 AI log 🎙️)</i>.\n\n"
+                                f"<i>(Send 'cancel' to abort)</i>"
                             )
                             toast = "Reply with the new amount"
 
@@ -462,69 +469,178 @@ async def telegram_webhook(
             return {"status": "ok"}
 
 
-        # Handle ForceReply response for bill settlement amount override
+        # Handle ForceReply response, reply to error, or bare amount for bill settlement override
         reply_to = message.get("reply_to_message")
-        if reply_to and "[Bill ID: " in reply_to.get("text", ""):
-            match = re.search(r'\[Bill ID:\s*([a-f0-9\-]+)\]', reply_to.get("text", ""), re.IGNORECASE)
-            if match:
-                bill_id_str = match.group(1)
-                try:
-                    target_bill_id = UUID(bill_id_str)
-                except ValueError:
-                    target_bill_id = None
+        reply_to_text = (reply_to.get("text") or "") if reply_to else ""
 
-                if target_bill_id:
-                    user_lang = (from_user.get("language_code") or "").lower()
-                    is_spanish = user_lang.startswith("es")
+        cached_edit = _pending_bill_edits.get(user_id)
+        is_active_pending_edit = bool(cached_edit and (time.time() - cached_edit.get("timestamp", 0)) < 600)
 
-                    # Check if user cancelled
-                    if text and text.strip().lower() in ("cancel", "cancelar", "/cancel", "abort"):
-                        cancel_msg = "❌ Pago de factura cancelado. La factura sigue pendiente." if is_spanish else "❌ Bill payment cancelled. The bill remains pending."
-                        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=cancel_msg)
-                        return {"status": "ok"}
+        is_bill_reply = False
+        if reply_to:
+            if (
+                "Settle '" in reply_to_text
+                or "Pagar '" in reply_to_text
+                or "[Bill ID: " in reply_to_text
+                or is_active_pending_edit
+            ):
+                is_bill_reply = True
+        elif is_active_pending_edit and text:
+            clean_strip = text.strip()
+            is_cancel = clean_strip.lower() in ("cancel", "cancelar", "/cancel", "abort")
+            s_num = re.sub(r'[\$€£¥₹]', '', clean_strip).strip()
+            s_num = re.sub(r'^[a-zA-Z]{3,4}\s+|\s+[a-zA-Z]{3,4}$', '', s_num, flags=re.IGNORECASE).strip()
+            is_bare_amount = bool(
+                re.match(r'^\d{1,6}(?:[.,]\d{1,2})?$', s_num)
+                or re.match(r'^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$', s_num)
+            )
+            if is_cancel or is_bare_amount:
+                is_bill_reply = True
 
-                    input_text = text
-                    if not input_text and voice:
-                        try:
-                            audio_file_id = voice.get("file_id")
-                            audio_bytes = await telegram_service.download_file_bytes(audio_file_id)
-                            whisper_service = WhisperService()
-                            transcribed, _ = await whisper_service.transcribe(audio_bytes=audio_bytes)
-                            input_text = transcribed
-                        except Exception as e:
-                            logger.error(f"Error transcribing voice note for bill override: {e}")
-                            input_text = None
+        if is_bill_reply:
+            target_bill_id = None
+            # 1. Check in-memory pending edit cache (valid for 10 minutes)
+            if cached_edit and (time.time() - cached_edit.get("timestamp", 0)) < 600:
+                target_bill_id = cached_edit.get("bill_id")
 
-                    override_amt = None
-                    if input_text:
-                        clean_num_str = input_text.replace(",", ".")
-                        m_num = re.search(r'(\d+(?:\.\d{1,2})?)', clean_num_str)
-                        if m_num:
+            # 2. Check entities for invisible link tg://bill/<uuid>
+            if not target_bill_id and reply_to:
+                for ent in reply_to.get("entities", []):
+                    if ent.get("type") == "text_link":
+                        u = ent.get("url", "")
+                        if u.startswith("tg://bill/"):
                             try:
-                                val = float(m_num.group(1))
-                                if val > 0:
-                                    override_amt = val
+                                target_bill_id = UUID(u.split("tg://bill/")[1])
+                                break
                             except ValueError:
                                 pass
 
-                    if override_amt is not None:
-                        success, settle_msg = settle_bill_by_id(
-                            bill_id=target_bill_id,
-                            user_id=user.id,
-                            family_id=family.id,
-                            override_amount=override_amt,
-                            is_spanish=is_spanish
+            # 3. Check legacy text pattern [Bill ID: <uuid>]
+            if not target_bill_id and "[Bill ID: " in reply_to_text:
+                m_legacy = re.search(r'\[Bill ID:\s*([a-f0-9\-]+)\]', reply_to_text, re.IGNORECASE)
+                if m_legacy:
+                    try:
+                        target_bill_id = UUID(m_legacy.group(1))
+                    except ValueError:
+                        pass
+
+            # 4. Fallback: match concept name from prompt text quotes
+            if not target_bill_id and reply_to_text and family:
+                m_cpt = re.search(r"[‘'\"`]([^'\"`]+)[’'\"`]", reply_to_text)
+                if m_cpt:
+                    target_cpt = m_cpt.group(1).strip().lower()
+                    enc_s = EncryptionService()
+                    pending_bills = session.exec(
+                        select(ScheduledBill).where(
+                            ScheduledBill.family_id == family.id,
+                            ScheduledBill.status == "pending"
                         )
-                        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=settle_msg)
-                        return {"status": "ok"}
+                    ).all()
+                    for pb in pending_bills:
+                        dec = enc_s.decrypt(pb.concept)
+                        if dec and dec.strip().lower() == target_cpt:
+                            target_bill_id = pb.id
+                            break
+
+            if target_bill_id:
+                user_lang = (from_user.get("language_code") or "").lower()
+                is_spanish = user_lang.startswith("es")
+
+                # Check if user cancelled
+                if text and text.strip().lower() in ("cancel", "cancelar", "/cancel", "abort"):
+                    _pending_bill_edits.pop(user_id, None)
+                    cancel_msg = "❌ Pago de factura cancelado. La factura sigue pendiente." if is_spanish else "❌ Bill payment cancelled. The bill remains pending."
+                    background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=cancel_msg)
+                    return {"status": "ok"}
+
+                is_voice_override = False
+                input_text = text
+                if not input_text and voice:
+                    is_voice_override = True
+                    # Voice note consumes 1 AI usage: validate family quota first
+                    if family:
+                        if check_and_reset_monthly_quota(family):
+                            session.add(family)
+                            session.commit()
+                        allowed, reason, limit_val = check_transaction_allowance(family)
+                        if not allowed:
+                            if user_id in _pending_bill_edits:
+                                _pending_bill_edits[user_id]["timestamp"] = time.time()
+                            if reason == "daily_limit":
+                                daily_note = (
+                                    "\n\n💡 <i>¡Aún puedes escribir el monto por texto gratis (ej: <code>45.50</code>) para pagar esta factura!</i>"
+                                    if is_spanish else
+                                    "\n\n💡 <i>You can still type the amount for free (e.g. <code>45.50</code>) to settle this bill!</i>"
+                                )
+                                quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val) + daily_note
+                            else:
+                                quota_msg = (
+                                    f"⛔ <b>Límite mensual de IA alcanzado ({family.monthly_tx_count}/{FREE_TIER_MONTHLY_LIMIT} registros)</b>\n\n"
+                                    "Has alcanzado el límite mensual de registros con IA.\n"
+                                    "¡Puedes escribir el monto por texto gratis (ej: <code>45.50</code>) para pagar esta factura!"
+                                    if is_spanish else
+                                    f"⛔ <b>Monthly AI Quota Reached ({family.monthly_tx_count}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
+                                    "You've reached your free monthly AI quota.\n"
+                                    "You can still type the amount for free (e.g. <code>45.50</code>) to settle this bill!"
+                                )
+                            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
+                            return {"status": "ok"}
+
+                    try:
+                        audio_file_id = voice.get("file_id")
+                        audio_bytes = await telegram_service.download_file_bytes(audio_file_id)
+                        whisper_service = WhisperService()
+                        transcribed, _ = await whisper_service.transcribe(audio_bytes=audio_bytes)
+                        input_text = transcribed
+                    except Exception as e:
+                        logger.error(f"Error transcribing voice note for bill override: {e}")
+                        input_text = None
+
+                override_amt = None
+                if input_text:
+                    clean_input = input_text.strip()
+                    if "." in clean_input and "," in clean_input:
+                        if clean_input.rfind(",") > clean_input.rfind("."):
+                            clean_input = clean_input.replace(".", "").replace(",", ".")
+                        else:
+                            clean_input = clean_input.replace(",", "")
                     else:
-                        err_msg = (
-                            "⚠️ No pude reconocer un monto válido. Por favor responde con un número (ej: 45.50) o escribe 'cancel'."
-                            if is_spanish else
-                            "⚠️ Could not recognize a valid amount. Please reply with a number (e.g. 45.50) or type 'cancel'."
-                        )
-                        background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=err_msg)
-                        return {"status": "ok"}
+                        clean_input = clean_input.replace(",", ".")
+
+                    m_num = re.search(r'(\d+(?:\.\d{1,2})?)', clean_input)
+                    if m_num:
+                        try:
+                            val = float(m_num.group(1))
+                            if val > 0:
+                                override_amt = val
+                        except ValueError:
+                            pass
+
+                if override_amt is not None:
+                    _pending_bill_edits.pop(user_id, None)
+                    success, settle_msg = settle_bill_by_id(
+                        bill_id=target_bill_id,
+                        user_id=user.id,
+                        family_id=family.id,
+                        override_amount=override_amt,
+                        is_spanish=is_spanish
+                    )
+                    if success and is_voice_override and family:
+                        family.monthly_tx_count = (family.monthly_tx_count or 0) + 1
+                        family.daily_tx_count = (family.daily_tx_count or 0) + 1
+                        session.add(family)
+                        session.commit()
+
+                    background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=settle_msg)
+                    return {"status": "ok"}
+                else:
+                    err_msg = (
+                        "⚠️ No pude reconocer un monto válido. Por favor responde con un número (ej: 45.50) o escribe 'cancel'."
+                        if is_spanish else
+                        "⚠️ Could not recognize a valid amount. Please reply with a number (e.g. 45.50) or type 'cancel'."
+                    )
+                    background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=err_msg)
+                    return {"status": "ok"}
 
         # Handle /start command
         if text and text.startswith("/start"):

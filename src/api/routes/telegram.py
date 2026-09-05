@@ -159,7 +159,7 @@ async def telegram_webhook(
                     await telegram_service.answer_callback_query(callback_query_id=cb_id)
                 return {"status": "ok"}
 
-            if cb_data.startswith("curr_p:") or cb_data.startswith("curr_set:"):
+            if cb_data.startswith(("curr_p:", "curr_set:", "bills_p:", "bill_v:", "bill_pay:", "bill_edit:")):
                 service = MessagingService(session)
                 user_data = {
                     "id": user_id,

@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     CRON_SECRET: Optional[str] = None  # Secret header token required to invoke internal background jobs (e.g. via GCP Cloud Scheduler)
     ENABLE_INTERNAL_SCHEDULER: bool = False  # Set to True only if running without an external cron trigger (defaults to False)
     CLOUDFLARE_ORIGIN_SECRET: Optional[str] = None  # Optional secret header token to block direct origin access
+    # Path whitelist exempt from Cloudflare Origin Shield verification:
+    # - /health: Container liveness/readiness probes from hosting platforms (e.g. Render, K8s)
+    # - /api/v1/telegram/webhook: Telegram Bot API webhook delivery
+    # - /api/internal/jobs/trial-lifecycle: Internal scheduled jobs (authenticated separately via CRON_SECRET)
+    CLOUDFLARE_ORIGIN_EXEMPT_PATHS: set[str] = {
+        "/health",
+        "/api/v1/telegram/webhook",
+        "/api/internal/jobs/trial-lifecycle",
+    }
+    MAX_REQUEST_SIZE_BYTES: int = 1_048_576  # Maximum allowable HTTP request payload size in bytes (1 MB default)
     ENABLE_DOCS: bool = False  # Set to True to expose Swagger/OpenAPI docs (/docs, /redoc, /openapi.json)
     USER_COOLDOWN_SECONDS: float = 0.5
     ALLOWED_TELEGRAM_USERS: str = ""  # Comma-separated list of allowed Telegram usernames or IDs (empty = open to all)
@@ -194,6 +204,12 @@ class Settings(BaseSettings):
         except Exception as e:
             raise ValueError(f"ENCRYPTION_KEY must be a valid 32-byte URL-safe base64 Fernet key. Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\". Error: {e}")
         return v.strip()
+
+    def is_origin_shield_exempt(self, path: str) -> bool:
+        """Check if request path is exempt from Cloudflare origin verification."""
+        norm_path = path.rstrip("/") if path != "/" else path
+        exempt_normalized = {p.rstrip("/") if p != "/" else p for p in self.CLOUDFLARE_ORIGIN_EXEMPT_PATHS}
+        return norm_path in exempt_normalized
 
     # Configuration
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")

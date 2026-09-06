@@ -62,7 +62,7 @@ def test_origin_shield_middleware():
     try:
         settings.CLOUDFLARE_ORIGIN_SECRET = "shield-key-abc"
         
-        # Direct access without header is blocked with 403
+        # Direct access without header is blocked with 403 on non-exempt paths
         blocked_resp = client.get("/")
         assert blocked_resp.status_code == 403
         assert blocked_resp.json() == {"detail": "Direct origin access forbidden"}
@@ -71,11 +71,68 @@ def test_origin_shield_middleware():
         allowed_resp = client.get("/", headers={"X-Origin-Verify-Secret": "shield-key-abc"})
         assert allowed_resp.status_code == 200
 
-        # Health probe bypasses origin secret check for monitoring
-        health_resp = client.get("/health")
-        assert health_resp.status_code in [200, 503] # Status depends on test DB state, but not 403 blocked
+        # Alternate origin key header succeeds
+        allowed_resp_alt = client.get("/", headers={"X-Clanomy-Origin-Key": "shield-key-abc"})
+        assert allowed_resp_alt.status_code == 200
+
+        # All configured exempt paths bypass origin shield verification (do NOT return 403)
+        for exempt_path in settings.CLOUDFLARE_ORIGIN_EXEMPT_PATHS:
+            resp = client.get(exempt_path)
+            assert resp.status_code != 403, f"Path {exempt_path} should be exempt from origin shield"
+
+        # Verify helper method
+        for exempt_path in settings.CLOUDFLARE_ORIGIN_EXEMPT_PATHS:
+            assert settings.is_origin_shield_exempt(exempt_path) is True
+            assert settings.is_origin_shield_exempt(f"{exempt_path}/") is True
+        assert settings.is_origin_shield_exempt("/") is False
+        assert settings.is_origin_shield_exempt("/api/v1/other") is False
     finally:
         settings.CLOUDFLARE_ORIGIN_SECRET = original_origin
+
+def test_request_size_limit_middleware():
+    client = TestClient(app)
+    original_limit = getattr(settings, "MAX_REQUEST_SIZE_BYTES", None)
+    try:
+        settings.MAX_REQUEST_SIZE_BYTES = 1000  # 1000 bytes limit for test
+
+        # 1. Payload within limit succeeds (not 413)
+        small_body = b"x" * 500
+        resp = client.post(
+            "/api/v1/simulate/message",
+            content=small_body,
+            headers={"Content-Length": str(len(small_body)), "Content-Type": "application/json"}
+        )
+        assert resp.status_code != 413
+
+        # 2. Content-Length header exceeding limit is rejected with 413 immediately
+        resp_413 = client.post(
+            "/api/v1/simulate/message",
+            content=b"x" * 2000,
+            headers={"Content-Length": "2000", "Content-Type": "application/json"}
+        )
+        assert resp_413.status_code == 413
+        assert resp_413.json() == {"detail": "Payload too large"}
+
+        # 3. Invalid Content-Length header returns 400
+        resp_400 = client.post(
+            "/api/v1/simulate/message",
+            content=b"test",
+            headers={"Content-Length": "invalid_number", "Content-Type": "application/json"}
+        )
+        assert resp_400.status_code == 400
+        assert resp_400.json() == {"detail": "Invalid Content-Length header"}
+
+        # 4. Chunked/streamed body exceeding limit without Content-Length header returns 413
+        large_body = b"y" * 1500
+        resp_chunked_413 = client.post(
+            "/api/v1/simulate/message",
+            content=large_body,
+            headers={"Content-Type": "application/json"}  # No Content-Length
+        )
+        assert resp_chunked_413.status_code == 413
+        assert resp_chunked_413.json() == {"detail": "Payload too large"}
+    finally:
+        settings.MAX_REQUEST_SIZE_BYTES = original_limit
 
 def test_mask_database_url():
     from src.core.security import mask_database_url

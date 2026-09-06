@@ -177,7 +177,7 @@ async def test_sec02_telegram_service_parse_error_fallback(monkeypatch):
                 raise httpx.HTTPStatusError("Parse Error", request=req, response=resp)
 
     class MockClient:
-        async def post(self, url, json):
+        async def post(self, url, json=None, **kwargs):
             calls.append(json)
             if json.get("parse_mode") == "HTML" and "<unclosed" in json.get("text", ""):
                 return MockResponse(400, "Bad Request: can't parse entities: unclosed tag <unclosed>")

@@ -2,6 +2,7 @@ import pytest
 import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import uuid4
+from datetime import datetime, timezone
 from fastapi import BackgroundTasks
 
 from src.api.routes.telegram import telegram_webhook
@@ -350,6 +351,7 @@ def test_telegram_webhook_force_reply_voice_charges_ai_quota():
     mock_family.id = uuid4()
     mock_family.monthly_tx_count = 5
     mock_family.daily_tx_count = 5
+    mock_family.last_reset_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
     bg_tasks = BackgroundTasks()
 
@@ -416,6 +418,7 @@ def test_telegram_webhook_force_reply_voice_quota_exceeded():
     mock_family.id = uuid4()
     mock_family.monthly_tx_count = 20
     mock_family.daily_tx_count = 20
+    mock_family.last_reset_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
     bg_tasks = BackgroundTasks()
 

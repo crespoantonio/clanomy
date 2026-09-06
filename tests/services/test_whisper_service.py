@@ -141,7 +141,8 @@ async def test_transcribe_from_url_success(mock_whisper_model):
         assert lang == "en"
         
         # Verify URL get called
-        mock_get.assert_called_once_with(audio_url)
+        assert mock_get.call_count == 1
+        assert mock_get.call_args[0][0] == audio_url
         mock_response.raise_for_status.assert_called_once()
         
         # Verify writing downloaded content

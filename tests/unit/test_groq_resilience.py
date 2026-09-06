@@ -7,11 +7,8 @@ from pydantic import BaseModel
 
 from src.core.config import Settings
 from src.core.security import sanitize_auth_tokens, sanitize_exception_message
-from src.core.llm.providers.openai_provider import (
-    OpenAICompatibleProvider,
-    is_retryable_provider_error,
-    OpenAIRateLimitWait,
-)
+from src.core.llm.providers.openai_provider import OpenAICompatibleProvider
+from src.core.llm.retry import is_retryable_provider_error, ProviderRateLimitWait as OpenAIRateLimitWait
 from src.services.whisper_service import WhisperService
 from src.services.telegram_service import TelegramService
 from src.services.query.service import QueryService, ParsedQueryIntent

@@ -93,13 +93,42 @@ async def security_and_origin_middleware(request: Request, call_next):
     client_ip = request.client.host if request.client else "unknown"
     logger.info(f"Incoming HTTP {request.method} {request.url.path} from {client_ip}")
 
-    # 1. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
-    # Allows /health probe, Telegram webhook, and internal cron jobs pass-through
-    if settings.CLOUDFLARE_ORIGIN_SECRET and request.url.path not in (
-        "/health",
-        "/api/v1/telegram/webhook",
-        "/api/internal/jobs/trial-lifecycle"
-    ):
+    # 1. Request Payload Size Validation
+    content_length_header = request.headers.get("content-length")
+    if content_length_header:
+        try:
+            content_length = int(content_length_header)
+            if content_length > settings.MAX_REQUEST_SIZE_BYTES:
+                logger.warning(
+                    f"Request payload too large on {request.url.path} from {client_ip}: "
+                    f"{content_length} bytes (max allowed: {settings.MAX_REQUEST_SIZE_BYTES})"
+                )
+                return JSONResponse(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    content={"detail": "Payload too large"}
+                )
+        except ValueError:
+            logger.warning(f"Invalid Content-Length header on {request.url.path} from {client_ip}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Invalid Content-Length header"}
+            )
+    elif request.method in ("POST", "PUT", "PATCH"):
+        # Guard against chunked / streaming uploads without Content-Length
+        body = await request.body()
+        if len(body) > settings.MAX_REQUEST_SIZE_BYTES:
+            logger.warning(
+                f"Request body exceeded max size on {request.url.path} from {client_ip}: "
+                f"{len(body)} bytes (max allowed: {settings.MAX_REQUEST_SIZE_BYTES})"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                content={"detail": "Payload too large"}
+            )
+
+    # 2. Cloudflare Origin Shield Verification (if CLOUDFLARE_ORIGIN_SECRET is configured)
+    # Allows exempt paths (health checks, Telegram webhook, internal cron jobs) pass-through
+    if settings.CLOUDFLARE_ORIGIN_SECRET and not settings.is_origin_shield_exempt(request.url.path):
         origin_header = request.headers.get("X-Origin-Verify-Secret") or request.headers.get("X-Clanomy-Origin-Key")
         if not verify_origin_secret(origin_header):
             logger.warning(f"Direct origin access attempt blocked on {request.url.path} from {client_ip}")

@@ -27,10 +27,10 @@ async def test_telegram_delete_message():
 
         success = await service.delete_message(chat_id=12345, message_id=67890)
         assert success is True
-        mock_client.post.assert_called_once_with(
-            f"{service.api_url}/deleteMessage",
-            json={"chat_id": 12345, "message_id": 67890}
-        )
+        assert mock_client.post.call_count == 1
+        call_args, call_kwargs = mock_client.post.call_args
+        assert call_args[0] == f"{service.api_url}/deleteMessage"
+        assert call_kwargs.get("json") == {"chat_id": 12345, "message_id": 67890}
 
 
 @pytest.mark.anyio

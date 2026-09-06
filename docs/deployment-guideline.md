@@ -164,6 +164,8 @@ Expand the **Environment Variables** section and add:
 | `DEFAULT_TIMEZONE` | `UTC` | Household default timezone (e.g. `America/Argentina/Buenos_Aires`) |
 | `ALLOWED_TELEGRAM_USERS` | `""` *(or comma-separated IDs)* | Restrict bot access to your Telegram ID(s) |
 | `SIMULATION_SECRET` | `""` *(optional)* | Secret token to test extractions via `/simulate/message` |
+| `CLOUDFLARE_ORIGIN_SECRET` | `""` *(optional)* | Secret token for Cloudflare Origin Shield (`X-Clanomy-Origin-Key` / `X-Origin-Verify-Secret`). Whitelisted exempt paths: `/health`, `/api/v1/telegram/webhook`, `/api/internal/jobs/trial-lifecycle` |
+| `MAX_REQUEST_SIZE_BYTES` | `1048576` *(default 1MB)* | Maximum allowable HTTP request payload size in bytes before returning 413 |
 | `ENABLE_DOCS` | `false` | Disables public `/docs` swagger page |
 
 7. Click **Deploy Web Service**.

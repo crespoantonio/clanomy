@@ -178,3 +178,30 @@ def test_telegram_fallback_resends_plain_text():
     # Fallback call had parse_mode None and original text preserved
     assert "parse_mode" not in sent_payloads[1]
     assert sent_payloads[1]["text"] == raw_html
+
+
+def test_telegram_messages_type_annotations_resolve():
+    """Verify that all type annotations in telegram_messages resolve cleanly (preventing Python 3.12 runtime NameError)."""
+    import inspect
+    import typing
+
+    for name, obj in inspect.getmembers(telegram_messages):
+        if inspect.isfunction(obj) and obj.__module__ == telegram_messages.__name__:
+            # get_type_hints evaluates annotations in the module global scope
+            hints = typing.get_type_hints(obj)
+            assert isinstance(hints, dict)
+
+    # Verify specific functions execute cleanly
+    card_text, kb = telegram_messages.format_bill_settlement_card("Internet", "$50.00", "2026-09-10", "Utilities", "bill-123", is_spanish=True)
+    assert "Internet" in card_text
+    assert kb["inline_keyboard"]
+
+    msg, kb = telegram_messages.format_bill_not_found_card(is_spanish=False)
+    assert "not found" in msg.lower()
+
+    msg, kb = telegram_messages.format_bill_already_paid_card(is_spanish=False)
+    assert "already marked as paid" in msg.lower()
+
+    prompt, toast = telegram_messages.format_bill_edit_prompt("bill-123", "Internet", is_spanish=False)
+    assert "Internet" in prompt
+

@@ -70,32 +70,21 @@ def build_currency_keyboard(page: int = 1, active_currency: str = "USD") -> Dict
     return {"inline_keyboard": inline_keyboard}
 
 
-def format_currency_menu_text(active_currency: str) -> str:
-    """Returns introduction text for the interactive currency selector."""
-    return (
-        "💵 <b>Select Household Default Currency</b>\n\n"
-        f"Currently active: <b>{active_currency}</b>\n\n"
-        "Tap a currency below to set it as your household default. "
-        "Any future expenses or income logged without a currency symbol will automatically default to your choice."
-    )
+from src.templates.telegram_messages import (
+    format_currency_menu_text,
+    format_currency_success_text,
+    is_spanish_text,
+)
 
 
-def format_currency_success_text(new_currency: str) -> str:
-    """Returns confirmation text when a new currency is selected."""
-    return (
-        f"✅ <b>Default Currency Updated to {new_currency}!</b>\n\n"
-        f"All future expenses & income logged without a currency symbol will automatically record as <b>{new_currency}</b>.\n\n"
-        "You can change this anytime with /currency."
-    )
-
-
-async def handle_manage_currency(user_uuid: UUID, family_id: UUID, raw_text: str = "") -> Tuple[str, Dict[str, Any]]:
+async def handle_manage_currency(user_uuid: UUID, family_id: UUID, raw_text: str = "", is_spanish: bool = False) -> Tuple[str, Dict[str, Any]]:
     """
     Handles the /currency command:
     - If a target currency argument is supplied (e.g. "/currency ARS" or "ARS"), updates the default currency directly and returns confirmation text with updated keyboard.
     - If called bare (e.g. "/currency"), returns the interactive selection menu and Page 1 inline keyboard.
     """
     family_service = FamilyService()
+    is_es = is_spanish or is_spanish_text(raw_text)
     target_curr = None
     if raw_text:
         parts = raw_text.split()
@@ -117,13 +106,13 @@ async def handle_manage_currency(user_uuid: UUID, family_id: UUID, raw_text: str
                     target_page = idx + 1
                     break
             keyboard = build_currency_keyboard(page=target_page, active_currency=new_curr)
-            return format_currency_success_text(new_curr), keyboard
+            return format_currency_success_text(new_curr, is_spanish=is_es), keyboard
         except ValueError as ve:
             active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
             keyboard = build_currency_keyboard(page=1, active_currency=active_curr)
             return f"⚠️ {ve}", keyboard
 
     active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
-    text = format_currency_menu_text(active_curr)
+    text = format_currency_menu_text(active_curr, is_spanish=is_es)
     keyboard = build_currency_keyboard(page=1, active_currency=active_curr)
     return text, keyboard

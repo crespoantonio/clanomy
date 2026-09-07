@@ -71,7 +71,10 @@ from src.templates.telegram_messages import (
     format_extraction_error_message,
     format_empty_message_error,
     format_generic_error_message,
-    format_bill_settled_notice
+    format_bill_settled_notice,
+    format_exchange_rate_line,
+    format_batch_bill_item,
+    format_batch_tx_item
 )
 
 logger = logging.getLogger(__name__)
@@ -336,11 +339,11 @@ class AIOrchestrator:
     ) -> Optional[Transaction]:
         return find_target_transaction(session, user_uuid, target_amount, target_currency, target_concept, self.encryption_service)
 
-    def _handle_transaction_undo(self, user_uuid: UUID, parsed_query: Optional[ParsedQueryIntent] = None) -> str:
-        return handle_transaction_undo(user_uuid, parsed_query, self.encryption_service, session_factory=Session)
+    def _handle_transaction_undo(self, user_uuid: UUID, parsed_query: Optional[ParsedQueryIntent] = None, is_spanish: bool = False) -> str:
+        return handle_transaction_undo(user_uuid, parsed_query, self.encryption_service, session_factory=Session, is_spanish=is_spanish)
 
-    def _handle_transaction_correction(self, user_uuid: UUID, parsed_query: ParsedQueryIntent) -> str:
-        return handle_transaction_correction(user_uuid, parsed_query, self.encryption_service, session_factory=Session)
+    def _handle_transaction_correction(self, user_uuid: UUID, parsed_query: ParsedQueryIntent, is_spanish: bool = False) -> str:
+        return handle_transaction_correction(user_uuid, parsed_query, self.encryption_service, session_factory=Session, is_spanish=is_spanish)
 
     async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None, tx_type: str = "expense"):
         return await safe_mirror_to_notion(family_id, amount, currency, concept, category, timestamp, user_name, transaction_id, tx_type)
@@ -365,6 +368,7 @@ class AIOrchestrator:
         raw_lower = raw_text.lower().strip()
         parts = raw_text.split()
         intent_str = getattr(parsed_query, "intent", None) or ""
+        is_spanish = _is_spanish(raw_text)
 
         if intent_str == IntentType.DELETE_ACCOUNT or intent_str == "delete_account":
             return await handle_delete_account(user_uuid, raw_text)
@@ -379,16 +383,16 @@ class AIOrchestrator:
             return None
 
         elif intent_str == IntentType.UNDO_LAST or intent_str == "undo_last":
-            return await asyncio.to_thread(self._handle_transaction_undo, user_uuid, parsed_query)
+            return await asyncio.to_thread(self._handle_transaction_undo, user_uuid, parsed_query, is_spanish)
 
         elif intent_str == IntentType.EDIT_LAST or intent_str == "edit_last":
-            return await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
+            return await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query, is_spanish)
 
         elif intent_str == IntentType.LEAVE_FAMILY or intent_str == "leave_family":
-            return await handle_leave_family(user_uuid, raw_text)
+            return await handle_leave_family(user_uuid, raw_text, is_spanish=is_spanish)
 
         elif intent_str == IntentType.REMOVE_MEMBER or intent_str == "remove_member":
-            return await handle_remove_member(user_uuid, parsed_query.target_member)
+            return await handle_remove_member(user_uuid, parsed_query.target_member, is_spanish=is_spanish)
 
         elif intent_str in [
             IntentType.SPENDING_SUMMARY, "spending_summary",
@@ -475,22 +479,22 @@ class AIOrchestrator:
             return bills_res
 
         elif intent_str == IntentType.CREATE_FAMILY or intent_str == "create_family":
-            return await handle_create_family(user_uuid, parsed_query.family_name)
+            return await handle_create_family(user_uuid, parsed_query.family_name, is_spanish=is_spanish)
 
         elif intent_str == IntentType.GENERATE_INVITE or intent_str == "generate_invite":
             family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
-            return await handle_generate_invite(user_uuid, family_id)
+            return await handle_generate_invite(user_uuid, family_id, is_spanish=is_spanish)
 
         elif intent_str == IntentType.FAMILY_INFO or intent_str == "family_info":
-            return await handle_family_info(user_uuid)
+            return await handle_family_info(user_uuid, is_spanish=is_spanish)
 
         elif intent_str == IntentType.NOTION_MANAGE or intent_str == "notion_manage":
             family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
-            return await handle_notion_manage(raw_text, family_id, chat_id, message_id)
+            return await handle_notion_manage(raw_text, family_id, chat_id, message_id, is_spanish=is_spanish)
 
         elif intent_str == IntentType.MANAGE_CURRENCY or intent_str == "manage_currency":
             family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
-            menu_text, keyboard = await handle_manage_currency(user_uuid, family_id, raw_text)
+            menu_text, keyboard = await handle_manage_currency(user_uuid, family_id, raw_text, is_spanish=is_spanish)
             if chat_id:
                 telegram_service = TelegramService()
                 await telegram_service.send_message(chat_id=chat_id, text=menu_text, reply_markup=keyboard)
@@ -733,7 +737,7 @@ class AIOrchestrator:
                                 target_currency=unified.target_currency,
                                 target_concept=unified.target_concept
                             )
-                            response_text = await asyncio.to_thread(self._handle_transaction_undo, user_uuid, parsed_query)
+                            response_text = await asyncio.to_thread(self._handle_transaction_undo, user_uuid, parsed_query, _is_spanish(raw_text))
                         elif unified.action == "edit_last":
                             parsed_query = ParsedQueryIntent(
                                 intent="edit_last",
@@ -746,7 +750,7 @@ class AIOrchestrator:
                                 target_currency=unified.target_currency,
                                 target_concept=unified.target_concept
                             )
-                            response_text = await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query)
+                            response_text = await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query, _is_spanish(raw_text))
                         elif unified.action == "query":
                             query_service = QueryService()
                             parsed_query = await query_service.parse_intent(text)
@@ -838,10 +842,8 @@ class AIOrchestrator:
                                     if not rate_val and sold["amount"] > 0:
                                         rate_val = round(recv["amount"] / sold["amount"], 4)
 
-                                    if is_spanish:
-                                        rate_line = f"\n• 📊 Cotización: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
-                                    else:
-                                        rate_line = f"\n• 📊 Rate: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
+                                    fmt_rate = _format_currency(rate_val, recv["currency"], show_sign=False) if rate_val else ""
+                                    rate_line = format_exchange_rate_line(sold["currency"], rate_val, recv["currency"], fmt_rate, is_spanish=is_spanish)
 
                                     response_text = format_exchange_confirmation(
                                         fmt_sold=fmt_sold,
@@ -855,13 +857,7 @@ class AIOrchestrator:
                                         parts.append(format_batch_bills_header(len(bills), is_spanish=is_spanish))
                                         for b in bills:
                                             fmt_amt = _format_currency(b["amount"], b["currency"])
-                                            due_str = b["due_date"].strftime("%d/%m")
-                                            if is_spanish:
-                                                day_name = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][b["due_date"].weekday()]
-                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n")
-                                            else:
-                                                day_name = b["due_date"].strftime("%a")
-                                                parts.append(f"• 💳 <b>{html.escape(b['concept'])}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n")
+                                            parts.append(format_batch_bill_item(b["concept"], fmt_amt, b["due_date"], is_spanish=is_spanish))
 
                                         totals = {}
                                         for b in bills:
@@ -879,7 +875,7 @@ class AIOrchestrator:
                                             is_inc = t.get("tx_type") == "income"
                                             icon = "💰" if is_inc else "💸"
                                             fmt_amt = _format_currency(t["amount"], t["currency"], show_sign=is_inc)
-                                            parts.append(f"• {icon} <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
+                                            parts.append(format_batch_tx_item(icon, t["concept"], fmt_amt, t["category"]))
 
                                     if bills:
                                         parts.append(format_batch_bills_tip(is_spanish=is_spanish))

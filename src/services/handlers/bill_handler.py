@@ -12,6 +12,13 @@ from src.db.session import engine
 from src.db.models import Transaction, ScheduledBill, User, Family
 from src.services.handlers.transaction_handler import format_currency, create_logged_task
 from src.services.handlers.notion_handler import safe_mirror_to_notion
+from src.templates.telegram_messages import (
+    format_bill_settled_response,
+    format_overdue_bills_reminder,
+    format_bill_settlement_card,
+    format_bill_not_found_card,
+    format_bill_already_paid_card,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -250,21 +257,7 @@ def settle_bill_without_amount(
             rem_str = "$0"
 
     fmt_paid = format_currency(amt, curr)
-    if is_spanish:
-        msg = (
-            f"✅ <b>Factura registrada como pagada:</b>\n"
-            f"• 💳 <b>{html.escape(matched_concept)}</b> ({fmt_paid})\n\n"
-            f"<i>Se guardó como gasto en tu historial.</i>\n"
-            f"📌 <b>Pendiente por pagar este mes:</b> {rem_str}"
-        )
-    else:
-        msg = (
-            f"✅ <b>Bill marked as paid:</b>\n"
-            f"• 💳 <b>{html.escape(matched_concept)}</b> ({fmt_paid})\n\n"
-            f"<i>Recorded as an expense in your history.</i>\n"
-            f"📌 <b>Remaining pending bills:</b> {rem_str}"
-        )
-    return msg
+    return format_bill_settled_response(matched_concept, fmt_paid, rem_str, is_spanish=is_spanish)
 
 
 def get_overdue_bills_reminder(
@@ -303,35 +296,23 @@ def get_overdue_bills_reminder(
         if not due_or_overdue:
             return ""
 
-        lines = []
-        if is_spanish:
-            lines.append("⚠️ <b>Recordatorio de Vencimientos:</b>\n<i>Tienes facturas programadas pendientes de pago:</i>")
-            for b in due_or_overdue:
-                dec_cpt = enc_service.decrypt(b.concept) or "Factura"
-                amt_str = enc_service.decrypt(b.amount) or "0 USD"
-                parts = amt_str.split()
-                amt = float(parts[0]) if parts else 0.0
-                curr = parts[1].upper() if len(parts) > 1 else "USD"
-                fmt_amt = format_currency(amt, curr)
+        due_lines = []
+        for b in due_or_overdue:
+            dec_cpt = enc_service.decrypt(b.concept) or ("Factura" if is_spanish else "Bill")
+            amt_str = enc_service.decrypt(b.amount) or "0 USD"
+            parts = amt_str.split()
+            amt = float(parts[0]) if parts else 0.0
+            curr = parts[1].upper() if len(parts) > 1 else "USD"
+            fmt_amt = format_currency(amt, curr)
+            if is_spanish:
                 due_fmt = b.due_date.strftime("%d/%m")
                 status_note = "Venció el" if b.due_date.date() < reference_time.date() else "Vence el"
-                lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
-            lines.append('\n👉 <i>Si ya pagaste alguna, solo dime "Pagué [nombre]" (ej: "Pagué la visa") para registrarla.</i>')
-        else:
-            lines.append("⚠️ <b>Upcoming / Due Bills Reminder:</b>\n<i>You have pending scheduled bills:</i>")
-            for b in due_or_overdue:
-                dec_cpt = enc_service.decrypt(b.concept) or "Bill"
-                amt_str = enc_service.decrypt(b.amount) or "0 USD"
-                parts = amt_str.split()
-                amt = float(parts[0]) if parts else 0.0
-                curr = parts[1].upper() if len(parts) > 1 else "USD"
-                fmt_amt = format_currency(amt, curr)
+            else:
                 due_fmt = b.due_date.strftime("%b %d")
                 status_note = "Was due on" if b.due_date.date() < reference_time.date() else "Due on"
-                lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
-            lines.append('\n👉 <i>If you already paid any, simply tell me "Paid [name]" (e.g. "Paid the visa") to record it.</i>')
+            due_lines.append(f"• 💳 <b>{html.escape(dec_cpt)}</b> ({fmt_amt}) — {status_note} {due_fmt}")
 
-        return "\n".join(lines)
+        return format_overdue_bills_reminder(due_lines, is_spanish=is_spanish)
 
 
 def build_bills_keyboard(
@@ -402,14 +383,12 @@ def build_bill_settlement_card(
     with session_factory(engine) as session:
         bill = session.get(ScheduledBill, bill_id)
         if not bill or bill.family_id != family_id:
-            not_found = "Factura no encontrada." if is_spanish else "Bill not found."
-            return not_found, {"inline_keyboard": [[{"text": "🔙 Volver" if is_spanish else "🔙 Back", "callback_data": f"bills_p:{return_page}:{tf_code}"}]]}
+            return format_bill_not_found_card(return_page=return_page, tf_code=tf_code, is_spanish=is_spanish)
 
         if bill.status != "pending":
-            already_paid = "Esta factura ya fue pagada." if is_spanish else "This bill is already marked as paid."
-            return already_paid, {"inline_keyboard": [[{"text": "🔙 Volver" if is_spanish else "🔙 Back", "callback_data": f"bills_p:{return_page}:{tf_code}"}]]}
+            return format_bill_already_paid_card(return_page=return_page, tf_code=tf_code, is_spanish=is_spanish)
 
-        dec_cpt = enc_service.decrypt(bill.concept) or "Bill"
+        dec_cpt = enc_service.decrypt(bill.concept) or ("Factura" if is_spanish else "Bill")
         amt_str = enc_service.decrypt(bill.amount) or "0 USD"
         parts = amt_str.split()
         amt = float(parts[0]) if parts else 0.0
@@ -419,40 +398,16 @@ def build_bill_settlement_card(
         due_fmt = bill.due_date.strftime("%d/%m") if is_spanish else bill.due_date.strftime("%b %d") if bill.due_date else "N/A"
         cat = bill.category or "Rent/Bills"
 
-    if is_spanish:
-        card_text = (
-            f"⚡ <b>Pagar Factura: {html.escape(dec_cpt)}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Monto Registrado:</b> {fmt_amt}\n"
-            f"• <b>Vencimiento:</b> {due_fmt}\n"
-            f"• <b>Categoría:</b> {html.escape(cat)}\n\n"
-            f"<i>¿Cómo deseas registrar este pago?</i>"
-        )
-        keyboard = {
-            "inline_keyboard": [
-                [{"text": f"✅ Pagar {fmt_amt} (Sin cambio)", "callback_data": f"bill_pay:{bill_id}:{tf_code}"}],
-                [{"text": "✏️ Pagar Otro Monto", "callback_data": f"bill_edit:{bill_id}"}],
-                [{"text": "🔙 Volver a Facturas", "callback_data": f"bills_p:{return_page}:{tf_code}"}],
-            ]
-        }
-    else:
-        card_text = (
-            f"⚡ <b>Settle Bill: {html.escape(dec_cpt)}</b>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Recorded Amount:</b> {fmt_amt}\n"
-            f"• <b>Due Date:</b> {due_fmt}\n"
-            f"• <b>Category:</b> {html.escape(cat)}\n\n"
-            f"<i>How would you like to settle this bill?</i>"
-        )
-        keyboard = {
-            "inline_keyboard": [
-                [{"text": f"✅ Pay {fmt_amt} (No Change)", "callback_data": f"bill_pay:{bill_id}:{tf_code}"}],
-                [{"text": "✏️ Pay Different Amount", "callback_data": f"bill_edit:{bill_id}"}],
-                [{"text": "🔙 Back to Bills", "callback_data": f"bills_p:{return_page}:{tf_code}"}],
-            ]
-        }
-
-    return card_text, keyboard
+    return format_bill_settlement_card(
+        concept=dec_cpt,
+        fmt_amt=fmt_amt,
+        due_fmt=due_fmt,
+        category=cat,
+        bill_id=bill_id,
+        return_page=return_page,
+        tf_code=tf_code,
+        is_spanish=is_spanish
+    )
 
 
 def settle_bill_by_id(
@@ -576,24 +531,7 @@ def settle_bill_by_id(
             rem_str = "$0"
 
     fmt_paid = format_currency(actual_amt, actual_curr)
-    if is_spanish:
-        note = " <i>(monto actualizado)</i>" if is_changed else ""
-        msg = (
-            f"✅ <b>Factura registrada como pagada:</b>\n"
-            f"• 💳 <b>{html.escape(dec_concept)}</b> ({fmt_paid}){note}\n\n"
-            f"<i>Se guardó como gasto en tu historial.</i>\n"
-            f"📌 <b>Pendiente por pagar este mes:</b> {rem_str}"
-        )
-    else:
-        note = " <i>(updated amount)</i>" if is_changed else ""
-        msg = (
-            f"✅ <b>Bill marked as paid:</b>\n"
-            f"• 💳 <b>{html.escape(dec_concept)}</b> ({fmt_paid}){note}\n\n"
-            f"<i>Recorded as an expense in your history.</i>\n"
-            f"📌 <b>Remaining pending bills:</b> {rem_str}"
-        )
-
-    return True, msg
+    return True, format_bill_settled_response(dec_concept, fmt_paid, rem_str, is_spanish=is_spanish, is_changed=is_changed)
 
 
 async def handle_bills_interactive(

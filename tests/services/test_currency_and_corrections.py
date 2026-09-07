@@ -107,7 +107,7 @@ async def test_targeted_correction_and_multi_currency_snapshot(setup_db):
         await orchestrator.orchestrate(user_id=str(user_id), text="el salario de 1606932 es ARS", audio_file_id=None, chat_id=9999)
         mock_telegram.assert_called_once()
         rep3 = mock_telegram.call_args[1]["text"]
-        assert "Updated transaction" in rep3
+        assert "Updated transaction" in rep3 or "Transacción modificada" in rep3
         assert "1,606,932.00 ARS" in rep3
 
         # Step 4: Verify DB records: Exactly 2 transactions exist (no duplicates!)
@@ -156,7 +156,7 @@ async def test_targeted_undo_specific_currency_and_amount(setup_db):
         await orchestrator.orchestrate(user_id=str(user_id), text="eliminar el ingreso de 1606932 en dolares", audio_file_id=None, chat_id=8888)
         mock_telegram.assert_called_once()
         reply = mock_telegram.call_args[1]["text"]
-        assert "Removed transaction" in reply
+        assert "Removed transaction" in reply or "Transacción revertida" in reply
         assert "1,606,932.00 USD" in reply
 
         # Verify DB: Only TX1 (2568 USD) and TX2 (1606932 ARS) remain!

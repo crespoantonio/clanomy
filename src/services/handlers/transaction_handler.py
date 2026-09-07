@@ -15,6 +15,12 @@ from src.services.handlers.notion_handler import (
     safe_update_notion_page,
     safe_archive_notion_page
 )
+from src.templates.telegram_messages import (
+    format_undo_no_transactions,
+    format_undo_success,
+    format_correction_no_transactions,
+    format_correction_success,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +191,8 @@ def handle_transaction_undo(
     user_uuid: UUID,
     parsed_query: Optional[ParsedQueryIntent] = None,
     encryption_service: Optional[EncryptionService] = None,
-    session_factory=Session
+    session_factory=Session,
+    is_spanish: bool = False
 ) -> str:
     """Removes a recent transaction or entire batch logged by the user, recalculating monthly balance."""
     enc_service = encryption_service or EncryptionService()
@@ -250,15 +257,19 @@ def handle_transaction_undo(
 
                 items_block = "\n".join(item_lines)
                 is_exchange_pair = (len(deleted_items) == 2 and all(it.get("category") == "Exchange" for it in deleted_items))
-                title = "🗑️ <b>Removed currency exchange:</b>\n" if is_exchange_pair else f"🗑️ <b>Removed {len(deleted_items)} transactions from your last message:</b>\n"
-                return (
-                    f"{title}"
-
-                    f"{items_block}\n\n"
-                    f"📊 <b>Updated {snapshot['month_name']} Balance ({primary_curr}):</b>\n"
-                    f"• Total In: {formatted_in}\n"
-                    f"• Total Out: {formatted_out}\n"
-                    f"• Net Savings: {formatted_net}{pct_str}"
+                return format_undo_success(
+                    items_block=items_block,
+                    month_name=snapshot["month_name"],
+                    primary_curr=primary_curr,
+                    formatted_in=formatted_in,
+                    formatted_out=formatted_out,
+                    formatted_net=formatted_net,
+                    pct_str=pct_str,
+                    is_exchange=is_exchange_pair,
+                    is_batch=True,
+                    batch_count=len(deleted_items),
+                    has_target=False,
+                    is_spanish=is_spanish
                 )
 
         t_amt = parsed_query.target_amount if parsed_query else None
@@ -274,7 +285,7 @@ def handle_transaction_undo(
             encryption_service=enc_service
         )
         if not tx:
-            return "ℹ️ You don't have any recent transactions to undo."
+            return format_undo_no_transactions(is_spanish=is_spanish)
 
         dec_amount = enc_service.decrypt(tx.amount) or "0.00 USD"
         dec_concept = enc_service.decrypt(tx.concept) or "Transaction"
@@ -355,25 +366,37 @@ def handle_transaction_undo(
         c_icon = "💰" if counterpart_info["type"] == "income" else "💸"
         c_sign = "+" if counterpart_info["type"] == "income" else "-"
         c_formatted = format_currency(counterpart_info["amount"], counterpart_info["currency"], show_sign=False)
-        return (
-            f"🗑️ <b>Removed currency exchange:</b>\n"
+        items_block = (
             f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n"
-            f"• {c_icon} {c_sign}{c_formatted} ({safe_category} - {html.escape(counterpart_info['concept'])})\n\n"
-            f"📊 <b>Updated {snapshot['month_name']} Balance ({curr}):</b>\n"
-            f"• Total In: {formatted_in}\n"
-            f"• Total Out: {formatted_out}\n"
-            f"• Net Savings: {formatted_net}{pct_str}"
+            f"• {c_icon} {c_sign}{c_formatted} ({safe_category} - {html.escape(counterpart_info['concept'])})"
+        )
+        return format_undo_success(
+            items_block=items_block,
+            month_name=snapshot["month_name"],
+            primary_curr=curr,
+            formatted_in=formatted_in,
+            formatted_out=formatted_out,
+            formatted_net=formatted_net,
+            pct_str=pct_str,
+            is_exchange=True,
+            is_batch=False,
+            has_target=False,
+            is_spanish=is_spanish
         )
 
-    title = "🗑️ <b>Removed transaction:</b>\n" if has_target else "🗑️ <b>Removed latest transaction:</b>\n"
-
-    return (
-        f"{title}"
-        f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})\n\n"
-        f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
-        f"• Total In: {formatted_in}\n"
-        f"• Total Out: {formatted_out}\n"
-        f"• Net Savings: {formatted_net}{pct_str}"
+    items_block = f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept})"
+    return format_undo_success(
+        items_block=items_block,
+        month_name=snapshot["month_name"],
+        primary_curr=curr,
+        formatted_in=formatted_in,
+        formatted_out=formatted_out,
+        formatted_net=formatted_net,
+        pct_str=pct_str,
+        is_exchange=False,
+        is_batch=False,
+        has_target=has_target,
+        is_spanish=is_spanish
     )
 
 
@@ -381,7 +404,8 @@ def handle_transaction_correction(
     user_uuid: UUID,
     parsed_query: ParsedQueryIntent,
     encryption_service: Optional[EncryptionService] = None,
-    session_factory=Session
+    session_factory=Session,
+    is_spanish: bool = False
 ) -> str:
     """Modifies fields on the user's targeted or latest transaction and updates Notion / cash flow snapshot."""
     enc_service = encryption_service or EncryptionService()
@@ -395,7 +419,7 @@ def handle_transaction_correction(
             encryption_service=enc_service
         )
         if not tx:
-            return "ℹ️ You don't have any recent transactions to update."
+            return format_correction_no_transactions(is_spanish=is_spanish)
 
         dec_amount = enc_service.decrypt(tx.amount) or "0.00 USD"
         dec_concept = enc_service.decrypt(tx.concept) or "Transaction"
@@ -449,9 +473,14 @@ def handle_transaction_correction(
 
     type_note = ""
     if current_type != new_type:
-        old_label = "Expense 💸" if current_type == "expense" else "Income 💰"
-        new_label = "Income 💰" if new_type == "income" else "Expense 💸"
-        type_note = f"\n<i>[Switched from {old_label} to {new_label}]</i>"
+        if is_spanish:
+            old_label = "Gasto 💸" if current_type == "expense" else "Ingreso 💰"
+            new_label = "Ingreso 💰" if new_type == "income" else "Gasto 💸"
+            type_note = f"\n<i>[Cambiado de {old_label} a {new_label}]</i>"
+        else:
+            old_label = "Expense 💸" if current_type == "expense" else "Income 💰"
+            new_label = "Income 💰" if new_type == "income" else "Expense 💸"
+            type_note = f"\n<i>[Switched from {old_label} to {new_label}]</i>"
 
     icon = "💰" if new_type == "income" else "💸"
     sign = "+" if new_type == "income" else "-"
@@ -461,17 +490,21 @@ def handle_transaction_correction(
     formatted_net = format_currency(snapshot["net_savings"], new_curr, show_sign=True)
     pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
 
-    safe_concept = html.escape(new_concept)
-    safe_cat = html.escape(new_cat)
     has_target = bool(parsed_query and (parsed_query.target_amount or parsed_query.target_currency or parsed_query.target_concept))
-    title = "✏️ <b>Updated transaction:</b>\n" if has_target else "✏️ <b>Updated latest transaction:</b>\n"
 
-    return (
-        f"{title}"
-        f"• {icon} {sign}{formatted_amt} ({safe_cat} - {safe_concept}){type_note}\n\n"
-        f"📊 <b>Updated {snapshot['month_name']} Balance:</b>\n"
-        f"• Total In: {formatted_in}\n"
-        f"• Total Out: {formatted_out}\n"
-        f"• Net Savings: {formatted_net}{pct_str}"
+    return format_correction_success(
+        icon=icon,
+        sign=sign,
+        formatted_amt=formatted_amt,
+        category=new_cat,
+        concept=new_concept,
+        type_note=type_note,
+        month_name=snapshot["month_name"],
+        formatted_in=formatted_in,
+        formatted_out=formatted_out,
+        formatted_net=formatted_net,
+        pct_str=pct_str,
+        has_target=has_target,
+        is_spanish=is_spanish
     )
 

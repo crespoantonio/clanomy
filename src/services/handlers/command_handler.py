@@ -27,7 +27,16 @@ from src.templates.telegram_messages import (
     PRIVACY_POLICY_MESSAGE,
     TERMS_OF_SERVICE_MESSAGE,
     AI_DISCLAIMER_FOOTER,
-    TELEGRAM_NON_AFFILIATION_DISCLAIMER
+    TELEGRAM_NON_AFFILIATION_DISCLAIMER,
+    is_spanish_text,
+    format_help_message,
+    format_timezone_overview,
+    format_timezone_unrecognized,
+    format_timezone_admin_required,
+    format_timezone_updated,
+    format_delete_my_data_confirm_prompt,
+    format_delete_my_data_success,
+    format_delete_my_data_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -259,27 +268,13 @@ class CommandHandler:
         
         args_clean = (args or "").strip()
         family_service = FamilyService()
+        is_spanish = is_spanish_text(args_clean)
 
         if not args_clean:
             active_tz = self._resolve_active_timezone(user, family)
             user_tz = getattr(user, "timezone", None)
             fam_tz = getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
-            user_note = f" (personal: <code>{user_tz}</code>)" if user_tz else " (using household default)"
-            
-            return (
-                f"🌐 <b>Timezone Settings</b>\n\n"
-                f"• Active Timezone: <b>{active_tz}</b>{user_note}\n"
-                f"• Household Default: <b>{fam_tz}</b>\n\n"
-                f"📍 <b>How to update:</b>\n"
-                f"• Send your location pin (📎 ➔ Location) to auto-detect.\n"
-                f"• Or type: <code>/timezone &lt;city, country, or offset&gt;</code>\n\n"
-                f"<i>Examples:</i>\n"
-                f"• <code>/timezone Buenos Aires</code>\n"
-                f"• <code>/timezone Madrid</code>\n"
-                f"• <code>/timezone -3</code>\n"
-                f"• <code>/timezone America/Argentina/Buenos_Aires</code>\n\n"
-                f"💡 <i>Tip: Household admins can update the family default with <code>/timezone --household &lt;zone&gt;</code>.</i>"
-            )
+            return format_timezone_overview(active_tz, fam_tz, user_tz, is_spanish=is_spanish)
 
         # Check if setting for household
         is_household = False
@@ -290,43 +285,28 @@ class CommandHandler:
 
         normalized = validate_and_normalize_timezone(tz_input)
         if not normalized:
-            escaped_input = html.escape(tz_input, quote=False)
-            return (
-                f"❌ <b>Unrecognized timezone:</b> '{escaped_input}'\n\n"
-                f"Please provide a known city, IANA name, or UTC offset:\n"
-                f"• <code>/timezone Buenos Aires</code>\n"
-                f"• <code>/timezone Madrid</code>\n"
-                f"• <code>/timezone -3</code>\n"
-                f"• <code>/timezone America/Argentina/Buenos_Aires</code>"
-            )
+            return format_timezone_unrecognized(tz_input, is_spanish=is_spanish)
 
         if is_household:
             is_admin = family_service.is_family_admin(family.id, user.id)
             if not is_admin:
-                return "⛔ Only household administrators can update the family-wide default timezone."
+                return format_timezone_admin_required(is_spanish=is_spanish)
             await asyncio.to_thread(family_service.set_family_timezone, family.id, normalized)
             family.timezone = normalized
-            return (
-                f"✅ <b>Household Default Timezone Updated!</b>\n\n"
-                f"The family workspace is now set to <b>{normalized}</b>. "
-                f"All daily and monthly summaries will be aligned to this local time."
-            )
+            return format_timezone_updated(normalized, is_household=True, is_spanish=is_spanish)
         else:
             await asyncio.to_thread(family_service.set_user_timezone, user.id, normalized)
             user.timezone = normalized
-            return (
-                f"✅ <b>Personal Timezone Updated!</b>\n\n"
-                f"Your active timezone is now set to <b>{normalized}</b>. "
-                f"Your daily reports (/today, /me) are now calibrated to your local time."
-            )
+            return format_timezone_updated(normalized, is_household=False, is_spanish=is_spanish)
 
-    async def handle_undo(self, user: User, family: Family) -> str:
+    async def handle_undo(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:
         """
-        /undo
+        /undo or /deshacer
         Instantly reverts the user's latest recorded transaction.
         """
         from src.services.handlers.transaction_handler import handle_transaction_undo
-        return await asyncio.to_thread(handle_transaction_undo, user.id, None)
+        is_es = is_spanish or is_spanish_text(args)
+        return await asyncio.to_thread(handle_transaction_undo, user.id, None, is_spanish=is_es)
 
     async def handle_privacy(self, user: User, family: Family, args: str = "") -> str:
         """
@@ -353,62 +333,28 @@ class CommandHandler:
         await export_service.export_and_send(family.id, chat_id, export_format=fmt)
         return None
 
-    async def handle_delete_my_data(self, user: User, family: Family, args: str = "") -> str:
+    async def handle_delete_my_data(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:
         """
         /delete_my_data, /delete_account, or /opt_out
         Permanently wipes the user's data from Clanomy (GDPR Right to Erasure / Right to be Forgotten).
         """
         clean_arg = (args or "").strip().upper()
+        is_es = is_spanish or is_spanish_text(args) or ("CONFIRMAR" in clean_arg) or ("SI" in clean_arg)
         if clean_arg in ("CONFIRM", "CONFIRMAR", "YES", "SI"):
             from src.services.account_service import AccountService
             account_service = AccountService()
             success = await account_service.delete_account(user.id)
             if success:
-                return (
-                    "✅ <b>Data Purged Successfully</b>\n\n"
-                    "Your personal account, Telegram identity link, and associated financial records have been permanently erased from our database.\n\n"
-                    "Thank you for using Clanomy! If you ever wish to return, simply send /start."
-                )
-            return "❌ Failed to delete your data. Please contact support@clanomy.com."
+                return format_delete_my_data_success(is_spanish=is_es)
+            return format_delete_my_data_failure(is_spanish=is_es)
 
-        return (
-            "⚠️ <b>Confirm Permanent Data Erasure (GDPR Right to be Forgotten)</b>\n\n"
-            "This action is permanent and irreversible:\n"
-            "• All your personal transactions and scheduled bills will be permanently deleted.\n"
-            "• Your Telegram ID and profile links will be wiped from our database.\n\n"
-            "To confirm, please reply with:\n"
-            "<b>/delete_my_data confirm</b> <i>(or type CONFIRM DELETE)</i>"
-        )
+        return format_delete_my_data_confirm_prompt(is_spanish=is_es)
 
-    async def handle_help(self, user: User, family: Family) -> str:
+    async def handle_help(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:
         """
-        /help
+        /help or /ayuda
         Displays interactive command guide and AI tips.
         """
-        return (
-            "✨ <b>Clanomy — Household Finance Assistant</b>\n\n"
-            "⚡ <b>Unlimited Free Commands:</b>\n"
-            "• /month — 📊 Household monthly summary &amp; member breakdown\n"
-            "• /month last — 📊 View last month's family summary\n"
-            "• /me — 👤 Your personal income, expenses &amp; top categories\n"
-            "• /today — 📅 Summary of transactions logged today\n"
-            "• /balance — 💰 Household net cash flow &amp; savings rate\n"
-            "• /bills — ⏰ Upcoming fixed bills and dues\n"
-            "• /timezone — 🌐 View or calibrate your active timezone\n"
-            "• /family — 👥 Members, roles, currency &amp; plan quota\n"
-            "• /invite — 🔗 Invite partner/roommate to your household\n"
-            "• /export — 📁 Download all transactions in CSV or JSON\n"
-            "• /undo — ↩️ Instantly revert your last logged expense\n"
-            "• /privacy — 🛡️ Zero-Knowledge privacy &amp; third-party AI disclosures\n"
-            "• /tos — 📜 Terms of Service &amp; Non-Advisory status\n"
-            "• /delete_my_data — 🗑️ Permanently wipe your data from Clanomy\n\n"
-            "🧠 <b>Conversational AI Assistant:</b>\n"
-            "<i>Simply message me naturally to log expenses, ask questions, or edit:</i>\n"
-            "• <i>\"35 sushi Tony\"</i> or <i>\"Paid 120 electric bill Maria\"</i>\n"
-            "• <i>\"How much did we spend on groceries last week?\"</i>\n"
-            "• <i>\"Change the last one to income\"</i>\n\n"
-            "💡 <i>Note: Slash commands (/month, /me, etc.) are always 100% free and never consume your monthly AI quota!</i>"
-            f"{AI_DISCLAIMER_FOOTER}"
-            f"{TELEGRAM_NON_AFFILIATION_DISCLAIMER}"
-        )
+        is_es = is_spanish or is_spanish_text(args)
+        return format_help_message(is_spanish=is_es)
 

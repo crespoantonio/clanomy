@@ -62,7 +62,15 @@ from src.templates.telegram_messages import (
     format_message_too_long,
     format_voice_too_long,
     format_voice_too_large,
-    format_welcome_message
+    format_welcome_message,
+    format_bill_edit_prompt,
+    format_bill_edit_cancelled,
+    format_bill_edit_invalid_amount,
+    format_monthly_free_limit_reached,
+    format_location_calibrated,
+    format_location_calibration_failed,
+    format_subscription_expired_notice,
+    is_spanish_text,
 )
 
 
@@ -373,24 +381,7 @@ async def telegram_webhook(
                         }
 
                         is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
-                        if is_spanish:
-                            prompt = (
-                                f'<a href="tg://bill/{target_bill_id}">&#8203;</a>'
-                                f"✏️ <b>Pagar '{html.escape(cpt)}'</b>\n\n"
-                                f"Responde con el monto pagado (ej: <code>45.50</code>) — <i>100% gratis</i>,\n"
-                                f"o envía un audio <i>(consume 1 crédito de IA 🎙️)</i>.\n\n"
-                                f"<i>(Escribe 'cancel' para abortar)</i>"
-                            )
-                            toast = "Responde con el nuevo monto"
-                        else:
-                            prompt = (
-                                f'<a href="tg://bill/{target_bill_id}">&#8203;</a>'
-                                f"✏️ <b>Settle '{html.escape(cpt)}'</b>\n\n"
-                                f"Reply with the exact amount paid (e.g. <code>45.50</code>) — <i>100% free</i>,\n"
-                                f"or send a voice note <i>(uses 1 AI log 🎙️)</i>.\n\n"
-                                f"<i>(Send 'cancel' to abort)</i>"
-                            )
-                            toast = "Reply with the new amount"
+                        prompt, toast = format_bill_edit_prompt(target_bill_id, cpt, is_spanish=is_spanish)
 
                         await telegram_service.send_message(
                             chat_id=chat_id,
@@ -472,17 +463,14 @@ async def telegram_webhook(
                     logger.warning(f"Error determining timezone from location ({lat}, {lon}): {e}")
                     tz_name = None
 
+                is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
                 if tz_name:
                     family_service = FamilyService()
                     await asyncio.to_thread(family_service.set_user_timezone, user.id, tz_name)
                     user.timezone = tz_name
-                    conf_msg = (
-                        f"📍 <b>Location Detected & Calibrated!</b>\n\n"
-                        f"Your active timezone has been automatically set to <b>{tz_name}</b>.\n"
-                        f"Your daily summaries (/today, /me) and date filters are now aligned to your local time."
-                    )
+                    conf_msg = format_location_calibrated(tz_name, is_spanish=is_spanish)
                 else:
-                    conf_msg = "⚠️ Could not determine the timezone from this location pin. Please configure it manually using <code>/timezone &lt;city&gt;</code>."
+                    conf_msg = format_location_calibration_failed(is_spanish=is_spanish)
                 
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=conf_msg)
                 return {"status": "ok"}
@@ -662,7 +650,7 @@ async def telegram_webhook(
                 # Check if user cancelled
                 if text and text.strip().lower() in ("cancel", "cancelar", "/cancel", "abort"):
                     _pending_bill_edits.pop(user_id, None)
-                    cancel_msg = "❌ Pago de factura cancelado. La factura sigue pendiente." if is_spanish else "❌ Bill payment cancelled. The bill remains pending."
+                    cancel_msg = format_bill_edit_cancelled(is_spanish=is_spanish)
                     background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=cancel_msg)
                     return {"status": "ok"}
 
@@ -687,15 +675,13 @@ async def telegram_webhook(
                                 )
                                 quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val) + daily_note
                             else:
-                                quota_msg = (
-                                    f"⛔ <b>Límite mensual de IA alcanzado ({family.monthly_tx_count}/{FREE_TIER_MONTHLY_LIMIT} registros)</b>\n\n"
-                                    "Has alcanzado el límite mensual de registros con IA.\n"
-                                    "¡Puedes escribir el monto por texto gratis (ej: <code>45.50</code>) para pagar esta factura!"
+                                is_admin = FamilyService().is_family_admin(family.id, user.id)
+                                daily_note = (
+                                    "\n\n💡 <i>¡Aún puedes escribir el monto por texto gratis (ej: <code>45.50</code>) para pagar esta factura!</i>"
                                     if is_spanish else
-                                    f"⛔ <b>Monthly AI Quota Reached ({family.monthly_tx_count}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
-                                    "You've reached your free monthly AI quota.\n"
-                                    "You can still type the amount for free (e.g. <code>45.50</code>) to settle this bill!"
+                                    "\n\n💡 <i>You can still type the amount for free (e.g. <code>45.50</code>) to settle this bill!</i>"
                                 )
+                                quota_msg = format_monthly_free_limit_reached(is_admin=is_admin, limit=FREE_TIER_MONTHLY_LIMIT, is_spanish=is_spanish) + daily_note
                             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
                             return {"status": "ok"}
 
@@ -747,11 +733,7 @@ async def telegram_webhook(
                     background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=settle_msg)
                     return {"status": "ok"}
                 else:
-                    err_msg = (
-                        "⚠️ No pude reconocer un monto válido. Por favor responde con un número (ej: 45.50) o escribe 'cancel'."
-                        if is_spanish else
-                        "⚠️ Could not recognize a valid amount. Please reply with a number (e.g. 45.50) or type 'cancel'."
-                    )
+                    err_msg = format_bill_edit_invalid_amount(is_spanish=is_spanish)
                     background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=err_msg)
                     return {"status": "ok"}
 
@@ -772,10 +754,10 @@ async def telegram_webhook(
                 "/saldo": cmd_handler.handle_balance,
                 "/timezone": cmd_handler.handle_timezone,
                 "/zonahoraria": cmd_handler.handle_timezone,
-                "/undo": lambda u, f, *a: cmd_handler.handle_undo(u, f),
-                "/deshacer": lambda u, f, *a: cmd_handler.handle_undo(u, f),
-                "/help": lambda u, f, *a: cmd_handler.handle_help(u, f),
-                "/ayuda": lambda u, f, *a: cmd_handler.handle_help(u, f),
+                "/undo": lambda u, f, *a: cmd_handler.handle_undo(u, f, is_spanish=False),
+                "/deshacer": lambda u, f, *a: cmd_handler.handle_undo(u, f, is_spanish=True),
+                "/help": lambda u, f, *a: cmd_handler.handle_help(u, f, is_spanish=False),
+                "/ayuda": lambda u, f, *a: cmd_handler.handle_help(u, f, is_spanish=True),
                 "/privacy": cmd_handler.handle_privacy,
                 "/privacidad": cmd_handler.handle_privacy,
                 "/tos": cmd_handler.handle_tos,
@@ -789,7 +771,8 @@ async def telegram_webhook(
             }
 
             if clean_cmd in ("/currency", "/moneda"):
-                menu_text, keyboard = await handle_manage_currency(user.id, family.id, cmd_args)
+                is_es = (clean_cmd == "/moneda") or is_spanish_text(cmd_args)
+                menu_text, keyboard = await handle_manage_currency(user.id, family.id, cmd_args, is_spanish=is_es)
                 background_tasks.add_task(
                     telegram_service.send_message,
                     chat_id=chat_id,
@@ -851,18 +834,8 @@ async def telegram_webhook(
                     quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val)
                 else:
                     is_admin = FamilyService().is_family_admin(family.id, user.id)
-                    if is_admin:
-                        quota_msg = (
-                            f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
-                            f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
-                            "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
-                        )
-                    else:
-                        quota_msg = (
-                            f"⛔ <b>Monthly Free Limit Reached ({FREE_TIER_MONTHLY_LIMIT}/{FREE_TIER_MONTHLY_LIMIT} logs)</b>\n\n"
-                            f"Your family has reached the limit of {FREE_TIER_MONTHLY_LIMIT} free transaction logs for this month. "
-                            "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
-                        )
+                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es") or is_spanish_text(text or "")
+                    quota_msg = format_monthly_free_limit_reached(is_admin=is_admin, limit=FREE_TIER_MONTHLY_LIMIT, is_spanish=is_spanish)
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
                 return {"status": "ok"}
 
@@ -950,11 +923,7 @@ async def handle_failure(
         admin_user = next((u for u in users if fam_service.is_family_admin(family.id, u.id)), users[0] if users else None)
         if admin_user and admin_user.telegram_id:
             telegram_service = TelegramService()
-            failure_msg = (
-                "⚠️ <b>Subscription Expired/Failed:</b> Your workspace payment failed or expired. "
-                f"Your workspace has transitioned to the Free tier ({FREE_TIER_MONTHLY_LIMIT} logs/month). "
-                "All your historical data, past entries, and Notion sync remain 100% safe."
-            )
+            failure_msg = format_subscription_expired_notice(FREE_TIER_MONTHLY_LIMIT, is_spanish=False)
             background_tasks.add_task(telegram_service.send_message, chat_id=admin_user.telegram_id, text=failure_msg)
             
     return {"status": "ok"}

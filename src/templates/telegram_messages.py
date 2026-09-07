@@ -584,3 +584,768 @@ def format_bill_settled_notice(matched_concept: str, remaining_pending: str, is_
     return f"\n\n✅ <b>Marked as paid!</b>\n💳 <b>{safe_concept}</b> recorded in your expenses.\n⏳ Remaining pending this month: <b>{remaining_pending}</b>"
 
 
+# ─────────────────────────────────────────────────────────────────
+# Batch Line Items & Exchange Rate Formatters
+# ─────────────────────────────────────────────────────────────────
+
+def format_exchange_rate_line(sold_currency: str, rate_val: Optional[float], recv_currency: str, fmt_rate: str, is_spanish: bool) -> str:
+    """Formats the calculated exchange rate line item."""
+    if not rate_val:
+        return ""
+    if is_spanish:
+        return f"\n• 📊 Cotización: 1 {sold_currency} = {fmt_rate}"
+    return f"\n• 📊 Rate: 1 {sold_currency} = {fmt_rate}"
+
+
+def format_batch_bill_item(concept: str, fmt_amt: str, due_date: datetime, is_spanish: bool) -> str:
+    """Formats a single bill row inside a batch confirmation message."""
+    safe_concept = html.escape(concept)
+    due_str = due_date.strftime("%d/%m")
+    if is_spanish:
+        day_names = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+        day_name = day_names[due_date.weekday()]
+        return f"• 💳 <b>{safe_concept}:</b> {fmt_amt} <i>(Vence: {day_name} {due_str})</i>\n"
+    day_name = due_date.strftime("%a")
+    return f"• 💳 <b>{safe_concept}:</b> {fmt_amt} <i>(Due: {day_name} {due_str})</i>\n"
+
+
+def format_batch_tx_item(icon: str, concept: str, fmt_amt: str, category: str) -> str:
+    """Formats a single transaction row inside a batch confirmation message."""
+    safe_concept = html.escape(concept)
+    safe_category = html.escape(category)
+    return f"• {icon} <b>{safe_concept}:</b> {fmt_amt} ({safe_category})\n"
+
+
+# ─────────────────────────────────────────────────────────────────
+# Bill Handler Presentation Templates & Cards
+# ─────────────────────────────────────────────────────────────────
+
+def format_bill_settled_response(
+    concept: str,
+    fmt_paid: str,
+    rem_str: str,
+    is_spanish: bool,
+    is_changed: bool = False
+) -> str:
+    """Full response message when a scheduled bill is settled by ID or name."""
+    safe_concept = html.escape(concept)
+    if is_spanish:
+        note = " <i>(monto actualizado)</i>" if is_changed else ""
+        return (
+            f"✅ <b>Factura registrada como pagada:</b>\n"
+            f"• 💳 <b>{safe_concept}</b> ({fmt_paid}){note}\n\n"
+            f"<i>Se guardó como gasto en tu historial.</i>\n"
+            f"📌 <b>Pendiente por pagar este mes:</b> {rem_str}"
+        )
+    note = " <i>(updated amount)</i>" if is_changed else ""
+    return (
+        f"✅ <b>Bill marked as paid:</b>\n"
+        f"• 💳 <b>{safe_concept}</b> ({fmt_paid}){note}\n\n"
+        f"<i>Recorded as an expense in your history.</i>\n"
+        f"📌 <b>Remaining pending bills:</b> {rem_str}"
+    )
+
+
+def format_overdue_bills_reminder(due_or_overdue_lines: list, is_spanish: bool) -> str:
+    """Formatted banner alerting users of impending or overdue bills."""
+    if not due_or_overdue_lines:
+        return ""
+    if is_spanish:
+        header = "⚠️ <b>Recordatorio de Vencimientos:</b>\n<i>Tienes facturas programadas pendientes de pago:</i>"
+        tip = '\n👉 <i>Si ya pagaste alguna, solo dime "Pagué [nombre]" (ej: "Pagué la visa") o pulsa en /bills para registrarla.</i>'
+    else:
+        header = "⚠️ <b>Upcoming / Due Bills Reminder:</b>\n<i>You have pending scheduled bills:</i>"
+        tip = '\n👉 <i>If you already paid any, simply tell me "Paid [name]" (e.g. "Paid the visa") or tap in /bills to record it.</i>'
+    return f"{header}\n" + "\n".join(due_or_overdue_lines) + f"\n{tip}"
+
+
+def format_bill_settlement_card(
+    concept: str,
+    fmt_amt: str,
+    due_fmt: str,
+    category: str,
+    bill_id: Any,
+    return_page: int = 1,
+    tf_code: str = "this",
+    is_spanish: bool = False
+) -> Tuple[str, dict]:
+    """Builds interactive 2-option settlement card text and inline keyboard for a specific bill."""
+    safe_concept = html.escape(concept)
+    safe_cat = html.escape(category)
+    if is_spanish:
+        card_text = (
+            f"⚡ <b>Pagar Factura: {safe_concept}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Monto Registrado:</b> {fmt_amt}\n"
+            f"• <b>Vencimiento:</b> {due_fmt}\n"
+            f"• <b>Categoría:</b> {safe_cat}\n\n"
+            f"<i>¿Cómo deseas registrar este pago?</i>"
+        )
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": f"✅ Pagar {fmt_amt} (Sin cambio)", "callback_data": f"bill_pay:{bill_id}:{tf_code}"}],
+                [{"text": "✏️ Pagar Otro Monto", "callback_data": f"bill_edit:{bill_id}"}],
+                [{"text": "🔙 Volver a Facturas", "callback_data": f"bills_p:{return_page}:{tf_code}"}],
+            ]
+        }
+    else:
+        card_text = (
+            f"⚡ <b>Settle Bill: {safe_concept}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Recorded Amount:</b> {fmt_amt}\n"
+            f"• <b>Due Date:</b> {due_fmt}\n"
+            f"• <b>Category:</b> {safe_cat}\n\n"
+            f"<i>How would you like to settle this bill?</i>"
+        )
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": f"✅ Pay {fmt_amt} (No Change)", "callback_data": f"bill_pay:{bill_id}:{tf_code}"}],
+                [{"text": "✏️ Pay Different Amount", "callback_data": f"bill_edit:{bill_id}"}],
+                [{"text": "🔙 Back to Bills", "callback_data": f"bills_p:{return_page}:{tf_code}"}],
+            ]
+        }
+    return card_text, keyboard
+
+
+def format_bill_not_found_card(return_page: int = 1, tf_code: str = "this", is_spanish: bool = False) -> Tuple[str, dict]:
+    """Fallback card when requested bill does not exist."""
+    msg = "Factura no encontrada." if is_spanish else "Bill not found."
+    btn_text = "🔙 Volver" if is_spanish else "🔙 Back"
+    return msg, {"inline_keyboard": [[{"text": btn_text, "callback_data": f"bills_p:{return_page}:{tf_code}"}]]}
+
+
+def format_bill_already_paid_card(return_page: int = 1, tf_code: str = "this", is_spanish: bool = False) -> Tuple[str, dict]:
+    """Fallback card when requested bill is already paid."""
+    msg = "Esta factura ya fue pagada." if is_spanish else "This bill is already marked as paid."
+    btn_text = "🔙 Volver" if is_spanish else "🔙 Back"
+    return msg, {"inline_keyboard": [[{"text": btn_text, "callback_data": f"bills_p:{return_page}:{tf_code}"}]]}
+
+
+# ─────────────────────────────────────────────────────────────────
+# Command Handler & General Interaction Templates
+# ─────────────────────────────────────────────────────────────────
+
+def format_help_message(is_spanish: bool) -> str:
+    """Full help menu detailing zero-quota commands and conversational AI capabilities."""
+    if is_spanish:
+        return (
+            "✨ <b>Clanomy — Asistente de Finanzas del Hogar</b>\n\n"
+            "⚡ <b>Comandos Gratuitos Ilimitados:</b>\n"
+            "• /month — 📊 Resumen mensual del hogar y desglose por integrante\n"
+            "• /month last — 📊 Ver el resumen del hogar del mes anterior\n"
+            "• /me — 👤 Tus ingresos, gastos personales y categorías principales\n"
+            "• /today — 📅 Resumen de transacciones registradas hoy\n"
+            "• /balance — 💰 Flujo de caja neto y tasa de ahorro del hogar\n"
+            "• /bills — ⏰ Facturas y vencimientos programados pendientes\n"
+            "• /timezone — 🌐 Ver o calibrar tu zona horaria activa\n"
+            "• /family — 👥 Integrantes, roles, moneda y cuota del plan\n"
+            "• /invite — 🔗 Invitar a tu pareja o compañero de casa\n"
+            "• /export — 📁 Descargar todas tus transacciones en CSV o JSON\n"
+            "• /undo — ↩️ Revertir de inmediato el último gasto registrado\n"
+            "• /privacy — 🛡️ Privacidad Zero-Knowledge y acuerdos de IA de terceros\n"
+            "• /tos — 📜 Términos de Servicio y aviso de herramienta no asesora\n"
+            "• /delete_my_data — 🗑️ Borrar permanentemente tus datos de Clanomy\n\n"
+            "🧠 <b>Asistente de IA Conversacional:</b>\n"
+            "<i>Escríbeme o envíame audios con total naturalidad para registrar o consultar:</i>\n"
+            "• <i>\"35 sushi Tony\"</i> o <i>\"Pagué 120 de luz María\"</i>\n"
+            "• <i>\"¿Cuánto gastamos en el súper la semana pasada?\"</i>\n"
+            "• <i>\"Cambia el último a ingreso\"</i>\n\n"
+            "💡 <i>Nota: Los comandos (/month, /me, etc.) son siempre 100% gratuitos y nunca consumen tu cuota mensual de IA.</i>"
+            f"{AI_DISCLAIMER_FOOTER}"
+            f"{TELEGRAM_NON_AFFILIATION_DISCLAIMER}"
+        )
+    return (
+        "✨ <b>Clanomy — Household Finance Assistant</b>\n\n"
+        "⚡ <b>Unlimited Free Commands:</b>\n"
+        "• /month — 📊 Household monthly summary &amp; member breakdown\n"
+        "• /month last — 📊 View last month's family summary\n"
+        "• /me — 👤 Your personal income, expenses &amp; top categories\n"
+        "• /today — 📅 Summary of transactions logged today\n"
+        "• /balance — 💰 Household net cash flow &amp; savings rate\n"
+        "• /bills — ⏰ Upcoming fixed bills and dues\n"
+        "• /timezone — 🌐 View or calibrate your active timezone\n"
+        "• /family — 👥 Members, roles, currency &amp; plan quota\n"
+        "• /invite — 🔗 Invite partner/roommate to your household\n"
+        "• /export — 📁 Download all transactions in CSV or JSON\n"
+        "• /undo — ↩️ Instantly revert your last logged expense\n"
+        "• /privacy — 🛡️ Zero-Knowledge privacy &amp; third-party AI disclosures\n"
+        "• /tos — 📜 Terms of Service &amp; Non-Advisory status\n"
+        "• /delete_my_data — 🗑️ Permanently wipe your data from Clanomy\n\n"
+        "🧠 <b>Conversational AI Assistant:</b>\n"
+        "<i>Simply message me naturally to log expenses, ask questions, or edit:</i>\n"
+        "• <i>\"35 sushi Tony\"</i> or <i>\"Paid 120 electric bill Maria\"</i>\n"
+        "• <i>\"How much did we spend on groceries last week?\"</i>\n"
+        "• <i>\"Change the last one to income\"</i>\n\n"
+        "💡 <i>Note: Slash commands (/month, /me, etc.) are always 100% free and never consume your monthly AI quota!</i>"
+        f"{AI_DISCLAIMER_FOOTER}"
+        f"{TELEGRAM_NON_AFFILIATION_DISCLAIMER}"
+    )
+
+
+def format_timezone_overview(active_tz: str, fam_tz: str, user_tz: Optional[str], is_spanish: bool) -> str:
+    """Overview message for the /timezone command."""
+    if is_spanish:
+        user_note = f" (personal: <code>{user_tz}</code>)" if user_tz else " (usando predeterminado del hogar)"
+        return (
+            f"🌐 <b>Configuración de Zona Horaria</b>\n\n"
+            f"• Zona Horaria Activa: <b>{active_tz}</b>{user_note}\n"
+            f"• Predeterminada del Hogar: <b>{fam_tz}</b>\n\n"
+            f"📍 <b>Cómo actualizar:</b>\n"
+            f"• Envía tu ubicación (📎 ➔ Ubicación) para detección automática.\n"
+            f"• O escribe: <code>/timezone &lt;ciudad, país o UTC offset&gt;</code>\n\n"
+            f"<i>Ejemplos:</i>\n"
+            f"• <code>/timezone Buenos Aires</code>\n"
+            f"• <code>/timezone Madrid</code>\n"
+            f"• <code>/timezone -3</code>\n"
+            f"• <code>/timezone America/Argentina/Buenos_Aires</code>\n\n"
+            f"💡 <i>Tip: Los administradores pueden cambiar la del hogar con <code>/timezone --household &lt;zona&gt;</code>.</i>"
+        )
+    user_note = f" (personal: <code>{user_tz}</code>)" if user_tz else " (using household default)"
+    return (
+        f"🌐 <b>Timezone Settings</b>\n\n"
+        f"• Active Timezone: <b>{active_tz}</b>{user_note}\n"
+        f"• Household Default: <b>{fam_tz}</b>\n\n"
+        f"📍 <b>How to update:</b>\n"
+        f"• Send your location pin (📎 ➔ Location) to auto-detect.\n"
+        f"• Or type: <code>/timezone &lt;city, country, or offset&gt;</code>\n\n"
+        f"<i>Examples:</i>\n"
+        f"• <code>/timezone Buenos Aires</code>\n"
+        f"• <code>/timezone Madrid</code>\n"
+        f"• <code>/timezone -3</code>\n"
+        f"• <code>/timezone America/Argentina/Buenos_Aires</code>\n\n"
+        f"💡 <i>Tip: Household admins can update the family default with <code>/timezone --household &lt;zone&gt;</code>.</i>"
+    )
+
+
+def format_timezone_unrecognized(input_tz: str, is_spanish: bool) -> str:
+    """Error message when a timezone string is invalid."""
+    escaped_input = html.escape(input_tz, quote=False)
+    if is_spanish:
+        return (
+            f"❌ <b>Zona horaria no reconocida:</b> '{escaped_input}'\n\n"
+            f"Por favor indica una ciudad conocida, nombre IANA o UTC offset:\n"
+            f"• <code>/timezone Buenos Aires</code>\n"
+            f"• <code>/timezone Madrid</code>\n"
+            f"• <code>/timezone -3</code>\n"
+            f"• <code>/timezone America/Argentina/Buenos_Aires</code>"
+        )
+    return (
+        f"❌ <b>Unrecognized timezone:</b> '{escaped_input}'\n\n"
+        f"Please provide a known city, IANA name, or UTC offset:\n"
+        f"• <code>/timezone Buenos Aires</code>\n"
+        f"• <code>/timezone Madrid</code>\n"
+        f"• <code>/timezone -3</code>\n"
+        f"• <code>/timezone America/Argentina/Buenos_Aires</code>"
+    )
+
+
+def format_timezone_admin_required(is_spanish: bool) -> str:
+    """Error message when non-admin attempts to set household timezone."""
+    if is_spanish:
+        return "⛔ Solo los administradores del hogar pueden actualizar la zona horaria predeterminada de la familia."
+    return "⛔ Only household administrators can update the family-wide default timezone."
+
+
+def format_timezone_updated(normalized_tz: str, is_household: bool, is_spanish: bool) -> str:
+    """Confirmation message after setting timezone."""
+    if is_spanish:
+        if is_household:
+            return (
+                f"✅ <b>¡Zona Horaria del Hogar Actualizada!</b>\n\n"
+                f"El espacio familiar ahora está configurado en <b>{normalized_tz}</b>. "
+                f"Todos los resúmenes diarios y mensuales se alinearán a esta hora local."
+            )
+        return (
+            f"✅ <b>¡Zona Horaria Personal Actualizada!</b>\n\n"
+            f"Tu zona horaria activa ahora está configurada en <b>{normalized_tz}</b>. "
+            f"Tus reportes diarios (/today, /me) ahora están calibrados a tu hora local."
+        )
+    if is_household:
+        return (
+            f"✅ <b>Household Default Timezone Updated!</b>\n\n"
+            f"The family workspace is now set to <b>{normalized_tz}</b>. "
+            f"All daily and monthly summaries will be aligned to this local time."
+        )
+    return (
+        f"✅ <b>Personal Timezone Updated!</b>\n\n"
+        f"Your active timezone is now set to <b>{normalized_tz}</b>. "
+        f"Your daily reports (/today, /me) are now calibrated to your local time."
+    )
+
+
+def format_delete_my_data_confirm_prompt(is_spanish: bool) -> str:
+    """Warning and confirmation prompt for account/data deletion."""
+    if is_spanish:
+        return (
+            "⚠️ <b>Confirmar Borrado Permanente de Datos (Derecho al Olvido - GDPR)</b>\n\n"
+            "Esta acción es permanente e irreversible:\n"
+            "• Todas tus transacciones personales y facturas programadas serán eliminadas para siempre.\n"
+            "• Tu ID de Telegram y enlaces de perfil serán borrados de nuestra base de datos.\n\n"
+            "Para confirmar, por favor responde con:\n"
+            "<b>/delete_my_data confirmar</b> <i>(o escribe CONFIRMAR BORRAR)</i>"
+        )
+    return (
+        "⚠️ <b>Confirm Permanent Data Erasure (GDPR Right to be Forgotten)</b>\n\n"
+        "This action is permanent and irreversible:\n"
+        "• All your personal transactions and scheduled bills will be permanently deleted.\n"
+        "• Your Telegram ID and profile links will be wiped from our database.\n\n"
+        "To confirm, please reply with:\n"
+        "<b>/delete_my_data confirm</b> <i>(or type CONFIRM DELETE)</i>"
+    )
+
+
+def format_delete_my_data_success(is_spanish: bool) -> str:
+    """Confirmation message when data is permanently erased."""
+    if is_spanish:
+        return (
+            "✅ <b>Datos Eliminados Exitosamente</b>\n\n"
+            "Tu cuenta personal, enlace de Telegram y registros financieros han sido borrados permanentemente de nuestra base de datos.\n\n"
+            "¡Gracias por haber usado Clanomy! Si deseas volver en el futuro, simplemente envía /start."
+        )
+    return (
+        "✅ <b>Data Purged Successfully</b>\n\n"
+        "Your personal account, Telegram identity link, and associated financial records have been permanently erased from our database.\n\n"
+        "Thank you for using Clanomy! If you ever wish to return, simply send /start."
+    )
+
+
+def format_delete_my_data_failure(is_spanish: bool) -> str:
+    """Error message when data deletion fails."""
+    if is_spanish:
+        return "❌ No se pudieron borrar tus datos. Por favor contacta a support@clanomy.com."
+    return "❌ Failed to delete your data. Please contact support@clanomy.com."
+
+
+# ─────────────────────────────────────────────────────────────────
+# Undo & Transaction Correction Templates
+# ─────────────────────────────────────────────────────────────────
+
+def format_undo_no_transactions(is_spanish: bool) -> str:
+    """Message when user calls /undo with no recent transactions."""
+    if is_spanish:
+        return "ℹ️ No tienes transacciones recientes para deshacer."
+    return "ℹ️ You don't have any recent transactions to undo."
+
+
+def format_undo_success(
+    items_block: str,
+    month_name: str,
+    primary_curr: str,
+    formatted_in: str,
+    formatted_out: str,
+    formatted_net: str,
+    pct_str: str,
+    is_exchange: bool = False,
+    is_batch: bool = False,
+    batch_count: int = 1,
+    has_target: bool = False,
+    is_spanish: bool = False
+) -> str:
+    """Confirmation message and updated balance snapshot after /undo."""
+    if is_spanish:
+        if is_exchange:
+            title = "🗑️ <b>Cambio de moneda revertido:</b>\n"
+        elif is_batch:
+            title = f"🗑️ <b>Se eliminaron {batch_count} transacciones de tu último mensaje:</b>\n"
+        elif has_target:
+            title = "🗑️ <b>Transacción revertida:</b>\n"
+        else:
+            title = "🗑️ <b>Última transacción revertida:</b>\n"
+
+        balance_header = f"📊 <b>Balance Actualizado de {month_name} ({primary_curr}):</b>"
+        in_label = "• Total Ingresos:"
+        out_label = "• Total Gastos:"
+        net_label = "• Ahorro Neto:"
+    else:
+        if is_exchange:
+            title = "🗑️ <b>Removed currency exchange:</b>\n"
+        elif is_batch:
+            title = f"🗑️ <b>Removed {batch_count} transactions from your last message:</b>\n"
+        elif has_target:
+            title = "🗑️ <b>Removed transaction:</b>\n"
+        else:
+            title = "🗑️ <b>Removed latest transaction:</b>\n"
+
+        balance_header = f"📊 <b>Updated {month_name} Balance ({primary_curr}):</b>"
+        in_label = "• Total In:"
+        out_label = "• Total Out:"
+        net_label = "• Net Savings:"
+
+    return (
+        f"{title}"
+        f"{items_block}\n\n"
+        f"{balance_header}\n"
+        f"{in_label} {formatted_in}\n"
+        f"{out_label} {formatted_out}\n"
+        f"{net_label} {formatted_net}{pct_str}"
+    )
+
+
+def format_correction_no_transactions(is_spanish: bool) -> str:
+    """Message when user attempts to correct a non-existent transaction."""
+    if is_spanish:
+        return "ℹ️ No tienes transacciones recientes para modificar."
+    return "ℹ️ You don't have any recent transactions to update."
+
+
+def format_correction_success(
+    icon: str,
+    sign: str,
+    formatted_amt: str,
+    category: str,
+    concept: str,
+    type_note: str,
+    month_name: str,
+    formatted_in: str,
+    formatted_out: str,
+    formatted_net: str,
+    pct_str: str,
+    has_target: bool = False,
+    is_spanish: bool = False
+) -> str:
+    """Confirmation message and updated balance snapshot after editing a transaction."""
+    safe_concept = html.escape(concept)
+    safe_category = html.escape(category)
+    if is_spanish:
+        title = "✏️ <b>Transacción modificada:</b>\n" if has_target else "✏️ <b>Última transacción modificada:</b>\n"
+        balance_header = f"📊 <b>Balance Actualizado de {month_name}:</b>"
+        in_label = "• Total Ingresos:"
+        out_label = "• Total Gastos:"
+        net_label = "• Ahorro Neto:"
+    else:
+        title = "✏️ <b>Updated transaction:</b>\n" if has_target else "✏️ <b>Updated latest transaction:</b>\n"
+        balance_header = f"📊 <b>Updated {month_name} Balance:</b>"
+        in_label = "• Total In:"
+        out_label = "• Total Out:"
+        net_label = "• Net Savings:"
+
+    return (
+        f"{title}"
+        f"• {icon} {sign}{formatted_amt} ({safe_category} - {safe_concept}){type_note}\n\n"
+        f"{balance_header}\n"
+        f"{in_label} {formatted_in}\n"
+        f"{out_label} {formatted_out}\n"
+        f"{net_label} {formatted_net}{pct_str}"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────
+# Currency, Family & Notion Handler Templates
+# ─────────────────────────────────────────────────────────────────
+
+def format_currency_menu_text(active_currency: str, is_spanish: bool = False) -> str:
+    """Introduction text for the interactive currency selector menu."""
+    if is_spanish:
+        return (
+            "💵 <b>Seleccionar Moneda Predeterminada del Hogar</b>\n\n"
+            f"Actualmente activa: <b>{active_currency}</b>\n\n"
+            "Toca una moneda abajo para establecerla como predeterminada de tu familia. "
+            "Cualquier futuro gasto o ingreso que registres sin especificar moneda usará automáticamente esta opción."
+        )
+    return (
+        "💵 <b>Select Household Default Currency</b>\n\n"
+        f"Currently active: <b>{active_currency}</b>\n\n"
+        "Tap a currency below to set it as your household default. "
+        "Any future expenses or income logged without a currency symbol will automatically default to your choice."
+    )
+
+
+def format_currency_success_text(new_currency: str, is_spanish: bool = False) -> str:
+    """Confirmation text when a new household currency is saved."""
+    if is_spanish:
+        return (
+            f"✅ <b>¡Moneda Predeterminada Actualizada a {new_currency}!</b>\n\n"
+            f"Todos los gastos e ingresos futuros registrados sin símbolo se guardarán automáticamente como <b>{new_currency}</b>.\n\n"
+            "Puedes cambiar esto en cualquier momento con /currency."
+        )
+    return (
+        f"✅ <b>Default Currency Updated to {new_currency}!</b>\n\n"
+        f"All future expenses & income logged without a currency symbol will automatically record as <b>{new_currency}</b>.\n\n"
+        "You can change this anytime with /currency."
+    )
+
+
+def format_family_created_text(name: str, is_spanish: bool = False) -> str:
+    """Confirmation text upon creating a new family workspace."""
+    safe_name = html.escape(name, quote=False)
+    if is_spanish:
+        return f"✅ ¡El grupo familiar '{safe_name}' ha sido creado! Para invitar a otros, simplemente pídeme 'generar un link de invitación'."
+    return f"✅ Family group '{safe_name}' has been created! To invite others, just ask me to 'generate an invite link'."
+
+
+def format_family_invite_text(link: str, is_spanish: bool = False) -> str:
+    """Invite link message for inviting partners/roommates to workspace."""
+    if is_spanish:
+        return f"🔗 Aquí tienes el link de invitación para tu familia:\n\n{link}\n\n⏳ Este enlace expirará en 1 hora."
+    return f"🔗 Here is your family invite link:\n\n{link}\n\n⏳ This invite link will expire in 1 hour."
+
+
+def format_family_info_text(
+    name: str,
+    plan_desc: str,
+    tx_info: str,
+    members_formatted: str,
+    tx_count: int,
+    invite_count: int,
+    is_spanish: bool = False
+) -> str:
+    """Information summary card for the /family command."""
+    safe_name = html.escape(name, quote=False)
+    if is_spanish:
+        return (
+            f"👪 <b>Espacio Familiar: {safe_name}</b>\n"
+            f"📋 <b>Plan:</b> {plan_desc}\n"
+            f"📊 <b>Registros de IA este mes:</b> {tx_info}\n\n"
+            f"<b>Integrantes:</b>\n{members_formatted}\n\n"
+            f"<b>Total de Transacciones:</b> {tx_count}\n"
+            f"<b>Invitaciones Activas:</b> {invite_count}"
+        )
+    return (
+        f"👪 <b>Family Workspace: {safe_name}</b>\n"
+        f"📋 <b>Plan:</b> {plan_desc}\n"
+        f"📊 <b>Monthly AI Logs:</b> {tx_info}\n\n"
+        f"<b>Members:</b>\n{members_formatted}\n\n"
+        f"<b>Total Transactions:</b> {tx_count}\n"
+        f"<b>Active Invites:</b> {invite_count}"
+    )
+
+
+def format_member_removed_notice(is_spanish: bool = False) -> str:
+    """Notification sent to a user removed from a household workspace."""
+    if is_spanish:
+        return (
+            "ℹ️ Has sido removido del espacio familiar por el administrador. "
+            "Se ha creado un nuevo espacio personal para ti con todo tu historial de transacciones intacto."
+        )
+    return (
+        "ℹ️ You have been removed from the family workspace by the admin. "
+        "A new personal workspace has been created for you with all your personal transaction history intact."
+    )
+
+
+def format_notion_pro_required(is_spanish: bool = False) -> str:
+    """Paywall notice for Notion mirroring."""
+    if is_spanish:
+        return (
+            "⭐️ <b>La Sincronización con Notion es una Función Pro</b>\n\n"
+            "La sincronización de base de datos en tiempo real con Notion está disponible en los planes <b>Solo Pro</b> y <b>Family Pro</b>.\n\n"
+            "Escribe /upgrade para conectar tu base de datos de Notion."
+        )
+    return (
+        "⭐️ <b>Notion Mirroring is a Pro Feature</b>\n\n"
+        "Real-time Notion database synchronization is available on <b>Solo Pro</b> and <b>Family Pro</b> plans.\n\n"
+        "Type /upgrade to connect your Notion database."
+    )
+
+
+def format_notion_connect_instructions(is_spanish: bool = False) -> str:
+    """Instructions on obtaining and providing an internal integration token."""
+    if is_spanish:
+        return (
+            "🔗 <b>Conecta tu Espacio de Notion</b>\n\n"
+            "Sigue estos rápidos pasos:\n"
+            "1. Ve a https://www.notion.so/my-integrations y crea una <b>Integración Interna</b>.\n"
+            "2. Copia el <b>Token Secreto de Integración</b>.\n"
+            "3. Abre tu base de datos de gastos en Notion, haz clic en <b>•••</b> (arriba a la derecha) -> <b>Conexiones</b>, y selecciona tu integración.\n"
+            "4. Responde aquí con:\n"
+            "   <code>/notion connect &lt;tu_token_secreto&gt;</code>"
+        )
+    return (
+        "🔗 <b>Connect your Notion Workspace</b>\n\n"
+        "Follow these quick steps:\n"
+        "1. Go to https://www.notion.so/my-integrations and create an <b>Internal Integration</b>.\n"
+        "2. Copy the <b>Internal Integration Secret</b> (token).\n"
+        "3. Open your Notion expenses database, click <b>•••</b> (top right) -> <b>Add connections</b>, and select your integration.\n"
+        "4. Reply here with:\n"
+        "   <code>/notion connect &lt;your_secret_token&gt;</code>"
+    )
+
+
+def format_notion_invalid_token(is_spanish: bool = False) -> str:
+    """Error message when a provided Notion token is invalid."""
+    if is_spanish:
+        return "⚠️ <b>¡Token Inválido!</b> Por favor verifica tu Token Secreto de Integración e intenta de nuevo.\n\n🔒 <i>Tu mensaje con el token fue eliminado automáticamente por seguridad.</i>"
+    return "⚠️ <b>Invalid Token!</b> Please check your Integration Secret and try again.\n\n🔒 <i>Your secret token message was automatically deleted for security.</i>"
+
+
+def format_notion_connected_success(database_name: Any, database_id: str, is_spanish: bool = False) -> str:
+    """Success message when Notion integration connects."""
+    if isinstance(database_name, list) and database_name and isinstance(database_name[0], dict) and "plain_text" in database_name[0]:
+        db_title = database_name[0]["plain_text"]
+    else:
+        db_title = str(database_name)
+    safe_db = html.escape(db_title)
+    if is_spanish:
+        return (
+            f"✅ <b>¡Espacio de Notion Conectado!</b>\n\n"
+            f"📁 <b>Base de Datos:</b> {safe_db}\n"
+            f"🆔 <b>ID:</b> <code>{database_id}</code>\n\n"
+            "¡Tus transacciones ahora están vinculadas y listas para sincronización automática!\n\n"
+            "🔒 <i>Tu mensaje con el token fue eliminado automáticamente por seguridad.</i>"
+        )
+    return (
+        f"✅ <b>Notion Workspace Connected!</b>\n\n"
+        f"📁 <b>Database:</b> {safe_db}\n"
+        f"🆔 <b>ID:</b> <code>{database_id}</code>\n\n"
+        "Your transactions are now linked and ready for automatic mirroring!\n\n"
+        "🔒 <i>Your secret token message was automatically deleted for security.</i>"
+    )
+
+
+def format_notion_no_databases(is_spanish: bool = False) -> str:
+    """Message when token is valid but no databases are shared."""
+    if is_spanish:
+        return (
+            "⚠️ <b>¡No se encontraron bases de datos!</b>\n"
+            "Tu token de Notion es válido, pero aún no has compartido ninguna base de datos con esta integración.\n\n"
+            "Por favor abre tu base de datos en Notion, haz clic en <b>•••</b> -> <b>Conexiones</b>, selecciona tu integración y envía <code>/notion connect &lt;token&gt;</code> de nuevo.\n\n"
+            "🔒 <i>Tu mensaje con el token fue eliminado automáticamente por seguridad.</i>"
+        )
+    return (
+        "⚠️ <b>No databases found!</b>\n"
+        "Your Notion token is valid, but no databases have been shared with this integration yet.\n\n"
+        "Please open your Notion database, click <b>•••</b> -> <b>Add connections</b>, select your integration, and run <code>/notion connect &lt;token&gt;</code> again.\n\n"
+        "🔒 <i>Your secret token message was automatically deleted for security.</i>"
+    )
+
+
+def format_notion_status_message(
+    is_connected: bool,
+    db_name: Optional[str] = None,
+    db_id: Optional[str] = None,
+    connected_at_str: Optional[str] = None,
+    is_spanish: bool = False
+) -> str:
+    """Status report for Notion workspace connection."""
+    if is_spanish:
+        if is_connected:
+            return (
+                f"📊 <b>Estado de Conexión con Notion:</b> Conectado ✅\n"
+                f"📁 <b>Base de Datos:</b> {html.escape(db_name or 'N/A')}\n"
+                f"🆔 <b>ID de Base de Datos:</b> <code>{db_id or 'N/A'}</code>\n"
+                f"📅 <b>Conectado:</b> {connected_at_str or 'N/A'}"
+            )
+        return "📊 <b>Estado de Conexión con Notion:</b> No Conectado ❌"
+    if is_connected:
+        return (
+            f"📊 <b>Notion Connection Status:</b> Connected ✅\n"
+            f"📁 <b>Target Database:</b> {html.escape(db_name or 'N/A')}\n"
+            f"🆔 <b>Database ID:</b> <code>{db_id or 'N/A'}</code>\n"
+            f"📅 <b>Connected:</b> {connected_at_str or 'N/A'}"
+        )
+    return "📊 <b>Notion Connection Status:</b> Not Connected ❌"
+
+
+def format_notion_disconnected(is_spanish: bool = False) -> str:
+    """Notice upon disconnecting Notion."""
+    if is_spanish:
+        return "🔌 <b>Notion Desconectado</b>\nLa conexión con tu espacio de Notion ha sido eliminada. La sincronización de transacciones está desactivada."
+    return "🔌 <b>Notion Disconnected</b>\nYour Notion workspace connection has been removed. Transaction mirroring is now disabled."
+
+
+# ─────────────────────────────────────────────────────────────────
+# Telegram Webhook Flow Templates
+# ─────────────────────────────────────────────────────────────────
+
+def format_bill_edit_prompt(target_bill_id: Any, concept: str, is_spanish: bool = False) -> Tuple[str, str]:
+    """Returns (prompt_text, toast_text) for interactive bill editing session."""
+    safe_cpt = html.escape(concept)
+    if is_spanish:
+        prompt = (
+            f'<a href="tg://bill/{target_bill_id}">&#8203;</a>'
+            f"✏️ <b>Pagar '{safe_cpt}'</b>\n\n"
+            f"Responde con el monto pagado (ej: <code>45.50</code>) — <i>100% gratis</i>,\n"
+            f"o envía un audio <i>(consume 1 crédito de IA 🎙️)</i>.\n\n"
+            f"<i>(Escribe 'cancel' para abortar)</i>"
+        )
+        toast = "Responde con el nuevo monto"
+    else:
+        prompt = (
+            f'<a href="tg://bill/{target_bill_id}">&#8203;</a>'
+            f"✏️ <b>Settle '{safe_cpt}'</b>\n\n"
+            f"Reply with the exact amount paid (e.g. <code>45.50</code>) — <i>100% free</i>,\n"
+            f"or send a voice note <i>(uses 1 AI log 🎙️)</i>.\n\n"
+            f"<i>(Send 'cancel' to abort)</i>"
+        )
+        toast = "Reply with the new amount"
+    return prompt, toast
+
+
+def format_bill_edit_cancelled(is_spanish: bool = False) -> str:
+    """Notice when an interactive bill edit is cancelled."""
+    if is_spanish:
+        return "❌ Pago de factura cancelado. La factura sigue pendiente."
+    return "❌ Bill payment cancelled. The bill remains pending."
+
+
+def format_bill_edit_invalid_amount(is_spanish: bool = False) -> str:
+    """Error message when invalid numeric amount is provided during bill edit."""
+    if is_spanish:
+        return "⚠️ No pude reconocer un monto válido. Por favor responde con un número (ej: 45.50) o escribe 'cancel'."
+    return "⚠️ Could not recognize a valid amount. Please reply with a number (e.g. 45.50) or type 'cancel'."
+
+
+def format_monthly_free_limit_reached(is_admin: bool, limit: int = FREE_TIER_MONTHLY_LIMIT, is_spanish: bool = False) -> str:
+    """Monthly free quota exhaustion message, customized by admin role."""
+    if is_spanish:
+        if is_admin:
+            return (
+                f"⛔ <b>Límite Mensual Gratuito Alcanzado ({limit}/{limit} registros)</b>\n\n"
+                f"Tu familia ha alcanzado el límite de {limit} registros gratuitos con IA para este mes (Cuota Alcanzada). "
+                "Escribe /upgrade para desbloquear registros ilimitados con IA, o continúa usando nuestros comandos gratuitos ilimitados (/month, /me, /balance, /bills)."
+            )
+        return (
+            f"⛔ <b>Límite Mensual Gratuito Alcanzado ({limit}/{limit} registros)</b>\n\n"
+            f"Tu familia ha alcanzado el límite de {limit} registros gratuitos con IA para este mes (Cuota Alcanzada). "
+            "Por favor pídele al administrador de tu hogar que actualice el espacio mediante /upgrade, o continúa usando nuestros comandos gratuitos ilimitados (/month, /me, /balance, /bills)."
+        )
+    if is_admin:
+        return (
+            f"⛔ <b>Monthly Free Limit Reached ({limit}/{limit} logs)</b>\n\n"
+            f"Your family has reached the limit of {limit} free transaction logs for this month (Quota Reached). "
+            "Type /upgrade to unlock unlimited AI logs, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
+        )
+    return (
+        f"⛔ <b>Monthly Free Limit Reached ({limit}/{limit} logs)</b>\n\n"
+        f"Your family has reached the limit of {limit} free transaction logs for this month (Quota Reached). "
+        "Please ask your family admin to upgrade the workspace via /upgrade, or continue using our unlimited free commands (/month, /me, /balance, /bills)."
+    )
+
+
+def format_location_calibrated(tz_name: str, is_spanish: bool = False) -> str:
+    """Confirmation message after auto-calibrating timezone from a location pin."""
+    if is_spanish:
+        return (
+            f"📍 <b>¡Ubicación Detectada y Calibrada!</b>\n\n"
+            f"Tu zona horaria activa ha sido configurada automáticamente en <b>{tz_name}</b>.\n"
+            f"Tus reportes diarios (/today, /me) y filtros de fecha ahora están alineados a tu hora local."
+        )
+    return (
+        f"📍 <b>Location Detected & Calibrated!</b>\n\n"
+        f"Your active timezone has been automatically set to <b>{tz_name}</b>.\n"
+        f"Your daily summaries (/today, /me) and date filters are now aligned to your local time."
+    )
+
+
+def format_location_calibration_failed(is_spanish: bool = False) -> str:
+    """Error message when timezone could not be determined from location pin."""
+    if is_spanish:
+        return "⚠️ No se pudo determinar la zona horaria a partir de esta ubicación. Por favor configúrala manualmente usando <code>/timezone &lt;ciudad&gt;</code>."
+    return "⚠️ Could not determine the timezone from this location pin. Please configure it manually using <code>/timezone &lt;city&gt;</code>."
+
+
+def format_subscription_expired_notice(limit: int = FREE_TIER_MONTHLY_LIMIT, is_spanish: bool = False) -> str:
+    """Alert message sent to admin when subscription payment fails or expires."""
+    if is_spanish:
+        return (
+            "⚠️ <b>Suscripción Expirada o Fallida:</b> El pago de tu espacio familiar falló o expiró. "
+            f"Tu espacio ha pasado al plan Gratuito ({limit} registros/mes). "
+            "Todo tu historial, registros anteriores y sincronización con Notion permanecen 100% seguros."
+        )
+    return (
+        "⚠️ <b>Subscription Expired/Failed:</b> Your workspace payment failed or expired. "
+        f"Your workspace has transitioned to the Free tier ({limit} logs/month). "
+        "All your historical data, past entries, and Notion sync remain 100% safe."
+    )
+
+

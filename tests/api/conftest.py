@@ -134,9 +134,26 @@ def mock_telegram(monkeypatch):
     class MockTelegramService:
         def __init__(self):
             self.messages = []
+            self.edited_messages = []
+            self.answered_callbacks = []
+            self.deleted_messages = []
             
         async def send_message(self, chat_id, text, **kwargs):
             self.messages.append({"chat_id": chat_id, "text": text, **kwargs})
+            return True
+
+        async def edit_message_text(self, chat_id, message_id, text, **kwargs):
+            entry = {"chat_id": chat_id, "message_id": message_id, "text": text, **kwargs}
+            self.edited_messages.append(entry)
+            self.messages.append(entry)
+            return True
+
+        async def answer_callback_query(self, callback_query_id, text=None, **kwargs):
+            self.answered_callbacks.append({"callback_query_id": callback_query_id, "text": text, **kwargs})
+            return True
+
+        async def delete_message(self, chat_id, message_id, **kwargs):
+            self.deleted_messages.append({"chat_id": chat_id, "message_id": message_id, **kwargs})
             return True
             
         async def send_document(self, chat_id, document=None, caption=None, **kwargs):

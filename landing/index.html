@@ -611,8 +611,8 @@
         <p><strong>Effective Date:</strong> September 2, 2026</p>
         <p><strong>Operated by:</strong> Clanomy ("Clanomy", "we", "us", or "our").</p>
 
-        <h4>1. Acceptance of Terms</h4>
-        <p>By accessing or using the Clanomy Telegram bot service, Web Studio, or associated application programming interfaces (collectively, the "Service"), you agree to be bound by these Terms of Service.</p>
+        <h4>1. Acceptance of Terms & Eligibility</h4>
+        <p>By accessing or using the Clanomy Telegram bot service, Web Studio, or associated application programming interfaces (collectively, the "Service"), you agree to be bound by these Terms of Service. <strong>Eligibility:</strong> You must be at least 18 years of age (or the legal age of majority in your jurisdiction) to access or use the Service. Individuals under 18 years of age are strictly prohibited from using Clanomy.</p>
 
         <h4>2. Description of Service & Non-Advisory Status</h4>
         <p>Clanomy is a software-as-a-service (SaaS) utility providing automated personal and family bookkeeping, natural language expense and income tracking, and Notion database synchronization. <strong>Clanomy is strictly a productivity software tool. Clanomy does NOT provide investment, financial, legal, or tax advice. We are NOT a bank, credit institution, money transmitter, lender, or foreign exchange provider.</strong> Clanomy does not hold user funds, initiate banking wires, or process financial transactions.</p>
@@ -626,10 +626,13 @@
         <h4>5. Termination & Cancellation</h4>
         <p>You may cancel your subscription at any time through the self-service Customer Portal (accessed via the bot with <code>/billing</code>). Cancellations take effect at the conclusion of your current prepaid billing cycle.</p>
 
-        <h4>6. Limitation of Liability</h4>
-        <p>To the maximum extent permitted by applicable law, Clanomy and its suppliers shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the Service or reliance on financial calculations.</p>
+        <h4>6. Limitation of Liability & AI Disclaimer</h4>
+        <p>Clanomy utilizes Artificial Intelligence (including Google Gemini and Whisper). AI-generated outputs, parsing, and arithmetic summaries may occasionally contain inaccuracies, hallucinations, or omissions. The Service is provided strictly on an <strong>"AS-IS"</strong> and <strong>"AS-AVAILABLE"</strong> basis without warranties of any kind, express or implied. To the maximum extent permitted by applicable law, Clanomy and its suppliers shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the Service or reliance on financial calculations.</p>
 
-        <h4>7. Contact</h4>
+        <h4>7. Telegram Non-Affiliation Notice</h4>
+        <p>Clanomy is an independent software application and is not affiliated with, sponsored by, or endorsed by Telegram FZ-LLC or Telegram Messenger Inc.</p>
+
+        <h4>8. Contact</h4>
         <p>For questions regarding these Terms, contact us at: <a href="mailto:support@clanomy.com">support@clanomy.com</a>.</p>
       </div>
       <div class="modal-footer">
@@ -663,15 +666,20 @@
         <h4>3. How We Use Data</h4>
         <p>Your data is used strictly to provide the bookkeeping, query aggregation, and Notion synchronization requested by you. We do <strong>NOT</strong> sell, rent, monetize, or share your data with advertisers or data brokers.</p>
 
-        <h4>4. Third-Party Integrations</h4>
+        <h4>4. Third-Party Sub-Processors & Zero AI Training</h4>
         <ul>
           <li><strong>Payment Processors:</strong> For secure payment processing, invoicing, and subscription management.</li>
-          <li><strong>Notion:</strong> When enabled by you, transactions are transmitted via TLS 1.3 to your personal Notion database.</li>
-          <li><strong>AI Inference & Zero Training:</strong> Transcription and extraction are executed through secured, zero-data-retention commercial developer AI endpoints solely for the transient duration of the request. Customer data, voice recordings, and financial prompts are strictly never retained or used to train machine learning models.</li>
+          <li><strong>Notion Labs:</strong> When enabled by you, transactions are transmitted via TLS 1.3 to your personal Notion database.</li>
+          <li><strong>Google LLC (Gemini Developer API) & Whisper:</strong> Natural language extraction and voice transcriptions are processed via secured, zero-data-retention commercial developer endpoints solely for the transient duration of the request. Customer data, voice notes, and financial prompts are strictly never retained or used to train machine learning models.</li>
         </ul>
 
-        <h4>5. Data Deletion Rights</h4>
-        <p>You may permanently delete your workspace, transactions, and linked credentials at any time by executing the <code>/delete_account</code> command or by writing to <a href="mailto:support@clanomy.com">support@clanomy.com</a>.</p>
+        <h4>5. Data Portability & Erasure Rights (GDPR & CCPA)</h4>
+        <p>You have full sovereignty over your personal data:
+        <ul>
+          <li><strong>Data Portability (GDPR Art. 20):</strong> Download your complete transaction history at any time in CSV or JSON format using the <code>/export</code> command.</li>
+          <li><strong>Right to Erasure (GDPR Art. 17):</strong> Permanently wipe your account, Telegram ID links, and all financial records using the <code>/delete_my_data</code> (or <code>/delete_account</code>) command, or by contacting <a href="mailto:support@clanomy.com">support@clanomy.com</a>.</li>
+        </ul>
+        </p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary modal-close" data-i18n="footer.close_btn">Close</button>

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     MAX_AUDIO_SIZE_BYTES: int = 3 * 1024 * 1024  # Maximum allowable voice/audio file size in bytes (3 MB) before fast-fail rejection
     MAX_TEXT_LENGTH: int = 350  # Maximum allowable text message length in characters before fast-fail rejection
     FAMILY_INVITE_TTL_HOURS: int = 1  # Family invite link expiration window in hours
+    REQUIRE_TERMS_ACCEPTANCE: bool = True  # Strict compliance gate: Require users to accept Terms of Service & Privacy Policy before logging
 
     # Monetization & Subscription Settings
     ENABLE_SUBSCRIPTIONS: bool = False

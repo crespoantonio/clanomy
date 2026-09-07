@@ -54,12 +54,15 @@ class User(SQLModel, table=True):
     is_admin: bool = Field(default=False)
     has_used_trial: bool = Field(default=False)
     timezone: Optional[str] = Field(default=None, max_length=50)
+    terms_accepted: bool = Field(default=False)
+    terms_accepted_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     family: Family = Relationship(back_populates="users")
     transactions: List["Transaction"] = Relationship(back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
     created_invites: List["FamilyInvite"] = Relationship(back_populates="creator", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    scheduled_bills: List["ScheduledBill"] = Relationship(back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
 
 class Transaction(SQLModel, table=True):
     """
@@ -139,5 +142,5 @@ class ScheduledBill(SQLModel, table=True):
 
     # Relationships
     family: Family = Relationship(back_populates="scheduled_bills")
-    user: User = Relationship()
+    user: Optional[User] = Relationship(back_populates="scheduled_bills")
     transaction: Optional[Transaction] = Relationship()

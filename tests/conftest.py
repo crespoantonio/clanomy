@@ -43,13 +43,16 @@ def test_environment_isolation():
     original_subs = settings.ENABLE_SUBSCRIPTIONS
     original_ai_key = settings.AI_API_KEY
     original_ollama_url = settings.OLLAMA_BASE_URL
+    original_terms = settings.REQUIRE_TERMS_ACCEPTANCE
     settings.ENABLE_SUBSCRIPTIONS = True
     settings.AI_API_KEY = None
     settings.OLLAMA_BASE_URL = "http://127.0.0.1:9"
+    settings.REQUIRE_TERMS_ACCEPTANCE = False
     from src.services.family_service import FamilyService
     FamilyService._instance = None
     yield
     settings.ENABLE_SUBSCRIPTIONS = original_subs
     settings.AI_API_KEY = original_ai_key
     settings.OLLAMA_BASE_URL = original_ollama_url
+    settings.REQUIRE_TERMS_ACCEPTANCE = original_terms
     FamilyService._instance = None

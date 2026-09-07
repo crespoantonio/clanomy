@@ -40,7 +40,10 @@ currency - Interactive selector or update household default currency (e.g. /curr
 family - Manage family members and shared ledger
 invite - Generate invite link for household members
 notion - Connect and mirror transactions to Notion
-export - Export financial logs to CSV or JSON
+export - Export financial logs to CSV or JSON (GDPR Art. 20 Data Portability)
+delete_my_data - Permanently erase personal account and financial records (GDPR Art. 17 Right to Erasure)
+privacy - View privacy policy, encryption guarantees, and sub-processor details
+tos - View terms of service, eligibility, and non-advisory status
 help - View available commands and AI logging tips
 ```
 

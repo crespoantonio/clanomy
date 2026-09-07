@@ -23,6 +23,12 @@ from src.services.query.formatters import (
     format_bills_summary,
     format_balance_summary
 )
+from src.templates.telegram_messages import (
+    PRIVACY_POLICY_MESSAGE,
+    TERMS_OF_SERVICE_MESSAGE,
+    AI_DISCLAIMER_FOOTER,
+    TELEGRAM_NON_AFFILIATION_DISCLAIMER
+)
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +328,58 @@ class CommandHandler:
         from src.services.handlers.transaction_handler import handle_transaction_undo
         return await asyncio.to_thread(handle_transaction_undo, user.id, None)
 
+    async def handle_privacy(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /privacy or /privacidad
+        Displays data rights, sub-processors, and Zero-Knowledge encryption guarantees.
+        """
+        return PRIVACY_POLICY_MESSAGE
+
+    async def handle_tos(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /tos, /terms, or /terminos
+        Displays Terms of Service, non-advisory status, and 'As-Is' warranty disclaimers.
+        """
+        return TERMS_OF_SERVICE_MESSAGE
+
+    async def handle_export(self, user: User, family: Family, chat_id: int, args: str = "") -> Optional[str]:
+        """
+        /export or /exportar
+        Deterministically exports family transactions in CSV or JSON without invoking AI.
+        """
+        from src.services.export_service import ExportService
+        export_service = ExportService()
+        fmt = "json" if "json" in (args or "").lower() else "csv"
+        await export_service.export_and_send(family.id, chat_id, export_format=fmt)
+        return None
+
+    async def handle_delete_my_data(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /delete_my_data, /delete_account, or /opt_out
+        Permanently wipes the user's data from Clanomy (GDPR Right to Erasure / Right to be Forgotten).
+        """
+        clean_arg = (args or "").strip().upper()
+        if clean_arg in ("CONFIRM", "CONFIRMAR", "YES", "SI"):
+            from src.services.account_service import AccountService
+            account_service = AccountService()
+            success = await account_service.delete_account(user.id)
+            if success:
+                return (
+                    "✅ <b>Data Purged Successfully</b>\n\n"
+                    "Your personal account, Telegram identity link, and associated financial records have been permanently erased from our database.\n\n"
+                    "Thank you for using Clanomy! If you ever wish to return, simply send /start."
+                )
+            return "❌ Failed to delete your data. Please contact support@clanomy.com."
+
+        return (
+            "⚠️ <b>Confirm Permanent Data Erasure (GDPR Right to be Forgotten)</b>\n\n"
+            "This action is permanent and irreversible:\n"
+            "• All your personal transactions and scheduled bills will be permanently deleted.\n"
+            "• Your Telegram ID and profile links will be wiped from our database.\n\n"
+            "To confirm, please reply with:\n"
+            "<b>/delete_my_data confirm</b> <i>(or type CONFIRM DELETE)</i>"
+        )
+
     async def handle_help(self, user: User, family: Family) -> str:
         """
         /help
@@ -339,13 +397,18 @@ class CommandHandler:
             "• /timezone — 🌐 View or calibrate your active timezone\n"
             "• /family — 👥 Members, roles, currency &amp; plan quota\n"
             "• /invite — 🔗 Invite partner/roommate to your household\n"
-            "• /export — 📁 Download all transactions in CSV\n"
-            "• /undo — ↩️ Instantly revert your last logged expense\n\n"
+            "• /export — 📁 Download all transactions in CSV or JSON\n"
+            "• /undo — ↩️ Instantly revert your last logged expense\n"
+            "• /privacy — 🛡️ Zero-Knowledge privacy &amp; third-party AI disclosures\n"
+            "• /tos — 📜 Terms of Service &amp; Non-Advisory status\n"
+            "• /delete_my_data — 🗑️ Permanently wipe your data from Clanomy\n\n"
             "🧠 <b>Conversational AI Assistant:</b>\n"
             "<i>Simply message me naturally to log expenses, ask questions, or edit:</i>\n"
             "• <i>\"35 sushi Tony\"</i> or <i>\"Paid 120 electric bill Maria\"</i>\n"
             "• <i>\"How much did we spend on groceries last week?\"</i>\n"
             "• <i>\"Change the last one to income\"</i>\n\n"
             "💡 <i>Note: Slash commands (/month, /me, etc.) are always 100% free and never consume your monthly AI quota!</i>"
+            f"{AI_DISCLAIMER_FOOTER}"
+            f"{TELEGRAM_NON_AFFILIATION_DISCLAIMER}"
         )
 

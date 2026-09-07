@@ -15,6 +15,59 @@ UNAUTHORIZED_ACCESS_MESSAGE = (
     "This Clanomy bot instance is private and restricted to authorized users."
 )
 
+CONSENT_REQUEST_MESSAGE = (
+    "👋 <b>Welcome to Clanomy!</b>\n\n"
+    "Clanomy is a privacy-first household financial assistant.\n\n"
+    "Before logging your finances, please review and accept our data terms:\n\n"
+    "• 🔒 <b>Zero-Knowledge:</b> Financial records (amounts &amp; concepts) are encrypted via AES-256 before storage.\n"
+    "• 🤖 <b>Third-Party AI:</b> Voice &amp; text notes are parsed using Google Gemini &amp; Whisper developer APIs under zero-retention, zero-training agreements.\n"
+    "• 🔞 <b>Eligibility:</b> You must be <b>18 years of age or older</b>. Individuals under 18 are prohibited from using Clanomy.\n"
+    "• 📜 <b>Non-Advisory Tool:</b> Clanomy is an automated software utility. We do <b>NOT</b> provide financial, investment, legal, or tax advice. AI outputs may contain inaccuracies; always verify critical entries.\n"
+    "• 🗑️ <b>Data Sovereignty:</b> You can permanently purge your data anytime with /delete_my_data.\n\n"
+    "<i>Please tap below to accept the Terms of Service &amp; Privacy Policy to begin:</i>"
+)
+
+CONSENT_KEYBOARD = {
+    "inline_keyboard": [
+        [{"text": "✅ Accept Terms & Privacy (18+)", "callback_data": "accept_tos"}],
+        [
+            {"text": "📄 Privacy Policy", "callback_data": "view_privacy"},
+            {"text": "📜 Terms of Service", "callback_data": "view_tos"}
+        ]
+    ]
+}
+
+PRIVACY_POLICY_MESSAGE = (
+    "🛡️ <b>Clanomy Privacy Policy & Transparency Notice</b>\n\n"
+    "• <b>Zero-Knowledge Encryption:</b> All financial entries are encrypted in memory using application-level AES-256 Fernet before hitting the database. Database backups contain only unreadable ciphertext.\n\n"
+    "• <b>Third-Party Sub-Processors:</b>\n"
+    "  1. <i>Google LLC (Gemini API):</i> Used for natural language parsing under commercial enterprise API terms. User prompts are strictly transient, never stored, and never used to train machine learning models.\n"
+    "  2. <i>Speech-to-Text (Whisper):</i> Voice notes are transcribed transiently in memory and immediately discarded.\n"
+    "  3. <i>Notion Labs (Optional):</i> Synchronized only if you explicitly connect your personal Notion database.\n\n"
+    "• <b>Data Retention & Rights (GDPR / CCPA):</b>\n"
+    "  - /export — Instantly download your full transaction history (CSV/JSON).\n"
+    "  - /delete_my_data — Permanently purge your account, Telegram ID, and all records.\n\n"
+    "• <b>Contact:</b> support@clanomy.com"
+)
+
+TERMS_OF_SERVICE_MESSAGE = (
+    "📜 <b>Clanomy Terms of Service</b>\n\n"
+    "• <b>Non-Advisory Tool:</b> Clanomy is an automated productivity software utility for personal record-keeping. Clanomy is <b>NOT</b> a certified financial planner, broker, lender, tax specialist, or attorney. We do NOT provide financial, investment, legal, or tax advice.\n\n"
+    "• <b>Age Requirement:</b> You must be at least 18 years old to use Clanomy.\n\n"
+    "• <b>'As-Is' Warranty & AI Notice:</b> Clanomy utilizes Artificial Intelligence. Outputs may be inaccurate, hallucinated, or delayed. The Service is provided on an <b>'AS IS'</b> and <b>'AS AVAILABLE'</b> basis with no uptime or error-free warranties. Always verify entries via /undo.\n\n"
+    "• <b>Subscriptions & Billing:</b> Paid plans auto-renew monthly or annually until cancelled. Cancel anytime with 1 tap via /billing. All plans include a 60-day free trial; paid subscriptions are non-refundable once billed.\n\n"
+    "• <b>Unofficial Status:</b> Clanomy is an independent product not affiliated with, sponsored by, or endorsed by Telegram FZ-LLC.\n\n"
+    "• <b>Contact:</b> support@clanomy.com"
+)
+
+AI_DISCLAIMER_FOOTER = (
+    "\n\n⚠️ <i>AI Notice: Outputs may be inaccurate or delayed. Do not rely on AI for critical financial, legal, or tax decisions. Verify entries via /undo.</i>"
+)
+
+TELEGRAM_NON_AFFILIATION_DISCLAIMER = (
+    "\nℹ️ <i>Notice: Clanomy is an independent application not affiliated with or endorsed by Telegram FZ-LLC.</i>"
+)
+
 UNSUPPORTED_FORMAT_MESSAGE = (
     "⚠️ <b>Unsupported Format</b>\n\n"
     "Clanomy only accepts native voice notes (hold the mic 🎙️ icon) or text messages (e.g. <i>'Spent $24 on lunch'</i>)."
@@ -84,6 +137,11 @@ UPGRADE_MENU_INTRO = (
     "3️⃣ <b>Family Pro ($11.99 / month)</b>\n"
     "• Everything in Duo Pro for up to 5 Family Members with shared ledger\n\n"
     "🎁 <i>Annual Savings: 2 Months Free on annual plans ($49.99, $79.99, $119.99/yr)!</i>\n\n"
+    "📋 <b>Billing Terms &amp; Transparency:</b>\n"
+    "• <b>Auto-Renewal:</b> Subscriptions auto-renew monthly or annually until cancelled.\n"
+    "• <b>Cancel Anytime:</b> 1-tap cancellation via /billing to prevent future charges.\n"
+    "• <b>Refund Policy:</b> All workspaces include a 60-day free trial. Paid subscriptions are non-refundable once billed.\n"
+    "• By subscribing, you agree to our /tos and /privacy.\n\n"
     "<i>Tap a button below to open secure checkout and activate immediately:</i>"
 )
 
@@ -93,6 +151,9 @@ UPGRADE_MENU_ANNUAL_INTRO = (
     "1️⃣ <b>Solo Pro Annual ($49.99 / year)</b> — ~$4.16/mo (1 User)\n\n"
     "2️⃣ <b>Duo Pro Annual ($79.99 / year)</b> — ~$6.66/mo (2 Partners ⭐)\n\n"
     "3️⃣ <b>Family Pro Annual ($119.99 / year)</b> — ~$9.99/mo (Up to 5 Members)\n\n"
+    "📋 <b>Billing Terms:</b>\n"
+    "• Subscriptions auto-renew annually until cancelled. Cancel anytime via /billing.\n"
+    "• All plans include a 60-day free evaluation; paid subscriptions are non-refundable. Terms: /tos.\n\n"
     "<i>Tap a button below to activate your annual subscription!</i>"
 )
 
@@ -209,7 +270,9 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
         "• 💰 <i>Type an income:</i> \"Got paid 3,000 salary\"\n"
         "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
         f"{teamwork_bullet}\n"
-        "Type /help anytime for Notion sync, family settings, and CSV/JSON export."
+        "Type /help anytime for commands, /privacy for data rights, or /export to download your data."
+        f"{AI_DISCLAIMER_FOOTER}"
+        f"{TELEGRAM_NON_AFFILIATION_DISCLAIMER}"
     )
 
 

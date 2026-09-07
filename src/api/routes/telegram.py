@@ -14,6 +14,7 @@ import asyncio
 import re
 import html
 from collections import OrderedDict
+from datetime import datetime, timezone
 from sqlmodel import Session, select
 
 from src.core.config import settings
@@ -54,6 +55,10 @@ from src.templates.telegram_messages import (
     UNAUTHORIZED_ACCESS_MESSAGE,
     UNSUPPORTED_FORMAT_MESSAGE,
     DAILY_LIMIT_REACHED_MESSAGE,
+    CONSENT_REQUEST_MESSAGE,
+    CONSENT_KEYBOARD,
+    PRIVACY_POLICY_MESSAGE,
+    TERMS_OF_SERVICE_MESSAGE,
     format_message_too_long,
     format_voice_too_long,
     format_voice_too_large,
@@ -156,6 +161,52 @@ async def telegram_webhook(
                     return {"status": "ok"}
 
             if cb_data == "noop":
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            if cb_data == "accept_tos":
+                service = MessagingService(session)
+                user_data = {
+                    "id": user_id,
+                    "telegram_id": user_id,
+                    "username": from_user.get("username"),
+                    "first_name": from_user.get("first_name"),
+                    "last_name": from_user.get("last_name")
+                }
+                user, family = service.get_or_create_user_and_family(user_data)
+                user.terms_accepted = True
+                user.terms_accepted_at = datetime.now(timezone.utc)
+                session.add(user)
+                session.commit()
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Terms accepted! Welcome to Clanomy.")
+                welcome_msg = format_welcome_message(user, family, from_user)
+                if message_id:
+                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=welcome_msg)
+                else:
+                    await telegram_service.send_message(chat_id=chat_id, text=welcome_msg)
+                return {"status": "ok"}
+
+            if cb_data == "view_privacy":
+                back_kb = {"inline_keyboard": [[{"text": "🔙 Back to Consent", "callback_data": "back_to_consent"}]]}
+                if message_id:
+                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=PRIVACY_POLICY_MESSAGE, reply_markup=back_kb)
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            if cb_data == "view_tos":
+                back_kb = {"inline_keyboard": [[{"text": "🔙 Back to Consent", "callback_data": "back_to_consent"}]]}
+                if message_id:
+                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=TERMS_OF_SERVICE_MESSAGE, reply_markup=back_kb)
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            if cb_data == "back_to_consent":
+                if message_id:
+                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=CONSENT_REQUEST_MESSAGE, reply_markup=CONSENT_KEYBOARD)
                 if cb_id:
                     await telegram_service.answer_callback_query(callback_query_id=cb_id)
                 return {"status": "ok"}
@@ -469,6 +520,68 @@ async def telegram_webhook(
             return {"status": "ok"}
 
 
+        # Handle /start command
+        if text and text.startswith("/start"):
+            parts = text.split(maxsplit=1)
+            if len(parts) > 1:
+                token = parts[1].strip()
+                if token.startswith("join_"):
+                    token = token[5:]
+                family_service = FamilyService()
+                _, msg, _ = family_service.join_family_via_invite(token, user.id)
+                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=msg)
+                if settings.REQUIRE_TERMS_ACCEPTANCE and not getattr(user, "terms_accepted", False):
+                    background_tasks.add_task(
+                        telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=CONSENT_REQUEST_MESSAGE,
+                        reply_markup=CONSENT_KEYBOARD
+                    )
+                return {"status": "ok"}
+
+            if settings.REQUIRE_TERMS_ACCEPTANCE and not getattr(user, "terms_accepted", False):
+                background_tasks.add_task(
+                    telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=CONSENT_REQUEST_MESSAGE,
+                    reply_markup=CONSENT_KEYBOARD
+                )
+                return {"status": "ok"}
+
+            welcome_msg = format_welcome_message(user, family, from_user)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_msg)
+            return {"status": "ok"}
+
+        # Handle direct text-based acceptance
+        if text and text.strip().lower() in ("/accept_terms", "/agree", "/aceptar"):
+            user.terms_accepted = True
+            user.terms_accepted_at = datetime.now(timezone.utc)
+            session.add(user)
+            session.commit()
+            welcome_msg = format_welcome_message(user, family, from_user)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_msg)
+            return {"status": "ok"}
+
+        # Allow /privacy and /tos inspection prior to consent
+        if text and text.strip().lower() in ("/privacy", "/privacidad", "/tos", "/terms", "/terminos"):
+            cmd_handler = CommandHandler()
+            if text.strip().lower() in ("/privacy", "/privacidad"):
+                res_text = await cmd_handler.handle_privacy(user, family)
+            else:
+                res_text = await cmd_handler.handle_tos(user, family)
+            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+            return {"status": "ok"}
+
+        # Enforce consent gate: block all transaction logging & AI processing if terms not accepted
+        if settings.REQUIRE_TERMS_ACCEPTANCE and not getattr(user, "terms_accepted", False):
+            background_tasks.add_task(
+                telegram_service.send_message,
+                chat_id=chat_id,
+                text=CONSENT_REQUEST_MESSAGE,
+                reply_markup=CONSENT_KEYBOARD
+            )
+            return {"status": "ok"}
+
         # Handle ForceReply response, reply to error, or bare amount for bill settlement override
         reply_to = message.get("reply_to_message")
         reply_to_text = (reply_to.get("text") or "") if reply_to else ""
@@ -642,22 +755,6 @@ async def telegram_webhook(
                     background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=err_msg)
                     return {"status": "ok"}
 
-        # Handle /start command
-        if text and text.startswith("/start"):
-            parts = text.split(maxsplit=1)
-            if len(parts) > 1:
-                token = parts[1].strip()
-                if token.startswith("join_"):
-                    token = token[5:]
-                family_service = FamilyService()
-                _, msg, _ = family_service.join_family_via_invite(token, user.id)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=msg)
-                return {"status": "ok"}
-
-            welcome_msg = format_welcome_message(user, family, from_user)
-            background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_msg)
-            return {"status": "ok"}
-
         # Fast-Path Deterministic Slash Commands
         if text and text.strip().startswith("/"):
             clean_cmd = text.strip().split()[0].lower()
@@ -679,6 +776,16 @@ async def telegram_webhook(
                 "/deshacer": lambda u, f, *a: cmd_handler.handle_undo(u, f),
                 "/help": lambda u, f, *a: cmd_handler.handle_help(u, f),
                 "/ayuda": lambda u, f, *a: cmd_handler.handle_help(u, f),
+                "/privacy": cmd_handler.handle_privacy,
+                "/privacidad": cmd_handler.handle_privacy,
+                "/tos": cmd_handler.handle_tos,
+                "/terms": cmd_handler.handle_tos,
+                "/terminos": cmd_handler.handle_tos,
+                "/export": lambda u, f, a: cmd_handler.handle_export(u, f, chat_id, a),
+                "/exportar": lambda u, f, a: cmd_handler.handle_export(u, f, chat_id, a),
+                "/delete_my_data": cmd_handler.handle_delete_my_data,
+                "/delete_account": cmd_handler.handle_delete_my_data,
+                "/opt_out": cmd_handler.handle_delete_my_data,
             }
 
             if clean_cmd in ("/currency", "/moneda"):
@@ -703,7 +810,8 @@ async def telegram_webhook(
 
             if clean_cmd in dispatch_map:
                 res_text = await dispatch_map[clean_cmd](user, family, cmd_args)
-                background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
+                if res_text:
+                    background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=res_text)
                 return {"status": "ok"}
 
         # Handle /billing /portal command

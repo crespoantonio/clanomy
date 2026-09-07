@@ -99,6 +99,26 @@ def clean_gemini_schema(schema_dict: dict) -> dict:
     return resolved
 
 
+DEFAULT_GEMINI_SAFETY_SETTINGS = [
+    {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+    {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+    {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+    {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    }
+]
+
+
 class GeminiProvider(BaseLLMProvider):
     """Native raw HTTP provider for Google Gemini API."""
 
@@ -148,6 +168,7 @@ class GeminiProvider(BaseLLMProvider):
                     "parts": [{"text": sanitized_user}]
                 }
             ],
+            "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
@@ -216,6 +237,7 @@ class GeminiProvider(BaseLLMProvider):
             "contents": [
                 {"role": "user", "parts": [{"text": sanitized_user}]}
             ],
+            "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": 600
@@ -232,5 +254,12 @@ class GeminiProvider(BaseLLMProvider):
         candidates = data.get("candidates", [])
         if not candidates:
             return ""
-        parts = candidates[0].get("content", {}).get("parts", [])
+
+        candidate = candidates[0]
+        finish_reason = candidate.get("finishReason")
+        if finish_reason in ("SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"):
+            logger.warning(f"Gemini candidate blocked by policy: {finish_reason}")
+            return "I am sorry, but I cannot process this query as it violates safety and usage guidelines."
+
+        parts = candidate.get("content", {}).get("parts", [])
         return parts[0].get("text", "").strip() if parts else ""

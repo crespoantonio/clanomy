@@ -4,8 +4,9 @@ import logging
 import threading
 from uuid import UUID
 from sqlmodel import Session
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.engine import Engine
-from src.db.models import User, Family
+from src.db.models import User, Family, Transaction, ScheduledBill, FamilyInvite
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ class AccountService:
                 if family and len(family.users) <= 1:
                     session.delete(family)
                 else:
+                    # Explicitly purge user's personal records to guarantee statutory right to erasure
+                    session.exec(sa_delete(ScheduledBill).where(ScheduledBill.user_id == user_id))
+                    session.exec(sa_delete(Transaction).where(Transaction.user_id == user_id))
+                    session.exec(sa_delete(FamilyInvite).where(FamilyInvite.created_by_user_id == user_id))
                     session.delete(user)
                     
                 session.commit()

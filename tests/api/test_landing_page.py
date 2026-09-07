@@ -32,11 +32,11 @@ def test_landing_page_serves_html():
     assert "Clanomy Web Studio" in content
     assert "assets/clanomy_logo.jpg" in content
     assert "assets/dashboard_preview.jpg" in content
-    assert "What is Zero-Knowledge AES-256 Privacy" in content
+    assert "What is Zero-Knowledge Privacy" in content
     assert "Self-Hosted" in content
     assert "Business Source License 1.1" in content
-    assert "unlimited, lifetime use of all pre-built slash commands" in content
-    assert "Is my financial data or voice recordings used to train AI models" in content
+    assert "Unlimited use of all slash commands" in content
+    assert "Is my financial data or voice notes used to train AI models" in content
     assert "Zero AI Training Policy" in content
     assert "https://ko-fi.com/crespoantonio" in content
     assert 'data-i18n="self.kofi_btn"' in content

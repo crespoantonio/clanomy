@@ -52,6 +52,28 @@ from src.services.handlers.bill_handler import (
     get_overdue_bills_reminder
 )
 
+from src.templates.telegram_messages import (
+    is_spanish_text as _is_spanish,
+    format_batch_bills_tip,
+    format_spending_summary_tip,
+    format_upcoming_bills_tip,
+    format_batch_bills_header,
+    format_batch_transactions_header,
+    format_batch_total_pending,
+    format_payload_too_long_message,
+    format_single_expense_confirmation,
+    format_single_income_confirmation,
+    format_exchange_confirmation,
+    format_unmatched_bill_claim,
+    format_unhandled_query_message,
+    format_audio_error_message,
+    format_persistence_error_message,
+    format_extraction_error_message,
+    format_empty_message_error,
+    format_generic_error_message,
+    format_bill_settled_notice
+)
+
 logger = logging.getLogger(__name__)
 
 def create_logged_task(coro, *, name: Optional[str] = None) -> asyncio.Task:
@@ -426,7 +448,7 @@ class AIOrchestrator:
             # Proactive reminder for due/overdue scheduled bills when inquiring about current status/month
             if intent_str in [IntentType.SPENDING_SUMMARY, "spending_summary", IntentType.QUERY_SPENDING, "query_spending", IntentType.NET_CASH_FLOW, "net_cash_flow", IntentType.NET_BALANCE, "net_balance", IntentType.CASH_FLOW_SUMMARY, "cash_flow_summary"]:
                 if parsed_query.timeframe in ["this_month", "all_time", "current_month"] or not parsed_query.timeframe:
-                    is_spanish = any(w in raw_lower for w in ["como", "cómo", "venimos", "mes", "gastos", "resumen", "balance", "pesos"])
+                    is_spanish = _is_spanish(raw_text)
                     overdue_block = await asyncio.to_thread(self._get_overdue_bills_reminder, family_id, is_spanish, reference_time)
                     if overdue_block:
                         summary_res += f"\n\n{overdue_block}"
@@ -434,10 +456,7 @@ class AIOrchestrator:
             # Append friendly shortcut pro-tip if asked in natural language
             plan_type = family_info.get("plan_type", "free")
             if not raw_text.strip().startswith("/"):
-                if plan_type == "free":
-                    summary_res += "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response that doesn't use your monthly AI quota!</i>"
-                else:
-                    summary_res += "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response!</i>"
+                summary_res += format_spending_summary_tip(is_spanish=_is_spanish(raw_text), plan_type=plan_type)
 
             return summary_res
 
@@ -452,11 +471,7 @@ class AIOrchestrator:
             if not raw_text.strip().startswith("/"):
                 family_service = FamilyService()
                 f_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
-                p_type = f_info.get("plan_type", "free")
-                if p_type == "free":
-                    bills_res += "\n\n💡 <i>Pro-tip: Type /bills anytime for an instant check that doesn't use your monthly AI quota!</i>"
-                else:
-                    bills_res += "\n\n💡 <i>Pro-tip: Type /bills anytime for an instant check!</i>"
+                bills_res += format_upcoming_bills_tip(is_spanish=_is_spanish(raw_text), plan_type=f_info.get("plan_type", "free"))
             return bills_res
 
         elif intent_str == IntentType.CREATE_FAMILY or intent_str == "create_family":
@@ -482,7 +497,7 @@ class AIOrchestrator:
                 return None
             return menu_text
 
-        return "I couldn't process your request."
+        return format_unhandled_query_message(is_spanish=_is_spanish(raw_text))
 
     async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
         async with self._user_locks[str(user_id)]:
@@ -558,7 +573,7 @@ class AIOrchestrator:
                 except Exception as e:
                     logger.error(f"Transcription failed: {e}")
                     status = "error"
-                    response_text = "I couldn't understand the audio. Could you please type it or try again?"
+                    response_text = format_audio_error_message(is_spanish=_is_spanish(text))
                     
             # 2. Process Text (Fast-path deterministic commands or Unified Classification & Extraction)
             if text and status == "success":
@@ -703,19 +718,7 @@ class AIOrchestrator:
                                     except Exception:
                                         pass
                         except PayloadTruncatedError:
-                            is_spanish = any(w in raw_lower for w in ["gastos", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares"])
-                            if is_spanish:
-                                response_text = (
-                                    "⚠️ <b>Lista demasiado extensa:</b>\n\n"
-                                    "Por tu seguridad financiera, no se guardó ningún gasto parcial de este mensaje.\n"
-                                    "Por favor, divide la lista y envíala en 2 mensajes más cortos."
-                                )
-                            else:
-                                response_text = (
-                                    "⚠️ <b>List is too long:</b>\n\n"
-                                    "For your financial safety, no partial transactions were saved.\n"
-                                    "Please split your list and send it in 2 smaller messages."
-                                )
+                            response_text = format_payload_too_long_message(is_spanish=_is_spanish(raw_text))
                             try:
                                 tg_svc = TelegramService()
                                 await tg_svc.send_message(chat_id=chat_id, text=response_text)
@@ -779,7 +782,7 @@ class AIOrchestrator:
                                     except Exception as e:
                                         logger.error(f"Batch persistence failed for user {user_id}: {e}", exc_info=True)
                                         status = "error"
-                                        response_text = "Failed to save transactions. Please try again later."
+                                        response_text = format_persistence_error_message(is_spanish=_is_spanish(raw_text), is_batch=True)
                                         batch_results = []
                                 else:
                                     user_info = {"display_name": "User"}
@@ -814,7 +817,7 @@ class AIOrchestrator:
                                                 "tx_type": tx_type
                                             })
 
-                                is_spanish = any(w in raw_lower for w in ["gastos", "gasto", "gaste", "gasté", "fijos", "vencimiento", "vence", "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "cambie", "cambié", "dolares", "dólares", "cobre", "cobré", "ingreso", "ingresos", "sueldo", "almacen", "almacén", "super", "súper", "verdu", "nafta", " y ", " en ", " de ", "para "])
+                                is_spanish = _is_spanish(raw_text)
                                 bills = [r for r in batch_results if r["kind"] == "bill"]
                                 txs = [r for r in batch_results if r["kind"] == "transaction"]
 
@@ -837,27 +840,19 @@ class AIOrchestrator:
 
                                     if is_spanish:
                                         rate_line = f"\n• 📊 Cotización: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
-                                        response_text = (
-                                            f"💱 <b>Cambio de Moneda Registrado:</b>\n"
-                                            f"• 💸 Entregaste: -{fmt_sold}\n"
-                                            f"• 💰 Recibiste: +{fmt_recv}"
-                                            f"{rate_line}\n\n"
-                                            f"🏷️ <i>Categorizado bajo <b>Exchange</b> para no distorsionar ingresos o gastos operativos del mes.</i>"
-                                        )
                                     else:
                                         rate_line = f"\n• 📊 Rate: 1 {sold['currency']} = {_format_currency(rate_val, recv['currency'], show_sign=False)}" if rate_val else ""
-                                        response_text = (
-                                            f"💱 <b>Currency Exchange Logged:</b>\n"
-                                            f"• 💸 Sold: -{fmt_sold}\n"
-                                            f"• 💰 Received: +{fmt_recv}"
-                                            f"{rate_line}\n\n"
-                                            f"🏷️ <i>Categorized under <b>Exchange</b> to keep operational income & expenses clean.</i>"
-                                        )
+
+                                    response_text = format_exchange_confirmation(
+                                        fmt_sold=fmt_sold,
+                                        fmt_recv=fmt_recv,
+                                        rate_line=rate_line,
+                                        is_spanish=is_spanish
+                                    )
                                 else:
                                     parts = []
                                     if bills:
-                                        header = f"📋 <b>{len(bills)} Factura(s) Programada(s):</b>\n\n" if is_spanish else f"📋 <b>{len(bills)} Scheduled Bill(s):</b>\n\n"
-                                        parts.append(header)
+                                        parts.append(format_batch_bills_header(len(bills), is_spanish=is_spanish))
                                         for b in bills:
                                             fmt_amt = _format_currency(b["amount"], b["currency"])
                                             due_str = b["due_date"].strftime("%d/%m")
@@ -872,23 +867,14 @@ class AIOrchestrator:
                                         for b in bills:
                                             totals[b["currency"]] = totals.get(b["currency"], 0.0) + b["amount"]
                                         tot_str = " + ".join([_format_currency(amt, curr) for curr, amt in totals.items()])
-                                        if is_spanish:
-                                            parts.append(f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}")
-                                        else:
-                                            parts.append(f"\n📌 <b>Total pending to pay:</b> {tot_str}")
+                                        parts.append(format_batch_total_pending(tot_str, is_spanish=is_spanish))
 
                                     if txs:
                                         if parts:
                                             parts.append("\n\n")
                                         incomes = [t for t in txs if t.get("tx_type") == "income"]
                                         expenses = [t for t in txs if t.get("tx_type") != "income"]
-                                        if len(incomes) > 0 and len(expenses) == 0:
-                                            header = f"📋 <b>{len(txs)} Ingreso(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Income(s) Logged:</b>\n\n"
-                                        elif len(expenses) > 0 and len(incomes) == 0:
-                                            header = f"📋 <b>{len(txs)} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Expense(s) Logged:</b>\n\n"
-                                        else:
-                                            header = f"📋 <b>{len(txs)} Transacciones Registradas:</b>\n\n" if is_spanish else f"📋 <b>{len(txs)} Transactions Logged:</b>\n\n"
-                                        parts.append(header)
+                                        parts.append(format_batch_transactions_header(len(incomes), len(expenses), len(txs), is_spanish=is_spanish))
                                         for t in txs:
                                             is_inc = t.get("tx_type") == "income"
                                             icon = "💰" if is_inc else "💸"
@@ -896,8 +882,7 @@ class AIOrchestrator:
                                             parts.append(f"• {icon} <b>{html.escape(t['concept'])}:</b> {fmt_amt} ({html.escape(t['category'])})\n")
 
                                     if bills:
-                                        tip = '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" cuando quieras revisar tus vencimientos.</i>' if is_spanish else '\n\n💡 <i>Ask me "what bills are due this week?" whenever you want to check your upcoming obligations.</i>'
-                                        parts.append(tip)
+                                        parts.append(format_batch_bills_tip(is_spanish=is_spanish))
 
                                     response_text = "".join(parts)
 
@@ -919,7 +904,7 @@ class AIOrchestrator:
                                             pass
 
                             elif unified.amount is None:
-                                is_spanish = any(w in raw_lower for w in ["pagué", "pague", "aboné", "abone", "tarjeta", "pesos", "factura", "prestamo", "préstamo", "cuentas", "luz", "gas", "agua"])
+                                is_spanish = _is_spanish(raw_text)
                                 is_payment_claim = bool(re.search(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay)\b', raw_lower))
                                 if is_payment_claim:
                                     settle_res = await asyncio.to_thread(
@@ -933,10 +918,7 @@ class AIOrchestrator:
                                         response_text = settle_res
                                     else:
                                         concept_hint = re.sub(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay|la|el|los|las|the|de|del|por|for|mi|my)\b', '', raw_text, flags=re.IGNORECASE).strip()
-                                        if is_spanish:
-                                            response_text = f"ℹ️ No encontré ninguna factura pendiente para '{html.escape(concept_hint or raw_text)}'. ¿Cuánto fue el monto que pagaste?"
-                                        else:
-                                            response_text = f"ℹ️ I couldn't find an upcoming bill matching '{html.escape(concept_hint or raw_text)}'. What was the amount paid?"
+                                        response_text = format_unmatched_bill_claim(concept_hint or raw_text, is_spanish=is_spanish)
                                 else:
                                     query_service = QueryService()
                                     parsed_query = await query_service.parse_intent(text)
@@ -946,7 +928,7 @@ class AIOrchestrator:
                                             return {"status": "ok"}
                                         response_text = res
                                     else:
-                                        response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
+                                        response_text = format_extraction_error_message(is_spanish=is_spanish)
                             else:
                                 transaction_time = override_tx_time if override_tx_time is not None else unified.to_datetime()
                                 tx_amount = unified.amount
@@ -983,7 +965,7 @@ class AIOrchestrator:
                                     except Exception as p_err:
                                         logger.error(f"Persistence failed for user {user_id}: {p_err}", exc_info=True)
                                         status = "error"
-                                        response_text = "Failed to save transaction. Please try again later."
+                                        response_text = format_persistence_error_message(is_spanish=_is_spanish(raw_text), is_batch=False)
                                         tx_id = None
                                         user_info = {"display_name": "User"}
                                 else:
@@ -991,9 +973,13 @@ class AIOrchestrator:
                                     user_info = {"display_name": "User"}
 
                                 if status != "error":
+                                    is_spanish = _is_spanish(raw_text)
                                     date_str = ""
                                     if getattr(unified, "transaction_date", None):
-                                        date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"
+                                        if is_spanish:
+                                            date_str = f" (registrado para el {transaction_time.strftime('%d/%m/%Y')})"
+                                        else:
+                                            date_str = f" (logged for {transaction_time.strftime('%b %d, %Y')})"
 
                                     if tx_type == "income":
                                         if not dry_run and family_id:
@@ -1025,17 +1011,27 @@ class AIOrchestrator:
                                         formatted_net = _format_currency(snapshot["net_savings"], tx_currency, show_sign=True)
                                         pct_str = f" ({snapshot['savings_pct']}%)" if snapshot["total_in"] > 0 else ""
 
-                                        response_text = (
-                                            f"💰 Income Logged: {formatted_amt} {concept_detail}{date_str}\n"
-                                            f"📊 {snapshot['month_name']} Snapshot:\n"
-                                            f"• Total In: {formatted_in}\n"
-                                            f"• Total Out: {formatted_out}\n"
-                                            f"• Net Savings: {formatted_net}{pct_str}"
+                                        response_text = format_single_income_confirmation(
+                                            formatted_amt=formatted_amt,
+                                            concept_detail=concept_detail,
+                                            date_str=date_str,
+                                            formatted_in=formatted_in,
+                                            formatted_out=formatted_out,
+                                            formatted_net=formatted_net,
+                                            pct_str=pct_str,
+                                            month_name=snapshot["month_name"],
+                                            is_spanish=is_spanish,
+                                            month_num=transaction_time.month
                                         )
                                     else:
-                                        safe_concept = html.escape(tx_concept)
-                                        safe_cat = html.escape(tx_category)
-                                        response_text = f"Saved {tx_amount} {tx_currency} for '{safe_concept}' under category '{safe_cat}'{date_str}."
+                                        response_text = format_single_expense_confirmation(
+                                            amount=tx_amount,
+                                            currency=tx_currency,
+                                            concept=tx_concept,
+                                            category=tx_category,
+                                            date_str=date_str,
+                                            is_spanish=is_spanish
+                                        )
 
                                         settlement = None
                                         if not dry_run:
@@ -1051,11 +1047,11 @@ class AIOrchestrator:
                                             )
                                         if settlement:
                                             matched_concept, remaining_pending = settlement
-                                            is_spanish = any(w in raw_lower for w in ["pagué", "pague", "aboné", "abone", "tarjeta", "prestamo", "préstamo", "factura", "gastos", "pesos"])
-                                            if is_spanish:
-                                                response_text += f"\n\n✅ <b>¡Marcado como pagado!</b>\n💳 <b>{html.escape(matched_concept)}</b> registrado en tus gastos.\n⏳ Restante pendiente este mes: <b>{remaining_pending}</b>"
-                                            else:
-                                                response_text += f"\n\n✅ <b>Marked as paid!</b>\n💳 <b>{html.escape(matched_concept)}</b> recorded in your expenses.\n⏳ Remaining pending this month: <b>{remaining_pending}</b>"
+                                            response_text += format_bill_settled_notice(
+                                                matched_concept=matched_concept,
+                                                remaining_pending=remaining_pending,
+                                                is_spanish=_is_spanish(raw_text)
+                                            )
 
                                     if not dry_run:
                                         # Trigger background notion mirroring safely without affecting transaction response
@@ -1076,17 +1072,17 @@ class AIOrchestrator:
                 except Exception as e:
                     logger.error(f"Extraction or routing failed for user {user_id}. (Exception details omitted for security)", exc_info=True)
                     status = "error"
-                    response_text = "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
+                    response_text = format_extraction_error_message(is_spanish=_is_spanish(text))
             elif not text and status == "success":
                 status = "error"
-                response_text = "No message or audio was provided."
+                response_text = format_empty_message_error(is_spanish=_is_spanish(text))
                 
         except Exception as e:
             from src.core.security import sanitize_exception_message
             sanitized_err = sanitize_exception_message(e)
             logger.error(f"Unexpected error in orchestrator for user {user_id}: {sanitized_err}", exc_info=True)
             status = "error"
-            response_text = "An unexpected error occurred while processing your request."
+            response_text = format_generic_error_message(is_spanish=_is_spanish(text))
             
         # 3. Direct Reply via Telegram API
         if send_telegram and chat_id:

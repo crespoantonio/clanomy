@@ -349,3 +349,238 @@ def format_member_graduated_notice(member_name: str, plan_name: str) -> str:
         "ℹ️ <b>Family Member Graduated</b>\n\n"
         f"<b>{escaped_member}</b> has upgraded to their own <b>{escaped_plan}</b> plan and transitioned to their own sovereign workspace. Their personal transactions have moved with them."
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# Orchestrator & Fast-Path Transaction / Query Message Templates
+# ─────────────────────────────────────────────────────────────────
+
+def is_spanish_text(text: Optional[str]) -> bool:
+    """
+    Heuristic to determine if input text is Spanish.
+    Defaults to False (English) as canonical baseline.
+    """
+    if not text:
+        return False
+    t = text.lower()
+    spanish_markers = [
+        "gastos", "gasto", "gaste", "gasté", "fijos", "vencimiento", "vence", "vencimientos",
+        "prestamo", "préstamo", "tarjeta", "pesos", "pago", "cuentas", "facturas", "factura",
+        "cambie", "cambié", "dolares", "dólares", "cobre", "cobré", "ingreso", "ingresos",
+        "sueldo", "almacen", "almacén", "super", "súper", "verdu", "nafta", "pagué", "pague",
+        "aboné", "abone", "liquidé", "liquide", "cancelé", "cancele", "luz", "gas", "agua",
+        "como", "cómo", "venimos", "mes", "resumen", "balance", "cuanto", "cuánto",
+        "saldo", "ahorro", "ahorros", "guardar", "deshacer", "borrar",
+        " y ", " en ", " de ", "para ", " con ", " por ", " mi ", " mis "
+    ]
+    return any(w in t for w in spanish_markers)
+
+
+def format_batch_bills_tip(is_spanish: bool) -> str:
+    """Returns pro-tip explaining /bills command alongside conversational query."""
+    if is_spanish:
+        return '\n\n💡 <i>Pregúntame "¿qué vence esta semana?" o envía /bills para ver todas tus facturas sin gastar créditos de IA.</i>'
+    return '\n\n💡 <i>Ask me "what bills are due this week?" or send /bills to check upcoming bills without using your monthly AI quota.</i>'
+
+
+def format_spending_summary_tip(is_spanish: bool, plan_type: str = "free") -> str:
+    """Returns friendly shortcut tip for spending/month queries."""
+    if plan_type == "free":
+        if is_spanish:
+            return "\n\n💡 <i>Tip: Escribe /month o /me en cualquier momento para una respuesta instantánea sin gastar tu cuota mensual de IA.</i>"
+        return "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response that doesn't use your monthly AI quota!</i>"
+    else:
+        if is_spanish:
+            return "\n\n💡 <i>Tip: Escribe /month o /me en cualquier momento para una respuesta instantánea.</i>"
+        return "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response!</i>"
+
+
+def format_upcoming_bills_tip(is_spanish: bool, plan_type: str = "free") -> str:
+    """Returns friendly shortcut tip for bills queries."""
+    if plan_type == "free":
+        if is_spanish:
+            return "\n\n💡 <i>Tip: Escribe /bills en cualquier momento para consultar tus facturas al instante sin gastar tu cuota mensual de IA.</i>"
+        return "\n\n💡 <i>Pro-tip: Type /bills anytime for an instant check that doesn't use your monthly AI quota!</i>"
+    else:
+        if is_spanish:
+            return "\n\n💡 <i>Tip: Escribe /bills en cualquier momento para una consulta instantánea.</i>"
+        return "\n\n💡 <i>Pro-tip: Type /bills anytime for an instant check!</i>"
+
+
+def format_batch_bills_header(count: int, is_spanish: bool) -> str:
+    """Header for scheduled bills section in batch responses."""
+    if is_spanish:
+        return f"📋 <b>{count} Factura(s) Programada(s):</b>\n\n"
+    return f"📋 <b>{count} Scheduled Bill(s):</b>\n\n"
+
+
+def format_batch_transactions_header(incomes_count: int, expenses_count: int, total_count: int, is_spanish: bool) -> str:
+    """Header for transaction section in batch responses."""
+    if incomes_count > 0 and expenses_count == 0:
+        return f"📋 <b>{total_count} Ingreso(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{total_count} Income(s) Logged:</b>\n\n"
+    elif expenses_count > 0 and incomes_count == 0:
+        return f"📋 <b>{total_count} Gasto(s) Registrado(s):</b>\n\n" if is_spanish else f"📋 <b>{total_count} Expense(s) Logged:</b>\n\n"
+    else:
+        return f"📋 <b>{total_count} Transacciones Registradas:</b>\n\n" if is_spanish else f"📋 <b>{total_count} Transactions Logged:</b>\n\n"
+
+
+def format_batch_total_pending(tot_str: str, is_spanish: bool) -> str:
+    """Summary of total pending amount for bills in batch responses."""
+    if is_spanish:
+        return f"\n📌 <b>Total pendiente por pagar:</b> {tot_str}"
+    return f"\n📌 <b>Total pending to pay:</b> {tot_str}"
+
+
+def format_payload_too_long_message(is_spanish: bool) -> str:
+    """Warning when transaction payload exceeds processing capacity."""
+    if is_spanish:
+        return (
+            "⚠️ <b>Lista demasiado extensa:</b>\n\n"
+            "Por tu seguridad financiera, no se guardó ningún gasto parcial de este mensaje.\n"
+            "Por favor, divide la lista y envíala en 2 mensajes más cortos."
+        )
+    return (
+        "⚠️ <b>List is too long:</b>\n\n"
+        "For your financial safety, no partial transactions were saved.\n"
+        "Please split your list and send it in 2 smaller messages."
+    )
+
+
+def format_single_expense_confirmation(
+    amount: float,
+    currency: str,
+    concept: str,
+    category: str,
+    date_str: str,
+    is_spanish: bool
+) -> str:
+    """Confirmation message for a single logged expense."""
+    safe_concept = html.escape(concept)
+    safe_cat = html.escape(category)
+    if is_spanish:
+        return f"Guardado {amount} {currency} para '{safe_concept}' en la categoría '{safe_cat}'{date_str}."
+    return f"Saved {amount} {currency} for '{safe_concept}' under category '{safe_cat}'{date_str}."
+
+
+def format_single_income_confirmation(
+    formatted_amt: str,
+    concept_detail: str,
+    date_str: str,
+    formatted_in: str,
+    formatted_out: str,
+    formatted_net: str,
+    pct_str: str,
+    month_name: str,
+    is_spanish: bool,
+    month_num: Optional[int] = None
+) -> str:
+    """Confirmation message and monthly snapshot for a single logged income."""
+    if is_spanish:
+        spanish_months = {
+            1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+            5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+            9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+        }
+        month_label = spanish_months.get(month_num, month_name) if month_num else month_name
+        return (
+            f"💰 Ingreso Registrado: {formatted_amt} {concept_detail}{date_str}\n"
+            f"📊 Resumen de {month_label}:\n"
+            f"• Total Ingresos: {formatted_in}\n"
+            f"• Total Gastos: {formatted_out}\n"
+            f"• Ahorro Neto: {formatted_net}{pct_str}"
+        )
+    return (
+        f"💰 Income Logged: {formatted_amt} {concept_detail}{date_str}\n"
+        f"📊 {month_name} Snapshot:\n"
+        f"• Total In: {formatted_in}\n"
+        f"• Total Out: {formatted_out}\n"
+        f"• Net Savings: {formatted_net}{pct_str}"
+    )
+
+
+def format_exchange_confirmation(
+    fmt_sold: str,
+    fmt_recv: str,
+    rate_line: str,
+    is_spanish: bool
+) -> str:
+    """Formatted confirmation for dual-leg currency exchange transactions."""
+    if is_spanish:
+        return (
+            f"💱 <b>Cambio de Moneda Registrado:</b>\n"
+            f"• 💸 Entregaste: -{fmt_sold}\n"
+            f"• 💰 Recibiste: +{fmt_recv}"
+            f"{rate_line}\n\n"
+            f"🏷️ <i>Categorizado bajo <b>Exchange</b> para no distorsionar ingresos o gastos operativos del mes.</i>"
+        )
+    return (
+        f"💱 <b>Currency Exchange Logged:</b>\n"
+        f"• 💸 Sold: -{fmt_sold}\n"
+        f"• 💰 Received: +{fmt_recv}"
+        f"{rate_line}\n\n"
+        f"🏷️ <i>Categorized under <b>Exchange</b> to keep operational income & expenses clean.</i>"
+    )
+
+
+def format_unmatched_bill_claim(concept_hint_or_raw: str, is_spanish: bool) -> str:
+    """Response when a payment claim does not match an upcoming bill."""
+    safe_hint = html.escape(concept_hint_or_raw)
+    if is_spanish:
+        return f"ℹ️ No encontré ninguna factura pendiente para '{safe_hint}'. ¿Cuánto fue el monto que pagaste?"
+    return f"ℹ️ I couldn't find an upcoming bill matching '{safe_hint}'. What was the amount paid?"
+
+
+def format_unhandled_query_message(is_spanish: bool) -> str:
+    """Fallback when parsed query cannot be fulfilled."""
+    if is_spanish:
+        return "No pude procesar tu solicitud."
+    return "I couldn't process your request."
+
+
+def format_audio_error_message(is_spanish: bool) -> str:
+    """Error message when audio cannot be transcribed."""
+    if is_spanish:
+        return "No pude entender el audio. ¿Podrías escribirlo o intentar de nuevo?"
+    return "I couldn't understand the audio. Could you please type it or try again?"
+
+
+def format_persistence_error_message(is_spanish: bool, is_batch: bool = False) -> str:
+    """Error message when transaction persistence fails."""
+    if is_batch:
+        if is_spanish:
+            return "No se pudieron guardar las transacciones. Por favor, intenta de nuevo más tarde."
+        return "Failed to save transactions. Please try again later."
+    if is_spanish:
+        return "No se pudo guardar la transacción. Por favor, intenta de nuevo más tarde."
+    return "Failed to save transaction. Please try again later."
+
+
+def format_extraction_error_message(is_spanish: bool) -> str:
+    """Error message when extraction fails to locate valid transaction parameters."""
+    if is_spanish:
+        return "No pude extraer los detalles de tu mensaje. Por favor asegúrate de incluir el monto y el concepto."
+    return "I couldn't extract the details from your message. Please make sure to include the amount and what it was for."
+
+
+def format_empty_message_error(is_spanish: bool) -> str:
+    """Error message when message payload is empty."""
+    if is_spanish:
+        return "No se proporcionó ningún mensaje o audio."
+    return "No message or audio was provided."
+
+
+def format_generic_error_message(is_spanish: bool) -> str:
+    """Generic error message for uncaught orchestrator exceptions."""
+    if is_spanish:
+        return "Ocurrió un error inesperado al procesar tu solicitud."
+    return "An unexpected error occurred while processing your request."
+
+
+def format_bill_settled_notice(matched_concept: str, remaining_pending: str, is_spanish: bool) -> str:
+    """Notice appended when an expense settles an existing scheduled bill."""
+    safe_concept = html.escape(matched_concept)
+    if is_spanish:
+        return f"\n\n✅ <b>¡Marcado como pagado!</b>\n💳 <b>{safe_concept}</b> registrado en tus gastos.\n⏳ Restante pendiente este mes: <b>{remaining_pending}</b>"
+    return f"\n\n✅ <b>Marked as paid!</b>\n💳 <b>{safe_concept}</b> recorded in your expenses.\n⏳ Remaining pending this month: <b>{remaining_pending}</b>"
+
+

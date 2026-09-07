@@ -1172,4 +1172,255 @@ async def test_orchestrator_unified_undo_last_spanish(orchestrator, monkeypatch)
     assert "Removed latest transaction" in mock_send.call_args[1]["text"]
 
 
+@pytest.mark.anyio
+async def test_batch_bills_tip_bilingual(orchestrator, monkeypatch):
+    """Verify batch logging tip suggests /bills and explains AI quota in both languages."""
+    from src.services.extraction import UnifiedResult
+    from src.services.extraction.models import ParsedItem
+
+    user_id = "00000000-0000-0000-0000-000000000000"
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    monkeypatch.setattr(orchestrator, "_safe_mirror_to_notion", AsyncMock())
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", MagicMock(return_value=UUID(user_id)))
+    monkeypatch.setattr(orchestrator, "_get_user_info", MagicMock(return_value={"display_name": "User", "family_id": UUID(user_id)}))
+
+    # 1. Spanish batch with a bill
+    spanish_items = [
+        ParsedItem(
+            concept="Luz",
+            amount=5000.0,
+            currency="ARS",
+            category="Utilities",
+            type="expense",
+            is_scheduled_bill=True,
+            due_date="2026-09-15"
+        )
+    ]
+    mock_classify_es = AsyncMock(return_value=UnifiedResult(action="log_transaction", items=spanish_items))
+
+    class MockExtServiceES:
+        classify_and_extract = mock_classify_es
+
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtServiceES)
+    monkeypatch.setattr(orchestrator, "_persist_batch_items", MagicMock(return_value=[{"id": UUID(user_id), "kind": "bill", "concept": "Luz", "amount": 5000.0, "currency": "ARS", "due_date": datetime.datetime(2026, 9, 15), "category": "Utilities"}]))
+
+    mock_send = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    await orchestrator.orchestrate(
+        user_id=user_id,
+        text="Anotar factura de luz 5000 vence el 15",
+        audio_file_id=None,
+        chat_id=12345
+    )
+
+    sent_es = mock_send.call_args[1]["text"]
+    assert "Pregúntame \"¿qué vence esta semana?\" o envía /bills para ver todas tus facturas sin gastar créditos de IA." in sent_es
+
+    # 2. English batch with a bill
+    english_items = [
+        ParsedItem(
+            concept="Electricity",
+            amount=50.0,
+            currency="USD",
+            category="Utilities",
+            type="expense",
+            is_scheduled_bill=True,
+            due_date="2026-09-15"
+        )
+    ]
+    mock_classify_en = AsyncMock(return_value=UnifiedResult(action="log_transaction", items=english_items))
+
+    class MockExtServiceEN:
+        classify_and_extract = mock_classify_en
+
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtServiceEN)
+    monkeypatch.setattr(orchestrator, "_persist_batch_items", MagicMock(return_value=[{"id": UUID(user_id), "kind": "bill", "concept": "Electricity", "amount": 50.0, "currency": "USD", "due_date": datetime.datetime(2026, 9, 15), "category": "Utilities"}]))
+
+    await orchestrator.orchestrate(
+        user_id=user_id,
+        text="Log electricity bill 50 dollars due on Sep 15",
+        audio_file_id=None,
+        chat_id=12345
+    )
+
+    sent_en = mock_send.call_args[1]["text"]
+    assert "Ask me \"what bills are due this week?\" or send /bills to check upcoming bills without using your monthly AI quota." in sent_en
+
+
+@pytest.mark.anyio
+async def test_nl_query_protips_bilingual(orchestrator, monkeypatch):
+    """Verify natural language query pro-tips output in English and Spanish for free and paid plans."""
+    from src.services.query import ParsedQueryIntent
+    user_uuid = UUID("00000000-0000-0000-0000-000000000000")
+
+    monkeypatch.setattr(orchestrator, "_get_user_family_id", MagicMock(return_value=user_uuid))
+    monkeypatch.setattr(orchestrator, "_get_overdue_bills_reminder", MagicMock(return_value=""))
+
+    class MockQueryService:
+        async def get_spending_summary(self, **kwargs):
+            return "Spending: $100"
+        async def get_upcoming_bills_summary(self, **kwargs):
+            return "Bills: None"
+
+    monkeypatch.setattr("src.services.ai_orchestrator.QueryService", MockQueryService)
+
+    # Free plan - Spanish spending query
+    class MockFamilyServiceFree:
+        def get_family_info(self, uid):
+            return {"id": user_uuid, "plan_type": "free", "name": "Familia", "members": []}
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyServiceFree)
+
+    res_es = await orchestrator._execute_parsed_query(
+        parsed_query=ParsedQueryIntent(intent="spending_summary", timeframe="this_month"),
+        raw_text="cuanto gastamos este mes",
+        user_uuid=user_uuid,
+        chat_id=12345
+    )
+    assert "Tip: Escribe /month o /me en cualquier momento para una respuesta instantánea sin gastar tu cuota mensual de IA." in res_es
+
+    # Free plan - English spending query
+    res_en = await orchestrator._execute_parsed_query(
+        parsed_query=ParsedQueryIntent(intent="spending_summary", timeframe="this_month"),
+        raw_text="how much did we spend this month",
+        user_uuid=user_uuid,
+        chat_id=12345
+    )
+    assert "Pro-tip: Type /month or /me anytime for an instant response that doesn't use your monthly AI quota!" in res_en
+
+    # Free plan - Spanish upcoming bills query
+    res_bills_es = await orchestrator._execute_parsed_query(
+        parsed_query=ParsedQueryIntent(intent="upcoming_bills", timeframe="this_month"),
+        raw_text="que facturas tengo pendientes",
+        user_uuid=user_uuid,
+        chat_id=12345
+    )
+    assert "Tip: Escribe /bills en cualquier momento para consultar tus facturas al instante sin gastar tu cuota mensual de IA." in res_bills_es
+
+    # Paid plan - Spanish upcoming bills query
+    class MockFamilyServicePaid:
+        def get_family_info(self, uid):
+            return {"id": user_uuid, "plan_type": "pro", "name": "Familia", "members": []}
+    monkeypatch.setattr("src.services.ai_orchestrator.FamilyService", MockFamilyServicePaid)
+
+    res_bills_paid = await orchestrator._execute_parsed_query(
+        parsed_query=ParsedQueryIntent(intent="upcoming_bills", timeframe="this_month"),
+        raw_text="que facturas tengo pendientes",
+        user_uuid=user_uuid,
+        chat_id=12345
+    )
+    assert "Tip: Escribe /bills en cualquier momento para una consulta instantánea." in res_bills_paid
+
+
+@pytest.mark.anyio
+async def test_single_transaction_logging_bilingual(orchestrator, monkeypatch):
+    """Verify single transaction confirmations in Spanish and English."""
+    from src.services.extraction import UnifiedResult
+
+    user_id = "00000000-0000-0000-0000-000000000000"
+
+    mock_session = MagicMock()
+    mock_session_class = MagicMock()
+    mock_session_class.return_value.__enter__.return_value = mock_session
+    monkeypatch.setattr("src.services.ai_orchestrator.Session", mock_session_class)
+    monkeypatch.setattr(orchestrator, "_safe_mirror_to_notion", AsyncMock())
+
+    # Spanish single expense
+    mock_classify_es = AsyncMock(return_value=UnifiedResult(
+        action="log_transaction",
+        amount=1500.0,
+        currency="ARS",
+        category="Food/Drink",
+        concept="súper",
+        type="expense"
+    ))
+    class MockExtServiceES:
+        classify_and_extract = mock_classify_es
+
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtServiceES)
+    monkeypatch.setattr(orchestrator, "_persist_transaction", MagicMock(return_value=UUID(user_id)))
+    monkeypatch.setattr(orchestrator, "_get_user_info", MagicMock(return_value={"display_name": "User", "family_id": UUID(user_id)}))
+    monkeypatch.setattr(orchestrator, "_check_and_settle_bill", MagicMock(return_value=None))
+
+    mock_send = AsyncMock()
+    class MockTelegramService:
+        send_message = mock_send
+    monkeypatch.setattr("src.services.ai_orchestrator.TelegramService", MockTelegramService)
+
+    await orchestrator.orchestrate(
+        user_id=user_id,
+        text="gasté 1500 en el súper",
+        audio_file_id=None,
+        chat_id=12345
+    )
+
+    sent_es = mock_send.call_args[1]["text"]
+    assert "Guardado 1500.0 ARS para 'súper' en la categoría 'Food/Drink'." in sent_es
+
+    # Spanish single income
+    mock_classify_inc = AsyncMock(return_value=UnifiedResult(
+        action="log_transaction",
+        amount=50000.0,
+        currency="ARS",
+        category="Salary",
+        concept="sueldo",
+        type="income"
+    ))
+    class MockExtServiceInc:
+        classify_and_extract = mock_classify_inc
+
+    monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtServiceInc)
+    monkeypatch.setattr(orchestrator, "_get_monthly_cash_flow_snapshot", MagicMock(return_value={
+        "month_name": "September",
+        "total_in": 50000.0,
+        "total_out": 0.0,
+        "net_savings": 50000.0,
+        "savings_pct": 100
+    }))
+
+    await orchestrator.orchestrate(
+        user_id=user_id,
+        text="cobré 50000 de sueldo",
+        audio_file_id=None,
+        chat_id=12345
+    )
+
+    sent_inc = mock_send.call_args[1]["text"]
+    assert "💰 Ingreso Registrado: +$50,000.00 ARS (Salary - sueldo)" in sent_inc
+    assert "📊 Resumen de Septiembre:" in sent_inc
+    assert "• Total Ingresos: $50,000.00 ARS" in sent_inc
+    assert "• Ahorro Neto: +$50,000.00 ARS" in sent_inc
+
+
+@pytest.mark.anyio
+async def test_error_fallbacks_bilingual(orchestrator, monkeypatch):
+    """Verify error fallbacks in English and Spanish."""
+    from src.services.query import ParsedQueryIntent
+    user_uuid = UUID("00000000-0000-0000-0000-000000000000")
+
+    # Unhandled query intent
+    res_es = await orchestrator._execute_parsed_query(
+        parsed_query=ParsedQueryIntent(intent="join_family"),
+        raw_text="cuentas raras de la familia",
+        user_uuid=user_uuid,
+        chat_id=12345
+    )
+    assert res_es == "No pude procesar tu solicitud."
+
+    res_en = await orchestrator._execute_parsed_query(
+        parsed_query=ParsedQueryIntent(intent="join_family"),
+        raw_text="join the family group",
+        user_uuid=user_uuid,
+        chat_id=12345
+    )
+    assert res_en == "I couldn't process your request."
+
+
+
 

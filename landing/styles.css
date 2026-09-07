@@ -47,7 +47,7 @@
   --shadow-card: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
 
   /* Layout & Transitions */
-  --max-width: 1200px;
+  --max-width: 1380px;
   --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -81,7 +81,7 @@ body {
   width: 100%;
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: 0 clamp(1.25rem, 3.2vw, 2.5rem);
 }
 
 /* Typography */
@@ -376,23 +376,31 @@ code {
 
 /* Hero Section */
 .hero-section {
-  padding: 5rem 0 3.5rem;
-  text-align: center;
+  padding: clamp(3.5rem, 5.5vw, 5.5rem) 0 clamp(3rem, 4.5vw, 4.5rem);
   position: relative;
+  overflow: hidden;
 }
 
 .hero-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3rem;
+  align-items: center;
+  width: 100%;
+}
+
+.hero-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: 920px;
+  text-align: center;
 }
 
 .hero-title {
-  font-size: clamp(2.3rem, 4.4vw, 3.6rem);
+  font-size: clamp(2.3rem, 4.2vw, 3.65rem);
   letter-spacing: -0.035em;
   line-height: 1.15;
-  margin-bottom: 1.4rem;
+  margin-bottom: 1.35rem;
   background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 65%, #94a3b8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -409,8 +417,8 @@ code {
   font-size: 1.15rem;
   line-height: 1.7;
   color: var(--text-secondary);
-  max-width: 760px;
-  margin-bottom: 2.2rem;
+  max-width: 640px;
+  margin-bottom: 2rem;
   text-wrap: balance;
 }
 
@@ -419,20 +427,44 @@ code {
   gap: 1.1rem;
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 1.2rem;
+  margin-bottom: 1.1rem;
 }
 
 .hero-trial-note {
   font-size: 0.92rem;
   color: var(--accent-primary);
   font-weight: 500;
-  margin-bottom: 3.5rem;
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.hero-visual {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.hero-visual::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 95%;
+  height: 95%;
+  background: radial-gradient(circle, rgba(0, 245, 196, 0.18) 0%, rgba(34, 211, 238, 0.08) 45%, transparent 70%);
+  filter: blur(50px);
+  z-index: 0;
+  pointer-events: none;
 }
 
 /* Mockup Chat Card */
 .mockup-card {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 660px;
+  max-width: 620px;
   background: var(--bg-card);
   backdrop-filter: blur(24px);
   border: 1px solid var(--border-cyan);
@@ -446,6 +478,47 @@ code {
 .mockup-card:hover {
   transform: translateY(-4px);
   border-color: var(--border-cyan-glow);
+}
+
+@media (min-width: 1024px) {
+  .hero-container {
+    grid-template-columns: 1.12fr 0.88fr;
+    gap: clamp(2.5rem, 3.8vw, 4.5rem);
+    align-items: center;
+  }
+
+  .hero-content {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .hero-title {
+    text-align: left;
+    font-size: clamp(2.5rem, 3.6vw, 3.75rem);
+  }
+
+  .hero-subtitle {
+    text-align: left;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .hero-actions {
+    justify-content: flex-start;
+  }
+
+  .hero-trial-note {
+    text-align: left;
+  }
+
+  .hero-visual {
+    justify-content: flex-end;
+  }
+
+  .mockup-card {
+    max-width: 100%;
+    margin: 0;
+  }
 }
 
 .mockup-header {
@@ -609,15 +682,29 @@ code {
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.75rem;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 600px) {
+  .features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .features-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .feature-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 2.2rem;
+  padding: 1.85rem 1.5rem;
+  display: flex;
+  flex-direction: column;
   transition: all var(--transition-smooth);
 }
 
@@ -896,7 +983,7 @@ code {
   border-radius: var(--radius-lg);
   padding: 1.25rem 1.75rem;
   margin: 0 auto 2.5rem;
-  max-width: 860px;
+  max-width: 960px;
   display: flex;
   align-items: center;
   gap: 1.2rem;
@@ -1114,15 +1201,15 @@ code {
 /* Pricing Grid (3 Pro Upgrade Cards) */
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
   align-items: stretch;
   margin-bottom: 2.5rem;
 }
 
-@media (min-width: 960px) {
+@media (min-width: 1080px) {
   .pricing-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -1354,7 +1441,7 @@ code {
 
 /* FAQ Accordion */
 .faq-list {
-  max-width: 750px;
+  max-width: 860px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;

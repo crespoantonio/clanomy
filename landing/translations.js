@@ -1,4 +1,5 @@
 // Clanomy Complete Bilingual Translation Dictionary (English & Español)
+// Curated by Sally (UX Designer) - De-duplicated & Paddle Compliance Verified
 
 const TRANSLATIONS = {
   en: {
@@ -13,12 +14,12 @@ const TRANSLATIONS = {
     "nav.cta": "Open in Telegram",
 
     // Hero
-    "hero.badge": "Powered by Telegram & Secure AI • Built for Families, Duos & Teams",
-    "hero.title": "The Smart Financial Assistant for <span>Families, Duos & Roommates</span>",
-    "hero.subtitle": "Effortlessly track personal and shared expenses via natural voice notes or text in Telegram. Perfect for households, couples splitting bills, roommates sharing rent, and small teams—backed by zero-knowledge AES-256 privacy.",
-    "hero.cta_start": "Start 60-Day Free Trial",
+    "hero.badge": "Powered by Telegram & Secure AI • Built for Families, Couples & Roommates",
+    "hero.title": "The Smart Expense Tracker & Budgeting Bot for <span>Families, Couples & Roommates</span>",
+    "hero.subtitle": "Effortlessly track personal and shared expenses via natural voice notes or text in Telegram. Private by design, shared with who matters.",
+    "hero.cta_start": "Start Free on Telegram",
     "hero.cta_pricing": "View Pricing",
-    "hero.trial_note": "✨ 60-day Duo Trial 100% free • 2 partners & shared ledger • 60 daily AI logs pool • No credit card required",
+    "hero.trial_note": "✨ Includes 60-day Duo Pro trial • Shared couple ledger & Notion sync • No credit card required",
     "hero.mockup_bot_name": "🤖 Clanomy Bot (@clanomy_bot)",
     "hero.mockup_badge": "AES-256 Encrypted",
     "hero.mockup_user_1": "🎙️ <i>Voice Note (0:04):</i> \"Spent 18.50 on groceries and 4 on coffee\"",
@@ -26,31 +27,27 @@ const TRANSLATIONS = {
     "hero.mockup_bot_2": "📊 <b>Household Balance (September 2026):</b><br>• 💰 Income: <b>$4,200.00 USD</b><br>• 💸 Total Expenses: <b>$1,480.50 USD</b><br>• 📈 Net Savings: <b>+$2,719.50 USD (64.7% saved)</b> 🎉",
 
     // Trust Bar
-    "trust.aes_title": "AES-256 Encryption",
-    "trust.aes_desc": "Zero-knowledge field security",
+    "trust.aes_title": "Zero-Knowledge Privacy",
+    "trust.aes_desc": "Application-level AES-256 field encryption",
+    "trust.speed_title": "Log in 3 Seconds",
+    "trust.speed_desc": "Natural voice notes & quick text",
     "trust.notion_title": "Real-Time Notion Sync",
     "trust.notion_desc": "Direct two-way database mirroring",
-    "trust.multi_title": "Multi-Member Ledgers",
-    "trust.multi_desc": "Per-member attribution & privacy",
-    "trust.mor_title": "Secure Payments",
-    "trust.mor_desc": "Encrypted global checkout",
+    "trust.multi_title": "Shared Household Ledgers",
+    "trust.multi_desc": "Per-member attribution & transparency",
 
-    // Features Grid
+    // Features Grid (4 Consolidated, High-Value Cards)
     "features.badge": "Designed for Simplicity",
-    "features.title": "Everything Your Family Needs to Master Money",
+    "features.title": "Everything Your Household Needs to Master Daily Spending",
     "features.subtitle": "No complex forms, no manual spreadsheets, no tedious bank logins. Just talk or type.",
     "features.f1_title": "Bilingual Voice & Text AI",
-    "features.f1_desc": "Send voice notes or quick messages in natural English. High-speed AI parses compound items, categories, currencies, and dates.",
-    "features.f2_title": "Shared Group Ledger",
-    "features.f2_desc": "Invite your partner or household members with a private link. Track joint expenses together with transparent per-member attribution and unified balances.",
+    "features.f1_desc": "Send voice notes or quick messages in natural English or Spanish. High-speed AI parses compound items, categories, currencies, and dates instantly.",
+    "features.f2_title": "Shared Household Ledger",
+    "features.f2_desc": "Invite your partner or roommates with a private link. Track joint expenses together with transparent per-member attribution and unified balances.",
     "features.f3_title": "Native Notion Integration",
     "features.f3_desc": "Every transaction automatically synchronizes to your private Notion workspace in real time. Maintain full data ownership with zero platform lock-in.",
-    "features.f4_title": "Zero-Knowledge AES-256 Privacy",
-    "features.f4_desc": "Your financial descriptions and amounts are encrypted at the application level with AES-256 before touching the database. Even database administrators cannot see your data.",
-    "features.f5_title": "Bills & Due Date Tracking",
-    "features.f5_desc": "Say \"Rent $1200 due on the 5th\" or \"Insurance $80 on the 20th\". Clanomy records the due date so you can query upcoming obligations anytime with <code>/bills</code>—no push reminders, full control in your hands.",
-    "features.f6_title": "Deterministic Fast-Path Commands",
-    "features.f6_desc": "Telegram chat commands (<code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/undo</code>) return instantly with zero impact on your daily AI message quota.",
+    "features.f4_title": "Bills & Due Date Tracking",
+    "features.f4_desc": "Say &ldquo;Rent $1200 due on the 5th&rdquo; or &ldquo;Internet $50 on the 20th&rdquo;. Clanomy tracks due dates so you can query upcoming obligations anytime with <code>/bills</code>.",
 
     // How It Works
     "how.badge": "Seamless Experience",
@@ -59,7 +56,7 @@ const TRANSLATIONS = {
     "how.s1_title": "Start @clanomy_bot",
     "how.s1_desc": "Open Telegram and tap Start. Your workspace is automatically created and protected with zero-knowledge encryption.",
     "how.s2_title": "Log as You Live",
-    "how.s2_desc": "Record expenses or income by text or voice. Say \"30 petrol\" or \"Received 2500 salary\". Multiple items in one message are split automatically.",
+    "how.s2_desc": "Record expenses or income by text or voice. Say &ldquo;30 petrol&rdquo; or &ldquo;Received 2500 salary&rdquo;. Multiple items in one message are split automatically.",
     "how.s3_title": "Gain Household Clarity",
     "how.s3_desc": "View instant monthly breakdowns, cash flow rates, and scheduled obligations. Watch transactions mirror cleanly into your Notion dashboard.",
 
@@ -75,63 +72,57 @@ const TRANSLATIONS = {
     "studio.cta": "Open @clanomy_bot in Telegram",
     "studio.preview_tag": "Web Studio Preview • Coming Soon",
 
-    // Self-Hosted
+    // Self-Hosted Freedom (Streamlined)
     "self.badge": "🔓 Source-Available • Business Source License 1.1",
-    "self.title": "Host It Yourself, or Let Us Handle the Cloud.",
-    "self.subtitle": "Your family's financial data belongs to you. Clanomy is source-available on GitHub. Run your own private instance for $0 with zero artificial limits for personal and household use, or choose Clanomy Cloud for a turnkey, maintenance-free experience.",
+    "self.title": "Your Data Belongs to You. Cloud Convenience or Self-Hosted Control.",
+    "self.subtitle": "Run your own private instance for $0 on your home server, or let Clanomy Cloud handle the infrastructure for a turnkey experience.",
     "self.community_title": "Community Self-Hosted",
     "self.community_price": "100% Free Forever",
-    "self.c1": "✓ <b>Full source code</b> available on GitHub",
-    "self.c2": "✓ Deploy with <b>Podman or Docker</b> compose files",
-    "self.c3": "✓ <b>100% Private:</b> run offline with local Ollama + Whisper",
-    "self.c4": "✓ Unlimited multi-user ledgers & Notion sync unlocked",
-    "self.c5": "✓ Unlimited use of all pre-built commands & exports",
-    "self.c6": "✓ Governed by <b>BSL 1.1</b> for personal & family use",
-    "self.c7": "⚠️ You manage your server, database backups, & bot webhooks",
-    "self.c8": "❤️ Code contributions and improvements are welcome!",
+    "self.c1": "✓ <b>Full source code</b> on GitHub under BSL 1.1",
+    "self.c2": "✓ Deploy with <b>Podman or Docker</b> compose",
+    "self.c3": "✓ <b>100% Offline:</b> local Ollama + Whisper STT",
+    "self.c4": "✓ Unlimited multi-user ledgers & Notion sync",
+    "self.c5": "✓ Unlimited use of all slash commands & exports",
+    "self.c6": "⚠️ You manage server maintenance & backups",
     "self.community_btn": "View Source on GitHub",
     "self.kofi_btn": "Support on Ko-fi",
-    "self.cloud_tag": "Managed Convenience",
+    "self.cloud_tag": "Turnkey Convenience",
     "self.cloud_title": "Clanomy Cloud",
     "self.cloud_price": "From $4.99 / month",
-    "self.cl1": "✓ <b>Instant start</b> directly via <code>@clanomy_bot</code>",
-    "self.cl2": "✓ <b>Zero server maintenance</b> or terminal configuration",
-    "self.cl3": "✓ Managed cloud infrastructure with automated database backups",
-    "self.cl4": "✓ High-speed cloud AI inference with instant voice transcription",
-    "self.cl5": "✓ <b>60-day free trial</b> with no credit card upfront",
-    "self.cl6": "✓ Continuous updates, new features, and Web Studio access (Coming Soon)",
-    "self.cl7": "✓ Priority support & automated Notion sync",
-    "self.cloud_btn": "Start 60-Day Free Trial",
-    "self.license_note": "⚖️ <b>License Protection Notice:</b> Clanomy is distributed under the <b>Business Source License 1.1 (BSL 1.1)</b>. Personal, non-commercial, and family self-hosting is 100% free and permanently encouraged. However, third parties are legally prohibited from offering Clanomy on a commercial, hosted, managed, or Software-as-a-Service (SaaS) basis. Commercial SaaS rights are reserved exclusively to Clanomy Authors.",
+    "self.cl1": "✓ <b>Instant start</b> directly in Telegram",
+    "self.cl2": "✓ <b>Zero server maintenance</b> or technical setup",
+    "self.cl3": "✓ High-speed cloud AI inference & audio transcription",
+    "self.cl4": "✓ Automated daily database backups & continuous updates",
+    "self.cl5": "✓ <b>Includes 60-day Duo trial</b> with no card required",
+    "self.cl6": "✓ Priority support & automated Notion sync",
+    "self.cloud_btn": "Start Free on Telegram",
+    "self.license_note": "⚖️ <b>License Notice:</b> Clanomy is distributed under the <b>Business Source License 1.1 (BSL 1.1)</b>. Personal and household self-hosting is 100% free. Commercial SaaS hosting rights are reserved exclusively to Clanomy Authors.",
 
-    // Pricing Header & Free Foundation Card
+    // Unified 4-Tier Pricing
     "pricing.badge": "Simple & Transparent Pricing",
-    "pricing.title": "Start Free. Upgrade as You Grow.",
-    "pricing.subtitle": "Every new account begins with a 60-day Duo Pro trial (2 partners, 60 daily AI logs pool). No credit card required upfront.",
-    "foundation.badge": "🎁 100% Free Forever • No Credit Card Required",
-    "foundation.title": "The Clanomy Free Foundation",
-    "foundation.desc": "Everyone starts with a <b>60-day Duo Pro trial</b> for 2 partners, with 60 shared daily AI logs and real-time Notion sync. After day 60, your workspace continues on our generous Free plan forever (up to 5 members, 20 monthly AI logs)—with zero paywalls on your reports, records, or pre-built commands.",
-    "foundation.p1_title": "Unlimited Slash Commands",
-    "foundation.p1_desc": "Run <code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/me</code>, <code>/undo</code>, and <code>/export</code> anytime with zero rate limits or paywalls.",
-    "foundation.p2_title": "Your Family Stays Together",
-    "foundation.p2_desc": "Nobody is kicked out. Partners who joined during your trial remain in your shared household ledger on the Free tier, and you can invite up to 5 family members total.",
-    "foundation.p3_title": "20 Monthly AI Messages (Shared)",
-    "foundation.p3_desc": "Log expenses via voice or text. The 20 free monthly AI messages are shared across all workspace members and reset every month.",
-    "foundation.p4_title": "Zero-Knowledge Privacy",
-    "foundation.p4_desc": "Application-level AES-256 field encryption ensures nobody—not even database admins or hosting providers—can read your entries.",
-    "foundation.cta": "Start Free in Telegram",
-
-    // Pro Upgrade Section & Cards
-    "pro.badge": "🚀 More AI Messages & Multi-Member Shared Ledgers",
-    "pro.title": "Upgrade Your Workspace to Pro",
-    "pro.subtitle": "Unlock higher AI message limits, real-time Notion synchronization, and shared workspaces for your household.",
+    "pricing.title": "Choose the Plan That Fits Your Household",
+    "pricing.subtitle": "Every new account begins with a 60-day Duo Pro trial. No credit card required upfront.",
+    "pricing.trial_badge": "60-Day Trial",
+    "pricing.trial_banner_title": "Try Duo Pro 100% Free",
+    "pricing.trial_banner_desc": "Start with 60 days of Duo Pro (2 partners, 60 daily AI logs pool, real-time Notion sync). Continue on Free Starter forever or upgrade as your household grows.",
     "toggle.monthly": "Monthly",
     "toggle.annual": "Annual",
     "toggle.discount": "2 Months Free (Save 17%)",
     "period.month": "/ month",
-    "period.year": "/ year",
 
-    // Solo Pro Card
+    // Free Starter Tier
+    "free.name": "Free Starter",
+    "free.period": "forever",
+    "free.desc": "Essential expense tracking for individuals and households with zero commitment.",
+    "free.f1": "✓ <b>Up to 5 Members</b> in shared ledger",
+    "free.f2": "✓ <b>20 AI logs/month</b> (shared pool)",
+    "free.f3": "✓ <b>Unlimited slash commands</b> (/month, /balance, /bills)",
+    "free.f4": "✓ Zero-knowledge AES-256 encryption",
+    "free.f5": "✓ CSV & JSON transaction exports",
+    "free.f6": "✓ Community support & self-serve portal",
+    "free.btn": "Start Free in Telegram",
+
+    // Solo Pro Tier
     "solo.name": "Solo Pro",
     "solo.desc": "For individuals wanting complete financial clarity, high-volume AI logging, and Notion sync.",
     "solo.f1": "✓ <b>1 User</b> workspace",
@@ -142,7 +133,7 @@ const TRANSLATIONS = {
     "solo.f6": "✓ Self-service customer billing portal",
     "solo.btn": "Upgrade in Telegram",
 
-    // Duo Pro Card
+    // Duo Pro Tier (Couples)
     "duo.badge": "Best for Couples",
     "duo.name": "Duo Pro",
     "duo.desc": "For couples, partners, and roommates managing joint finances with total clarity.",
@@ -154,7 +145,7 @@ const TRANSLATIONS = {
     "duo.f6": "✓ Per-member transaction attribution",
     "duo.btn": "Upgrade in Telegram",
 
-    // Family Pro Card
+    // Family Pro Tier
     "family.name": "Family Pro",
     "family.desc": "For households wanting complete transparency across parents, kids, and dependents.",
     "family.f1": "✓ <b>Everything in Duo Pro</b>",
@@ -162,48 +153,40 @@ const TRANSLATIONS = {
     "family.f3": "✓ Up to <b>300 shared AI messages/day</b> (pool)",
     "family.f4": "✓ Household member invitations (<code>/invite</code>)",
     "family.f5": "✓ Shared family Notion database mirror",
-    "family.f6": "✓ Per-member transaction attribution",
+    "family.f6": "✓ Priority customer support",
     "family.btn": "Upgrade in Telegram",
 
-    // Roadmap Ribbon
+    // Roadmap Ribbon & Fulfillment
     "roadmap.badge": "🚀 Roadmap",
     "roadmap.text": "<strong>Need Clanomy for 6+ members?</strong> Our <b>Custom & Teams</b> tier for coliving spaces, large households, and field teams is currently in development.",
     "roadmap.status": "Coming Soon",
-
-    // Fulfillment Box
     "fulfill.title": "Instant Automated Delivery",
     "fulfill.desc": "Upon completing subscription checkout, your plan is instantly activated via real-time confirmation linked directly to your Telegram workspace. No license keys to enter—just open <code>@clanomy_bot</code> to enjoy unlimited access immediately.",
 
-    // Disclaimer
+    // Regulatory Notice (Paddle Compliance)
     "disclaimer.title": "Regulatory & Software Classification Notice",
-    "disclaimer.desc": "Clanomy is an automated personal productivity and bookkeeping software developed and operated by <b>Clanomy</b>. Clanomy is <b>NOT</b> a bank, financial institution, money transmitter, lender, investment advisor, or foreign currency exchange. Clanomy does not hold custodial funds, transmit currency, or process financial transactions. All data recorded represents private user bookkeeping entries.",
+    "disclaimer.desc": "Clanomy is an automated personal productivity and expense tracking software developed and operated by <b>Clanomy</b>. Clanomy is <b>NOT</b> a bank, financial institution, money transmitter, lender, investment advisor, or foreign currency exchange. Clanomy does not hold custodial funds, transmit currency, or process financial transactions. All data recorded represents private user bookkeeping entries. Clanomy does not provide financial, investment, tax, or legal advice.",
 
-    // FAQ
+    // FAQ (Consolidated 7 Non-Redundant Questions)
     "faq.badge": "Got Questions?",
     "faq.title": "Frequently Asked Questions",
-    "faq.q1": "Do I need to enter a credit card for the 60-day free trial?",
-    "faq.a1": "No. You can start using Clanomy immediately on Telegram without entering payment details. All new accounts receive a 60-day Duo Pro trial completely free.",
+    "faq.q1": "Do I need a credit card to start, and what happens after the 60-day trial?",
+    "faq.a1": "<p>No payment information is required upfront. Every new workspace begins with 60 days of unrestricted Duo Pro access. When the trial concludes, your account smoothly transitions to our <b>Free Starter plan forever</b>—your family stays together in the shared ledger, all historical logs remain intact, and you retain 20 free monthly AI logs alongside unlimited slash commands (<code>/month</code>, <code>/balance</code>, <code>/bills</code>).</p>",
     "faq.q2": "How does Notion synchronization work?",
-    "faq.a2": "Simply type <code>/notion</code> in the bot. You will be provided a secure authorization link to connect your Notion account. Clanomy creates and maintains an encrypted financial database directly in your personal Notion workspace.",
+    "faq.a2": "<p>Simply type <code>/notion</code> in the bot. You will receive a secure authorization link to connect your Notion account. Clanomy creates and maintains an encrypted financial database directly in your personal workspace with instant bi-directional updates.</p>",
     "faq.q3": "How do I invite my partner or household members?",
-    "faq.a3": "On Duo Pro or Family Pro, type <code>/invite</code> in Telegram. The bot will generate a unique, time-limited invitation link. When your partner or household member clicks it, they join your shared workspace automatically.",
-    "faq.q4": "What is Zero-Knowledge AES-256 Privacy and how does it protect me?",
-    "faq.a4": "<p><b>AES-256 (Advanced Encryption Standard 256-bit)</b> is the gold-standard cryptographic cipher used worldwide by financial institutions and cybersecurity agencies.</p><p>Unlike traditional budgeting apps that store your transactions in plain, readable text, Clanomy applies <b>application-level field encryption</b>. Every sensitive expense description, concept, and monetary amount is cryptographically scrambled before it ever touches our database. Even if a raw database backup were intercepted, your records remain unbreakable ciphertext. No hosting administrators, third parties, or advertisers can ever read what you spent or earned.</p>",
-    "faq.q5": "Is my financial data or voice recordings used to train AI models?",
-    "faq.a5": "<p><b>No, absolutely not.</b> Clanomy enforces a strict, non-negotiable <b>Zero AI Training Policy</b>.</p><p>All expense parsing and voice transcriptions are processed exclusively through paid commercial developer API tiers. Under these commercial agreements, the AI providers are contractually and legally bound <b>never to use your inputs, prompts, audio files, or financial records to train machine learning models</b>.</p><p>Your inputs exist in transient AI memory only for the split-second required to extract categories and amounts, and are immediately discarded. Furthermore, if you prefer complete air-gapped isolation, Clanomy can be self-hosted locally on your own machine using private open-source models (Ollama + Faster-Whisper) where zero data ever leaves your local network.</p>",
-    "faq.q6": "What happens when my 60-day trial ends? Does my workspace stay intact on the Free plan?",
-    "faq.a6": "<p><b>Yes! Your workspace stays completely intact.</b> Nobody is removed. Your shared ledger, all historical records, and invited members remain completely intact.</p><p>On the Free tier, your workspace supports <b>up to 5 family members</b> and shares <b>20 free AI voice and text transaction logs per month</b> (shared across all members), while everyone enjoys <b>unlimited, lifetime use of all pre-built slash commands</b> (<code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/me</code>, <code>/undo</code>, <code>/export</code>) with zero paywalls.</p><p>If your household ever needs higher daily AI logging limits or Notion sync, you can upgrade anytime to <b>Solo Pro</b> (1 user, 60/day), <b>Duo Pro</b> (2 members, 120/day), or <b>Family Pro</b> (up to 5 members, 300/day).</p>",
-    "faq.q7": "Can I self-host Clanomy on my own hardware for free?",
-    "faq.a7": "<p><b>Yes!</b> Clanomy is source-available on GitHub under the Business Source License 1.1. You can clone the repository, run it using Podman or Docker on your own home lab or private VPS, and even connect local offline AI models (Ollama + Faster-Whisper) for 100% air-gapped financial tracking at $0 for your personal household. Code contributions and improvements are also welcome!</p>",
-    "faq.q8": "Can a third party host Clanomy and charge money for it?",
-    "faq.a8": "<p><b>No.</b> Under our <b>Business Source License 1.1 (BSL 1.1)</b>, self-hosting is free for personal, non-commercial, and family use. However, third parties are legally prohibited from offering Clanomy on a commercial, hosted, managed, or Software-as-a-Service (SaaS) basis, or charging users for access. Commercial SaaS rights are reserved exclusively to Clanomy Authors.</p>",
-    "faq.q9": "How do I cancel or manage my subscription?",
-    "faq.a9": "<p>You can manage your subscription at any time by typing <code>/billing</code> in the bot. This opens your secure customer portal where you can cancel, update your payment method, or view invoices with one click.</p>",
-    "faq.q10": "What are the AI message limits per tier?",
-    "faq.a10": "<p>AI message limits are shared across all members in your workspace and reset monthly (Pro tiers reset daily). Each tier's allowance:</p><ul><li><b>Free:</b> 20 AI messages/month (shared across up to 5 members)</li><li><b>Duo Trial:</b> 60 AI messages/day (shared pool between 2 partners for 60 days)</li><li><b>Solo Pro:</b> 60 AI messages/day (1 user)</li><li><b>Duo Pro:</b> 120 AI messages/day (shared pool between 2 members)</li><li><b>Family Pro:</b> 300 AI messages/day (shared pool across up to 5 members)</li></ul><p>Slash commands (<code>/month</code>, <code>/balance</code>, <code>/bills</code>, etc.) do <b>not</b> consume AI messages—they are always free and instant.</p>",
+    "faq.a3": "<p>On Duo Pro, Family Pro, or during your 60-day trial, type <code>/invite</code> in Telegram. The bot generates a private, secure link. When your partner or family member taps it, they join your shared household workspace automatically with per-member attribution.</p>",
+    "faq.q4": "What is Zero-Knowledge Privacy and how does it protect my family?",
+    "faq.a4": "<p><b>Zero-Knowledge Privacy</b> means your data is protected using application-level AES-256 field encryption before it ever reaches the database. Transaction amounts and merchant descriptions are encrypted in memory. Even if a raw database backup were intercepted, your records remain unbreakable ciphertext. No hosting administrators, third parties, or advertisers can ever read what you spent or earned.</p>",
+    "faq.q5": "Is my financial data or voice notes used to train AI models?",
+    "faq.a5": "<p><b>No, absolutely not.</b> Clanomy enforces a strict <b>Zero AI Training Policy</b>. All expense parsing and voice transcriptions are processed exclusively through commercial developer endpoints that legally prohibit using customer inputs, prompts, audio files, or financial records to train machine learning models. Voice notes exist in transient memory only for the seconds required to transcribe, then are immediately deleted.</p>",
+    "faq.q6": "Can I self-host Clanomy on my own hardware for free?",
+    "faq.a6": "<p><b>Yes!</b> Clanomy is source-available on GitHub under the Business Source License 1.1. You can clone the repository, run it using Podman or Docker on your own home lab or private VPS, and even connect local offline AI models (Ollama + Faster-Whisper) for 100% private, air-gapped financial tracking at $0 for personal household use.</p>",
+    "faq.q7": "How do I cancel or manage my subscription?",
+    "faq.a7": "<p>You can manage your subscription at any time by typing <code>/billing</code> in the bot. This opens your secure customer portal where you can cancel with one click, update payment methods, or view invoices. Premium access remains active until the end of your paid billing period.</p>",
 
     // Footer
-    "footer.tagline": "Privacy-first personal and family financial assistant for Telegram.",
+    "footer.tagline": "Privacy-first personal and family expense tracker & budgeting bot for Telegram.",
     "footer.operator": "Developed & Operated by <b>Clanomy</b>",
     "footer.support": "Support Contact:",
     "footer.kofi": "Support Project on Ko-fi",
@@ -217,7 +200,17 @@ const TRANSLATIONS = {
     "footer.refund": "Refund & Cancellation Policy",
     "footer.launch_bot": "Launch Telegram Bot",
     "footer.copyright": "© 2026 Clanomy. All rights reserved. Payments securely processed.",
-    "footer.close_btn": "Close"
+    "footer.close_btn": "Close",
+
+    // Legal Modals (English)
+    "terms.title": "Clanomy SaaS Terms of Service",
+    "terms.body": "<p><strong>Effective Date:</strong> September 2, 2026</p><p><strong>Operated by:</strong> Clanomy (\"Clanomy\", \"we\", \"us\", or \"our\").</p><h4>1. Acceptance of Terms</h4><p>By accessing or using the Clanomy Telegram bot service, Web Studio, or associated APIs (collectively, the \"Service\"), you agree to be bound by these Terms of Service.</p><h4>2. Description of Service & Non-Advisory Status</h4><p>Clanomy is a software-as-a-service (SaaS) utility providing automated personal and family bookkeeping, natural language expense and income tracking, and Notion database synchronization. <strong>Clanomy is strictly a productivity software tool. Clanomy does NOT provide investment, financial, legal, or tax advice. We are NOT a bank, credit institution, money transmitter, lender, or foreign exchange provider.</strong> Clanomy does not hold user funds, initiate banking wires, or process financial transactions.</p><h4>3. Subscriptions & Payments</h4><p>All subscription transactions, invoicing, tax collection, and customer billing are handled securely by authorized Merchant of Record payment processors. When you subscribe to Clanomy Solo Pro, Duo Pro, or Family Pro, subscription fees are billed on a recurring monthly or annual basis until canceled.</p><h4>4. Account Security & Privacy</h4><p>You are responsible for safeguarding access to your Telegram account. Financial entries recorded via Clanomy are protected using application-level AES-256 field encryption. You agree not to upload harmful code, abuse rate limits, or use the Service for illegal financial reporting.</p><h4>5. Termination & Cancellation</h4><p>You may cancel your subscription at any time through the self-service Customer Portal (accessed via the bot with <code>/billing</code>). Cancellations take effect at the conclusion of your current prepaid billing cycle.</p><h4>6. Limitation of Liability</h4><p>To the maximum extent permitted by applicable law, Clanomy and its suppliers shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the Service or reliance on financial calculations.</p><h4>7. Contact</h4><p>For questions regarding these Terms, contact us at: <a href=\"mailto:support@clanomy.com\">support@clanomy.com</a>.</p>",
+
+    "privacy.title": "Privacy Policy",
+    "privacy.body": "<p><strong>Effective Date:</strong> September 2, 2026</p><p>Clanomy is committed to safeguarding the privacy and confidentiality of your personal financial records.</p><h4>1. Information We Collect</h4><ul><li><strong>Telegram Identity:</strong> User ID, Chat ID, and display name provided by Telegram.</li><li><strong>Bookkeeping Data:</strong> Financial concepts, amounts, categories, and dates you choose to log.</li><li><strong>Billing Metadata:</strong> Subscription status, plan tier, and customer ID reference. <em>We never see or store your raw payment card numbers. All payment processing is handled securely by PCI-DSS compliant payment processors.</em></li></ul><h4>2. Zero-Knowledge Field Encryption</h4><p>Clanomy implements application-level AES-256 URL-safe Fernet encryption. All transaction amounts and merchant descriptions are encrypted prior to database persistence. Server-side database snapshots cannot read your financial records in plaintext.</p><h4>3. How We Use Data</h4><p>Your data is used strictly to provide the bookkeeping, query aggregation, and Notion synchronization requested by you. We do <strong>NOT</strong> sell, rent, monetize, or share your data with advertisers or data brokers.</p><h4>4. Third-Party Integrations</h4><ul><li><strong>Payment Processors:</strong> For secure payment processing, invoicing, and subscription management.</li><li><strong>Notion:</strong> When enabled by you, transactions are transmitted via TLS 1.3 to your personal Notion database.</li><li><strong>AI Inference & Zero Training:</strong> Transcription and extraction are executed through secured, zero-data-retention commercial developer AI endpoints solely for the transient duration of the request. Customer data, voice recordings, and financial prompts are strictly never retained or used to train machine learning models.</li></ul><h4>5. Data Deletion Rights</h4><p>You may permanently delete your workspace, transactions, and linked credentials at any time by executing the <code>/delete_account</code> command or by writing to <a href=\"mailto:support@clanomy.com\">support@clanomy.com</a>.</p>",
+
+    "refund.title": "Refund & Cancellation Policy",
+    "refund.body": "<p><strong>Effective Date:</strong> September 2, 2026</p><h4>1. 60-Day Risk-Free Trial</h4><p>Clanomy provides an unrestricted <strong>60-day free trial</strong> on all new workspaces—with <strong>no credit card required upfront</strong>. This ensures you have ample time to test voice logging, Notion database syncing, and multi-member features before making any financial commitment.</p><h4>2. Cancellations</h4><p>You may cancel your subscription at any time with a single click. Simply type <code>/billing</code> in Telegram to access your billing portal directly. When you cancel, your premium features remain fully active until the end of your prepaid billing period, and you will not be charged again.</p><h4>3. Refund Terms</h4><p>Because every user receives 60 days of free evaluation prior to any charge, recurring subscription payments are generally <strong>non-refundable</strong> once billed.</p><h4>4. Exceptions & Billing Errors</h4><p>If you believe you were charged in error, experienced an unintended renewal, or encountered a technical fault preventing access to your paid tier, please contact us at <a href=\"mailto:support@clanomy.com\">support@clanomy.com</a> within <strong>14 days</strong> of the transaction. We review all legitimate billing claims in good faith and will issue a prompt full refund where justified.</p>"
   },
 
   es: {
@@ -232,12 +225,12 @@ const TRANSLATIONS = {
     "nav.cta": "Abrir en Telegram",
 
     // Hero
-    "hero.badge": "Impulsado por Telegram e IA Segura • Para Familias, Parejas y Equipos",
-    "hero.title": "El Asistente Financiero Inteligente para <span>Familias, Parejas y Compañeros</span>",
-    "hero.subtitle": "Registra gastos personales y compartidos sin esfuerzo mediante notas de voz o mensajes de texto en Telegram. Ideal para hogares, parejas, compañeros de piso y pequeños equipos—con privacidad AES-256 de conocimiento cero.",
-    "hero.cta_start": "Iniciar Prueba Gratis de 60 Días",
+    "hero.badge": "Impulsado por Telegram e IA Segura • Para Familias, Parejas y Compañeros",
+    "hero.title": "El Bot Inteligente de Control de Gastos y Presupuesto para <span>Familias, Parejas y Compañeros</span>",
+    "hero.subtitle": "Registra gastos personales y compartidos sin esfuerzo mediante notas de voz o texto en Telegram. Privacidad por diseño, compartido con quien importa.",
+    "hero.cta_start": "Comenzar Gratis en Telegram",
     "hero.cta_pricing": "Ver Precios",
-    "hero.trial_note": "✨ Prueba Duo de 60 días 100% gratis • 2 integrantes y libro compartido • Cuota de 60 mensajes IA/día • Sin tarjeta de crédito",
+    "hero.trial_note": "✨ Incluye 60 días de prueba Duo Pro • Libro compartido para parejas y Notion • Sin tarjeta de crédito",
     "hero.mockup_bot_name": "🤖 Clanomy Bot (@clanomy_bot)",
     "hero.mockup_badge": "Encriptado AES-256",
     "hero.mockup_user_1": "🎙️ <i>Nota de Voz (0:04):</i> \"Gasté 18.50 en el súper y 4 en café\"",
@@ -245,31 +238,27 @@ const TRANSLATIONS = {
     "hero.mockup_bot_2": "📊 <b>Balance del Hogar (Septiembre 2026):</b><br>• 💰 Ingresos: <b>$4,200.00 USD</b><br>• 💸 Gastos Totales: <b>$1,480.50 USD</b><br>• 📈 Ahorro Neto: <b>+$2,719.50 USD (64.7% ahorrado)</b> 🎉",
 
     // Trust Bar
-    "trust.aes_title": "Encriptación AES-256",
-    "trust.aes_desc": "Seguridad de campos con conocimiento cero",
+    "trust.aes_title": "Privacidad de Conocimiento Cero",
+    "trust.aes_desc": "Encriptación de campos AES-256 a nivel de app",
+    "trust.speed_title": "Registra en 3 Segundos",
+    "trust.speed_desc": "Notas de voz naturales y texto rápido",
     "trust.notion_title": "Sincronización con Notion",
-    "trust.notion_desc": "Reflejo directo bidireccional de base de datos",
-    "trust.multi_title": "Libros Multimiembro",
-    "trust.multi_desc": "Atribución individual y privacidad por miembro",
-    "trust.mor_title": "Pagos Seguros",
-    "trust.mor_desc": "Pago seguro global encriptado",
+    "trust.notion_desc": "Reflejo directo bidireccional en tiempo real",
+    "trust.multi_title": "Libros de Hogar Compartidos",
+    "trust.multi_desc": "Atribución por integrante y transparencia",
 
-    // Features Grid
+    // Features Grid (4 Consolidated, High-Value Cards)
     "features.badge": "Diseñado para la Simplicidad",
-    "features.title": "Todo lo que Necesitas para Dominar tus Finanzas Compartidas",
+    "features.title": "Todo lo que Necesitas para Dominar los Gastos del Hogar",
     "features.subtitle": "Sin formularios complejos, sin hojas de cálculo manuales ni tediosos accesos bancarios. Solo habla o escribe.",
     "features.f1_title": "IA Bilingüe por Voz y Texto",
-    "features.f1_desc": "Envía notas de voz o mensajes rápidos en español natural. La IA procesa ítems compuestos, categorías, monedas y fechas al instante.",
-    "features.f2_title": "Libro Compartido del Grupo",
+    "features.f1_desc": "Envía notas de voz o mensajes rápidos en español o inglés natural. La IA procesa ítems compuestos, categorías, monedas y fechas al instante.",
+    "features.f2_title": "Libro Compartido del Hogar",
     "features.f2_desc": "Invita a tu pareja o familiares con un enlace privado. Gestiona los gastos del hogar en conjunto con atribución transparente y balances unificados.",
     "features.f3_title": "Integración Nativa con Notion",
     "features.f3_desc": "Cada transacción se sincroniza automáticamente con tu espacio privado en Notion en tiempo real. Conserva la soberanía total de tus datos sin ataduras.",
-    "features.f4_title": "Privacidad AES-256 de Conocimiento Cero",
-    "features.f4_desc": "Los conceptos y montos de tus gastos se encriptan a nivel de aplicación con AES-256 antes de guardarse en la base de datos. Ni los administradores pueden ver tu información.",
-    "features.f5_title": "Rastreo de Facturas y Vencimientos",
-    "features.f5_desc": "Di \"Alquiler 1200 vence el 5\" o \"Préstamo vence el 18\". Clanomy registra la fecha y puedes consultar tus obligaciones pendientes cuando quieras con <code>/bills</code>—sin recordatorios automáticos, el control está en tus manos.",
-    "features.f6_title": "Comandos Rápidos Deterministas",
-    "features.f6_desc": "Comandos de chat de Telegram (<code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/undo</code>) responden al instante sin afectar tu cuota diaria de mensajes de IA.",
+    "features.f4_title": "Control de Facturas y Vencimientos",
+    "features.f4_desc": "Di &ldquo;Alquiler 1200 vence el 5&rdquo; o &ldquo;Internet 50 el 20&rdquo;. Clanomy registra las fechas para que consultes tus obligaciones pendientes cuando quieras con <code>/bills</code>.",
 
     // How It Works
     "how.badge": "Experiencia Fluida",
@@ -294,135 +283,121 @@ const TRANSLATIONS = {
     "studio.cta": "Abrir @clanomy_bot en Telegram",
     "studio.preview_tag": "Vista Previa Web Studio • Próximamente",
 
-    // Self-Hosted
+    // Self-Hosted Freedom (Streamlined)
     "self.badge": "🔓 Código Disponible • Business Source License 1.1",
-    "self.title": "Hospédalo tú Mismo o Déjanos la Nube a Nosotros.",
-    "self.subtitle": "Los datos financieros de tu familia te pertenecen. Clanomy tiene código disponible en GitHub. Corre tu instancia privada por $0 sin límites artificiales para tu hogar, o elige Clanomy Cloud para una experiencia lista para usar y sin mantenimiento.",
+    "self.title": "Tus Datos Te Pertenecen. Comodidad en la Nube o Control Auto-Hospedado.",
+    "self.subtitle": "Corre tu propia instancia por $0 en tu servidor privado, o deja que Clanomy Cloud gestione la infraestructura para una experiencia lista para usar.",
     "self.community_title": "Comunidad Auto-Hospedada",
     "self.community_price": "100% Gratis para Siempre",
-    "self.c1": "✓ <b>Código fuente completo</b> disponible en GitHub",
-    "self.c2": "✓ Despliegue con archivos compose de <b>Podman o Docker</b>",
-    "self.c3": "✓ <b>100% Privado:</b> opera offline con Ollama y Whisper locales",
-    "self.c4": "✓ Libros multimiembro y sincronización con Notion desbloqueados",
-    "self.c5": "✓ Uso ilimitado de todos los comandos integrados y exportaciones",
-    "self.c6": "✓ Regulado bajo <b>BSL 1.1</b> para uso personal y familiar",
-    "self.c7": "⚠️ Tú administras tu servidor, backups de base de datos y webhooks",
-    "self.c8": "❤️ ¡Las contribuciones y mejoras de código son bienvenidas!",
+    "self.c1": "✓ <b>Código fuente completo</b> en GitHub bajo BSL 1.1",
+    "self.c2": "✓ Despliegue con compose de <b>Podman o Docker</b>",
+    "self.c3": "✓ <b>100% Offline:</b> Ollama + Whisper locales",
+    "self.c4": "✓ Libros multimiembro y sincronización con Notion sin límites",
+    "self.c5": "✓ Uso ilimitado de todos los comandos y exportaciones",
+    "self.c6": "⚠️ Tú administras el mantenimiento del servidor y copias de seguridad",
     "self.community_btn": "Ver Código en GitHub",
     "self.kofi_btn": "Apoyar en Ko-fi",
     "self.cloud_tag": "Comodidad Gestionada",
     "self.cloud_title": "Clanomy Cloud",
     "self.cloud_price": "Desde $4.99 / mes",
-    "self.cl1": "✓ <b>Inicio inmediato</b> directamente vía <code>@clanomy_bot</code>",
-    "self.cl2": "✓ <b>Cero mantenimiento de servidores</b> o configuración de terminal",
-    "self.cl3": "✓ Infraestructura en la nube con copias de seguridad automatizadas",
-    "self.cl4": "✓ Inferencia de IA de alta velocidad con transcripción de voz al instante",
-    "self.cl5": "✓ <b>Prueba gratis de 60 días</b> sin ingresar tarjeta de crédito",
-    "self.cl6": "✓ Actualizaciones continuas, nuevas funciones y acceso a Web Studio (Próximamente)",
-    "self.cl7": "✓ Soporte prioritario y sincronización automatizada con Notion",
-    "self.cloud_btn": "Iniciar Prueba Gratis de 60 Días",
-    "self.license_note": "⚖️ <b>Aviso de Protección de Licencia:</b> Clanomy se distribuye bajo la <b>Business Source License 1.1 (BSL 1.1)</b>. El auto-alojamiento personal, no comercial y familiar es 100% gratuito y permanentemente fomentado. Sin embargo, se prohíbe legalmente a terceros ofrecer Clanomy de forma comercial, alojada, gestionada o como Software como Servicio (SaaS). Los derechos comerciales de SaaS están reservados exclusivamente a los Autores de Clanomy.",
+    "self.cl1": "✓ <b>Inicio inmediato</b> directamente en Telegram",
+    "self.cl2": "✓ <b>Cero mantenimiento</b> ni configuración técnica",
+    "self.cl3": "✓ IA en la nube de alta velocidad y transcripción de voz",
+    "self.cl4": "✓ Copias de seguridad automáticas y actualizaciones continuas",
+    "self.cl5": "✓ <b>Incluye 60 días de prueba Duo</b> sin tarjeta requerida",
+    "self.cl6": "✓ Soporte prioritario y sincronización con Notion",
+    "self.cloud_btn": "Comenzar Gratis en Telegram",
+    "self.license_note": "⚖️ <b>Aviso de Licencia:</b> Clanomy se distribuye bajo la <b>Business Source License 1.1 (BSL 1.1)</b>. El auto-alojamiento personal y familiar es 100% gratuito. Los derechos de explotación comercial como SaaS están reservados exclusivamente a los Autores de Clanomy.",
 
-    // Pricing Header & Free Foundation Card
+    // Unified 4-Tier Pricing
     "pricing.badge": "Precios Simples y Transparentes",
-    "pricing.title": "Comienza Gratis. Crece a tu Ritmo.",
-    "pricing.subtitle": "Cada cuenta nueva inicia con 60 días de prueba Duo Pro (2 integrantes, grupo de 60 mensajes IA/día). Sin tarjeta de crédito requerida por adelantado.",
-    "foundation.badge": "🎁 100% Gratis para Siempre • Sin Tarjeta Requerida",
-    "foundation.title": "La Base Gratuita de Clanomy",
-    "foundation.desc": "Todos comienzan con una <b>prueba Duo Pro de 60 días</b> para 2 integrantes, con 60 mensajes de IA diarios compartidos y sincronización con Notion en tiempo real. Tras el día 60, tu espacio continúa en nuestro generoso plan Free para siempre (hasta 5 integrantes, 20 registros mensuales de IA): sin muros de pago en tus reportes, registros o comandos.",
-    "foundation.p1_title": "Comandos Slash Ilimitados",
-    "foundation.p1_desc": "Ejecuta <code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/me</code>, <code>/undo</code> y <code>/export</code> siempre que quieras sin límites de tasa ni cobros.",
-    "foundation.p2_title": "Tu Familia se Mantiene Unida",
-    "foundation.p2_desc": "Nadie queda afuera. Quienes se hayan sumado durante tu prueba continúan compartiendo el libro del hogar en el plan Free, y puedes invitar hasta 5 integrantes en total.",
-    "foundation.p3_title": "20 Registros IA al Mes (Compartidos)",
-    "foundation.p3_desc": "Anota gastos por voz o texto. Los 20 registros mensuales con IA se comparten entre todos los miembros y se reinician cada mes.",
-    "foundation.p4_title": "Privacidad de Conocimiento Cero",
-    "foundation.p4_desc": "La encriptación AES-256 a nivel de aplicación asegura que nadie —ni administradores de base de datos ni proveedores de hosting— pueda leer tus registros.",
-    "foundation.cta": "Comenzar Gratis en Telegram",
-
-    // Pro Upgrade Section & Cards
-    "pro.badge": "🚀 Más Mensajes de IA y Libros Compartidos Multimiembro",
-    "pro.title": "Mejora tu Espacio a Clanomy Pro",
-    "pro.subtitle": "Desbloquea mayores cuotas de mensajes de IA, sincronización en tiempo real con Notion y espacios compartidos para el hogar.",
+    "pricing.title": "Elige el Plan que Mejor se Adapte a tu Hogar",
+    "pricing.subtitle": "Cada cuenta nueva inicia con 60 días de prueba Duo Pro. Sin tarjeta de crédito requerida por adelantado.",
+    "pricing.trial_badge": "Prueba 60 Días",
+    "pricing.trial_banner_title": "Prueba Duo Pro 100% Gratis",
+    "pricing.trial_banner_desc": "Comienza con 60 días de Duo Pro (2 integrantes, 60 registros diarios, sincronización con Notion). Continúa en Free Inicial para siempre o mejora según crezca tu hogar.",
     "toggle.monthly": "Mensual",
     "toggle.annual": "Anual",
     "toggle.discount": "2 Meses Gratis (Ahorra 17%)",
     "period.month": "/ mes",
-    "period.year": "/ año",
 
-    // Solo Pro Card
+    // Free Starter Tier
+    "free.name": "Free Inicial",
+    "free.period": "para siempre",
+    "free.desc": "Control de gastos esencial para individuos y hogares sin ningún compromiso.",
+    "free.f1": "✓ <b>Hasta 5 Integrantes</b> en libro compartido",
+    "free.f2": "✓ <b>20 registros IA/mes</b> (grupo compartido)",
+    "free.f3": "✓ <b>Comandos ilimitados</b> (/month, /balance, /bills)",
+    "free.f4": "✓ Privacidad con encriptación AES-256",
+    "free.f5": "✓ Exportación en CSV y JSON",
+    "free.f6": "✓ Soporte comunitario y portal de autoservicio",
+    "free.btn": "Comenzar Gratis en Telegram",
+
+    // Solo Pro Tier
     "solo.name": "Solo Pro",
-    "solo.desc": "Para personas que buscan total claridad financiera, alta cuota de registros con IA y sincronización con Notion.",
-    "solo.f1": "✓ Espacio para <b>1 Usuario</b>",
+    "solo.desc": "Para personas que buscan máxima claridad, alto volumen de IA y sincronización con Notion.",
+    "solo.f1": "✓ Espacio de <b>1 Usuario</b>",
     "solo.f2": "✓ Hasta <b>60 mensajes IA/día</b> (voz y texto)",
-    "solo.f3": "✓ <b>Sincronización en tiempo real con Notion</b>",
-    "solo.f4": "✓ Consultas de saldo y rastreador de facturas",
+    "solo.f3": "✓ <b>Sincronización con Notion</b> en tiempo real",
+    "solo.f4": "✓ Consultas de flujo de caja y facturas",
     "solo.f5": "✓ Exportación de datos en CSV y JSON",
     "solo.f6": "✓ Portal de facturación de autoservicio",
     "solo.btn": "Mejorar en Telegram",
 
-    // Duo Pro Card
+    // Duo Pro Tier (Couples)
     "duo.badge": "Ideal para Parejas",
     "duo.name": "Duo Pro",
-    "duo.desc": "Para parejas, cónyuges y compañeros de piso que administran finanzas conjuntas con total claridad.",
-    "duo.f1": "✓ <b>Todo lo incluido en Solo Pro</b>",
-    "duo.f2": "✓ <b>2 Integrantes</b> (Libro compartido de pareja)",
-    "duo.f3": "✓ Hasta <b>120 mensajes IA/día compartidos</b> (grupo)",
-    "duo.f4": "✓ Enlace de invitación para pareja (<code>/invite</code>)",
-    "duo.f5": "✓ Reflejo de base de datos en Notion compartida",
-    "duo.f6": "✓ Atribución de gastos por integrante",
+    "duo.desc": "Para parejas y compañeros que gestionan gastos compartidos con total claridad.",
+    "duo.f1": "✓ <b>Todo lo de Solo Pro</b>",
+    "duo.f2": "✓ <b>2 Integrantes</b> (Libro compartido)",
+    "duo.f3": "✓ Hasta <b>120 mensajes IA/día</b> (grupo compartido)",
+    "duo.f4": "✓ Enlace de invitación (<code>/invite</code>)",
+    "duo.f5": "✓ Base de Notion compartida",
+    "duo.f6": "✓ Atribución transparente por miembro",
     "duo.btn": "Mejorar en Telegram",
 
-    // Family Pro Card
+    // Family Pro Tier
     "family.name": "Family Pro",
-    "family.desc": "Para hogares que buscan transparencia total entre padres, hijos y dependientes.",
-    "family.f1": "✓ <b>Todo lo incluido en Duo Pro</b>",
-    "family.f2": "✓ <b>Hasta 5 Integrantes</b> (Libro del hogar)",
-    "family.f3": "✓ Hasta <b>300 mensajes IA/día compartidos</b> (grupo)",
-    "family.f4": "✓ Invitación a integrantes del hogar (<code>/invite</code>)",
-    "family.f5": "✓ Base de datos familiar compartida en Notion",
-    "family.f6": "✓ Atribución de gastos por integrante",
+    "family.desc": "Para hogares que buscan transparencia total entre familia y convivientes.",
+    "family.f1": "✓ <b>Todo lo de Duo Pro</b>",
+    "family.f2": "✓ <b>Hasta 5 Integrantes</b> (Libro familiar)",
+    "family.f3": "✓ Hasta <b>300 mensajes IA/día</b> (grupo compartido)",
+    "family.f4": "✓ Enlaces de invitación (<code>/invite</code>)",
+    "family.f5": "✓ Base de Notion familiar compartida",
+    "family.f6": "✓ Soporte al cliente prioritario",
     "family.btn": "Mejorar en Telegram",
 
-    // Roadmap Ribbon
-    "roadmap.badge": "🚀 En Desarrollo",
-    "roadmap.text": "<strong>¿Necesitas Clanomy para 6 o más integrantes?</strong> Nuestro plan <b>Personalizado y Equipos</b> para espacios compartidos, familias numerosas y grupos está actualmente en desarrollo.",
+    // Roadmap Ribbon & Fulfillment
+    "roadmap.badge": "🚀 Próximamente",
+    "roadmap.text": "<strong>¿Necesitas Clanomy para 6+ integrantes?</strong> Nuestro plan <b>Custom & Teams</b> para espacios compartidos, hogares numerosos y equipos está en desarrollo.",
     "roadmap.status": "Próximamente",
+    "fulfill.title": "Entrega Inmediata Automatizada",
+    "fulfill.desc": "Al completar la suscripción, tu plan se activa al instante mediante confirmación en tiempo real vinculada a tu espacio de Telegram. Sin claves de licencia: solo abre <code>@clanomy_bot</code> para disfrutar de acceso inmediato.",
 
-    // Fulfillment Box
-    "fulfill.title": "Activación Instantánea y Automatizada",
-    "fulfill.desc": "Al completar tu suscripción, tu plan se activa de inmediato mediante confirmación en tiempo real vinculada a tu espacio de Telegram. Sin claves de licencia que ingresar: solo abre <code>@clanomy_bot</code> para disfrutar de acceso ilimitado.",
+    // Regulatory Notice (Paddle Compliance)
+    "disclaimer.title": "Aviso de Clasificación Regulatoria y de Software",
+    "disclaimer.desc": "Clanomy es un software automatizado de productividad personal y registro de gastos desarrollado y operado por <b>Clanomy</b>. Clanomy <b>NO</b> es un banco, institución financiera, transmisor de dinero, prestamista, asesor de inversiones ni operador de cambio de divisas. Clanomy no custodia fondos, no transmite divisas ni procesa transacciones financieras. Todos los datos registrados representan anotaciones privadas de contabilidad personal. Clanomy no brinda asesoramiento financiero, de inversión, fiscal ni legal.",
 
-    // Disclaimer
-    "disclaimer.title": "Aviso Regulatorio y Clasificación de Software",
-    "disclaimer.desc": "Clanomy es un software automatizado de productividad personal y registro contable desarrollado y operado por <b>Clanomy</b>. Clanomy <b>NO</b> es un banco, entidad financiera, transmisor de dinero, prestamista, asesor de inversiones ni casa de cambio de divisas. Clanomy no custodia fondos, no transmite divisas ni procesa transferencias bancarias. Todos los datos registrados corresponden a asientos contables privados del usuario.",
-
-    // FAQ
-    "faq.badge": "¿Dudas?",
+    // FAQ (Consolidated 7 Non-Redundant Questions)
+    "faq.badge": "¿Preguntas Frecuentes?",
     "faq.title": "Preguntas Frecuentes",
-    "faq.q1": "¿Necesito ingresar tarjeta de crédito para la prueba gratis de 60 días?",
-    "faq.a1": "No. Puedes empezar a usar Clanomy de inmediato en Telegram sin ingresar ningún dato de pago. Todas las cuentas nuevas reciben una prueba Duo Pro de 60 días completamente gratis.",
+    "faq.q1": "¿Necesito tarjeta de crédito para empezar y qué sucede tras los 60 días de prueba?",
+    "faq.a1": "<p>No necesitas ingresar datos de pago por adelantado. Cada cuenta nueva inicia con 60 días de acceso Duo Pro completo. Al finalizar la prueba, tu espacio continúa en nuestro <b>plan Free Inicial para siempre</b>: tu familia permanece unida en el libro compartido, conservas todos tus registros históricos y dispones de 20 registros mensuales de IA junto con comandos ilimitados (<code>/month</code>, <code>/balance</code>, <code>/bills</code>).</p>",
     "faq.q2": "¿Cómo funciona la sincronización con Notion?",
-    "faq.a2": "Simplemente escribe <code>/notion</code> en el bot. Se te proporcionará un enlace de autorización seguro para vincular tu cuenta de Notion. Clanomy creará y mantendrá una base de datos financiera encriptada directamente en tu espacio de trabajo personal de Notion.",
+    "faq.a2": "<p>Solo escribe <code>/notion</code> en el bot. Recibirás un enlace seguro para autorizar tu cuenta de Notion. Clanomy creará y mantendrá una base de datos financiera en tu propio espacio con sincronización bidireccional instantánea.</p>",
     "faq.q3": "¿Cómo invito a mi pareja o integrantes del hogar?",
-    "faq.a3": "En Duo Pro o Family Pro, escribe <code>/invite</code> en Telegram. El bot generará un enlace de invitación único y temporal. Cuando tu pareja o familiar haga clic, se unirá automáticamente al espacio compartido.",
-    "faq.q4": "¿Qué es la Privacidad de Conocimiento Cero AES-256 y cómo me protege?",
-    "faq.a4": "<p><b>AES-256 (Advanced Encryption Standard de 256 bits)</b> es el estándar criptográfico de máxima seguridad utilizado a nivel mundial por entidades financieras y agencias de ciberseguridad.</p><p>A diferencia de las aplicaciones de presupuesto tradicionales que guardan tus transacciones en texto plano legible, Clanomy aplica <b>encriptación de campos a nivel de aplicación</b>. Cada descripción de gasto, concepto y monto se cifra criptográficamente antes de tocar nuestra base de datos. Incluso si se interceptara un backup de la base de datos, tus registros permanecen como texto cifrado indescifrable. Ningún administrador de hosting, tercero o anunciante puede leer lo que gastaste o ganaste.</p>",
-    "faq.q5": "¿Mis datos financieros o notas de voz se usan para entrenar modelos de IA?",
-    "faq.a5": "<p><b>No, en absoluto.</b> Clanomy aplica una estricta e innegociable <b>Política de Cero Entrenamiento en IA</b>.</p><p>Todo el procesamiento de gastos y transcripciones de voz se realiza exclusivamente a través de APIs de desarrollo comercial de pago. Bajo estos acuerdos comerciales, los proveedores de IA están contractual y legalmente obligados a <b>nunca usar tus entradas, audios o registros financieros para entrenar modelos de aprendizaje automático</b>.</p><p>Tus datos permanecen en la memoria temporal de la IA únicamente durante la fracción de segundo requerida para extraer categorías y montos, e inmediatamente se descartan. Además, si prefieres un aislamiento total, puedes auto-hospedar Clanomy localmente en tu propia máquina usando modelos abiertos privados (Ollama + Faster-Whisper), donde ningún dato sale jamás de tu red local.</p>",
-    "faq.q6": "¿Qué ocurre al finalizar los 60 días de prueba? ¿Mi espacio sigue intacto en el plan Gratis?",
-    "faq.a6": "<p><b>¡Sí! Tu espacio se mantiene completamente intacto.</b> Nadie es expulsado. El libro contable compartido, todos los registros históricos y los miembros invitados permanecen intactos.</p><p>En el plan Gratis, el espacio admite <b>hasta 5 integrantes</b> y comparte <b>20 registros mensuales gratuitos de transacciones con IA por voz o texto</b> (compartidos entre todos los miembros), mientras que todos disfrutan de <b>uso ilimitado y de por vida de todos los comandos slash</b> (<code>/month</code>, <code>/today</code>, <code>/balance</code>, <code>/bills</code>, <code>/me</code>, <code>/undo</code>, <code>/export</code>) sin ningún muro de pago.</p><p>Si en algún momento necesitas mayores cuotas diarias de IA o sincronización con Notion, puedes mejorar cuando lo desees a <b>Solo Pro</b> (1 usuario, 60/día), <b>Duo Pro</b> (2 integrantes, 120/día) o <b>Family Pro</b> (hasta 5 integrantes, 300/día).</p>",
-    "faq.q7": "¿Puedo auto-hospedar Clanomy en mi propio hardware gratis?",
-    "faq.a7": "<p><b>¡Sí!</b> Clanomy tiene código disponible en GitHub bajo la Business Source License 1.1. Puedes clonar el repositorio, ejecutarlo usando Podman o Docker en tu propio home lab o VPS privado, e incluso conectar modelos de IA offline locales (Ollama + Faster-Whisper) para un seguimiento 100% aislado a $0 para tu hogar personal. ¡Las contribuciones y mejoras de código también son bienvenidas!</p>",
-    "faq.q8": "¿Puede un tercero hospedar Clanomy y cobrar por el servicio?",
-    "faq.a8": "<p><b>No.</b> Bajo nuestra <b>Business Source License 1.1 (BSL 1.1)</b>, el auto-alojamiento es gratuito para uso personal, no comercial y familiar. Sin embargo, se prohíbe legalmente a terceros ofrecer Clanomy sobre una base comercial, alojada, gestionada o como Software como Servicio (SaaS), o cobrar a usuarios por el acceso. Los derechos comerciales de SaaS están reservados exclusivamente a los Autores de Clanomy.</p>",
-    "faq.q9": "¿Cómo cancelo o gestiono mi suscripción?",
-    "faq.a9": "<p>Puedes administrar tu suscripción en cualquier momento escribiendo <code>/billing</code> en el bot. Esto abrirá tu portal de cliente seguro, donde podrás cancelar, actualizar tu método de pago o consultar tus facturas con un solo clic.</p>",
-    "faq.q10": "¿Cuáles son los límites de mensajes de IA por plan?",
-    "faq.a10": "<p>Los mensajes de IA se comparten entre todos los integrantes del espacio. El plan Gratis se reinicia mensualmente; los planes Pro se reinician diariamente. Cuota de cada plan:</p><ul><li><b>Gratis:</b> 20 mensajes IA/mes (compartidos entre hasta 5 integrantes)</li><li><b>Prueba Duo:</b> 60 mensajes IA/día (grupo compartido entre 2 integrantes durante 60 días)</li><li><b>Solo Pro:</b> 60 mensajes IA/día (1 usuario)</li><li><b>Duo Pro:</b> 120 mensajes IA/día (grupo compartido entre 2 integrantes)</li><li><b>Family Pro:</b> 300 mensajes IA/día (grupo compartido entre hasta 5 integrantes)</li></ul><p>Los comandos slash (<code>/month</code>, <code>/balance</code>, <code>/bills</code>, etc.) <b>no</b> consumen mensajes de IA: son siempre gratuitos e instantáneos.</p>",
+    "faq.a3": "<p>En Duo Pro, Family Pro o durante tus 60 días de prueba, escribe <code>/invite</code> en Telegram. El bot genera un enlace privado y seguro. Cuando tu pareja o familiar lo abre, se une automáticamente al libro compartido de tu hogar con atribución individual.</p>",
+    "faq.q4": "¿Qué es la Privacidad de Conocimiento Cero y cómo protege a mi familia?",
+    "faq.a4": "<p><b>Privacidad de Conocimiento Cero</b> significa que tus datos se protegen con encriptación AES-256 a nivel de aplicación antes de tocar la base de datos. Los montos y descripciones se cifran en memoria. Incluso ante una intercepción de la base de datos, tus registros permanecen ilegibles. Ningún administrador de hosting, tercero o anunciante puede leer lo que gastaste o ganaste.</p>",
+    "faq.q5": "¿Mis registros o notas de voz se usan para entrenar modelos de IA?",
+    "faq.a5": "<p><b>No, en lo absoluto.</b> Clanomy aplica una estricta <b>Política de Cero Entrenamiento de IA</b>. Todo el procesamiento de texto y audio se realiza a través de APIs comerciales que prohíben por contrato el uso de datos de clientes para entrenar modelos de machine learning. Los audios se procesan en memoria transitoria y se eliminan de inmediato.</p>",
+    "faq.q6": "¿Puedo auto-hospedar Clanomy en mi propio hardware gratis?",
+    "faq.a6": "<p><b>¡Sí!</b> Clanomy tiene código disponible en GitHub bajo la Business Source License 1.1. Puedes clonar el repositorio, ejecutarlo usando Podman o Docker en tu propio servidor o VPS privado, e incluso conectar modelos de IA offline locales (Ollama + Faster-Whisper) para un seguimiento 100% privado y aislado a $0 para uso personal y familiar.</p>",
+    "faq.q7": "¿Cómo cancelo o gestiono mi suscripción?",
+    "faq.a7": "<p>Puedes administrar tu suscripción en cualquier momento escribiendo <code>/billing</code> en el bot. Esto abrirá tu portal de cliente seguro, donde podrás cancelar con un solo clic, cambiar métodos de pago o consultar facturas. El acceso premium permanece activo hasta el final de tu período pagado.</p>",
 
     // Footer
-    "footer.tagline": "Asistente financiero personal y familiar con privacidad de conocimiento cero para Telegram.",
+    "footer.tagline": "Control de gastos y presupuesto personal y familiar con privacidad primero para Telegram.",
     "footer.operator": "Desarrollado y Operado por <b>Clanomy</b>",
     "footer.support": "Contacto de Soporte:",
     "footer.kofi": "Apoyar Proyecto en Ko-fi",
@@ -436,6 +411,16 @@ const TRANSLATIONS = {
     "footer.refund": "Política de Cancelación y Reembolso",
     "footer.launch_bot": "Abrir Bot en Telegram",
     "footer.copyright": "© 2026 Clanomy. Todos los derechos reservados. Pagos procesados de forma segura.",
-    "footer.close_btn": "Cerrar"
+    "footer.close_btn": "Cerrar",
+
+    // Legal Modals (Spanish)
+    "terms.title": "Términos de Servicio de Clanomy SaaS",
+    "terms.body": "<p><strong>Fecha de Entrada en Vigor:</strong> 2 de Septiembre de 2026</p><p><strong>Operado por:</strong> Clanomy (\"Clanomy\", \"nosotros\" o \"nuestro\").</p><h4>1. Aceptación de los Términos</h4><p>Al acceder o utilizar el servicio de bot de Telegram de Clanomy, Web Studio o las APIs asociadas (colectivamente, el \"Servicio\"), aceptas quedar vinculado por estos Términos de Servicio.</p><h4>2. Descripción del Servicio y Estado No Consultivo</h4><p>Clanomy es un servicio de software (SaaS) que proporciona registro automatizado de gastos personales y familiares, gestión presupuestaria y sincronización con Notion. <strong>Clanomy es estrictamente una herramienta de productividad. Clanomy NO brinda asesoramiento financiero, de inversión, legal ni fiscal. NO somos un banco, institución de crédito, transmisor de dinero, prestamista ni operador de cambio de divisas.</strong> Clanomy no custodia fondos de usuarios, no realiza transferencias bancarias ni procesa transacciones financieras.</p><h4>3. Suscripciones y Pagos</h4><p>Todas las transacciones de suscripción, facturación, recaudación de impuestos y cobros son procesadas de manera segura por procesadores de pago autorizados (Merchant of Record). Al suscribirte a Clanomy Solo Pro, Duo Pro o Family Pro, las tarifas se facturan de forma recurrente mensual o anual hasta su cancelación.</p><h4>4. Seguridad de Cuenta y Privacidad</h4><p>Eres responsable de proteger el acceso a tu cuenta de Telegram. Los registros guardados en Clanomy están protegidos con encriptación AES-256 a nivel de aplicación. Aceptas no subir código malicioso, no abusar de los límites de tasa ni utilizar el Servicio para informes financieros ilegales.</p><h4>5. Terminación y Cancelación</h4><p>Puedes cancelar tu suscripción en cualquier momento a través del Portal de Cliente de autoservicio (accediendo desde el bot con <code>/billing</code>). Las cancelaciones entran en vigor al finalizar tu ciclo de facturación prepagado actual.</p><h4>6. Limitación de Responsabilidad</h4><p>En la máxima medida permitida por la ley aplicable, Clanomy y sus proveedores no serán responsables por daños indirectos, incidentales, especiales o consecuentes derivados del uso del Servicio o de cálculos financieros.</p><h4>7. Contacto</h4><p>Para preguntas sobre estos Términos, contáctanos en: <a href=\"mailto:support@clanomy.com\">support@clanomy.com</a>.</p>",
+
+    "privacy.title": "Política de Privacidad",
+    "privacy.body": "<p><strong>Fecha de Entrada en Vigor:</strong> 2 de Septiembre de 2026</p><p>Clanomy se compromete a salvaguardar la privacidad y confidencialidad de tus registros financieros personales.</p><h4>1. Información que Recopilamos</h4><ul><li><strong>Identidad de Telegram:</strong> ID de usuario, ID de chat y nombre público provisto por Telegram.</li><li><strong>Datos Contables:</strong> Conceptos financieros, montos, categorías y fechas que decides registrar.</li><li><strong>Metadatos de Facturación:</strong> Estado de suscripción, plan y referencia de cliente. <em>Nunca vemos ni almacenamos números de tarjetas de pago. Todos los pagos son gestionados de forma segura por procesadores conformes con PCI-DSS.</em></li></ul><h4>2. Encriptación de Campos con Conocimiento Cero</h4><p>Clanomy implementa encriptación AES-256 URL-safe Fernet a nivel de aplicación. Todos los montos y descripciones se cifran antes de guardarse en la base de datos. Los respaldos de base de datos no contienen registros en texto plano.</p><h4>3. Uso de la Información</h4><p>Tus datos se utilizan estrictamente para el registro, consulta y sincronización con Notion solicitados por ti. <strong>NO</strong> vendemos, alquilamos ni compartimos tus datos con anunciantes ni intermediarios de datos.</p><h4>4. Integraciones con Terceros</h4><ul><li><strong>Procesadores de Pago:</strong> Para cobros seguros, facturación y gestión de suscripciones.</li><li><strong>Notion:</strong> Cuando lo habilitas, las transacciones se transmiten mediante TLS 1.3 a tu base de datos privada de Notion.</li><li><strong>Inferencia de IA y Cero Entrenamiento:</strong> La transcripción y extracción se ejecutan en APIs comerciales con retención cero. Los datos y audios de los clientes nunca se almacenan ni se usan para entrenar modelos de IA.</li></ul><h4>5. Derechos de Eliminación de Datos</h4><p>Puedes eliminar permanentemente tu espacio de trabajo, transacciones y credenciales vinculadas en cualquier momento ejecutando el comando <code>/delete_account</code> o escribiendo a <a href=\"mailto:support@clanomy.com\">support@clanomy.com</a>.</p>",
+
+    "refund.title": "Política de Cancelación y Reembolso",
+    "refund.body": "<p><strong>Fecha de Entrada en Vigor:</strong> 2 de Septiembre de 2026</p><h4>1. Prueba de 60 Días Sin Riesgo</h4><p>Clanomy ofrece una <strong>prueba gratuita de 60 días</strong> en todos los espacios nuevos, <strong>sin requerir tarjeta de crédito por adelantado</strong>. Esto asegura que dispongas de tiempo suficiente para probar el registro por voz, la sincronización con Notion y las funciones multimiembro antes de comprometerte financieramente.</p><h4>2. Cancelaciones</h4><p>Puedes cancelar tu suscripción en cualquier momento con un solo clic. Solo escribe <code>/billing</code> en Telegram para acceder directamente a tu portal de facturación. Al cancelar, tus funciones premium continúan activas hasta el final del ciclo prepagado y no se te cobrará nuevamente.</p><h4>3. Condiciones de Reembolso</h4><p>Dado que todos los usuarios disfrutan de 60 días de evaluación gratuita antes de cualquier cobro, los pagos de suscripción recurrente son por regla general <strong>no reembolsables</strong> una vez facturados.</p><h4>4. Excepciones y Errores de Facturación</h4><p>Si consideras que se te cobró por error, experimentaste una renovación involuntaria o un fallo técnico impidió tu acceso al plan pagado, contáctanos a <a href=\"mailto:support@clanomy.com\">support@clanomy.com</a> dentro de los <strong>14 días</strong> posteriores a la transacción. Revisamos todas las solicitudes legítimas de buena fe y emitiremos un reembolso completo inmediato cuando corresponda.</p>"
   }
 };

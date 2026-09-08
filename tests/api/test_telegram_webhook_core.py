@@ -240,7 +240,7 @@ def test_webhook_solo_pro_invite_blocked(app_client, mock_telegram, telegram_pay
     assert "/upgrade" in resp_text
 
 def test_webhook_upgrade_command_saas(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
-    """[P0] /upgrade command returns interactive tier buttons with Lemon Squeezy checkout URLs."""
+    """[P0] /upgrade command returns interactive tier buttons with subscription upgrade URLs."""
     from src.core.config import settings
     monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
 

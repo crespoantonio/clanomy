@@ -38,18 +38,47 @@ class OllamaProvider(BaseLLMProvider):
 
         logger.info(f"Calling Ollama model {self.model} for structured completion...")
         async with get_global_ollama_semaphore():
-            response = await asyncio.wait_for(
-                self.client.chat(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    format=schema.model_json_schema(),
-                    options={"temperature": temperature, "num_predict": max_tokens}
-                ),
-                timeout=timeout
-            )
+            try:
+                response = await asyncio.wait_for(
+                    self.client.chat(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        format=schema.model_json_schema(),
+                        options={"temperature": temperature, "num_predict": max_tokens}
+                    ),
+                    timeout=timeout
+                )
+            except ollama.ResponseError as e:
+                # Handle older Ollama servers (< 0.5.0) where ChatRequest.format is a string ("json")
+                # and rejects dictionary schema objects with:
+                # "json: cannot unmarshal object into Go struct field ChatRequest.format of type string"
+                if "ChatRequest.format" in str(e) or "cannot unmarshal object" in str(e):
+                    logger.warning(
+                        "Ollama server rejected JSON schema in format parameter. "
+                        "Falling back to format='json' with embedded JSON schema in system prompt."
+                    )
+                    augmented_system_prompt = (
+                        f"{system_prompt}\n\n"
+                        f"CRITICAL: You MUST reply with a single valid JSON object strictly matching this schema:\n"
+                        f"{schema.model_json_schema()}"
+                    )
+                    response = await asyncio.wait_for(
+                        self.client.chat(
+                            model=self.model,
+                            messages=[
+                                {"role": "system", "content": augmented_system_prompt},
+                                {"role": "user", "content": user_prompt}
+                            ],
+                            format="json",
+                            options={"temperature": temperature, "num_predict": max_tokens}
+                        ),
+                        timeout=timeout
+                    )
+                else:
+                    raise
             content = response.message.content
             if not content:
                 raise ValueError("Received empty response from Ollama")

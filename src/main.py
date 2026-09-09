@@ -14,6 +14,8 @@ from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 from src.api.routes.internal_jobs import router as internal_jobs_router
 from src.api.routes.simulate import router as simulate_router
+from src.api.routes.paddle import router as paddle_router
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +29,7 @@ logger = logging.getLogger("clanomy")
 async def lifespan(app: FastAPI):
     # Startup validation: Fail fast if SaaS mode is configured without Cloud AI credentials in non-test environments
     if settings.ENABLE_SUBSCRIPTIONS and not (settings.AI_API_KEY and settings.AI_API_KEY.strip()):
-        if not os.environ.get("PYTEST_CURRENT_TEST") and not settings.DATABASE_URL.startswith("sqlite"):
+        if not os.environ.get("PYTEST_CURRENT_TEST") and not settings.DATABASE_URL.startswith("sqlite") and not settings.ALLOW_LOCAL_AI_WITH_SUBSCRIPTIONS:
             logger.critical("Startup aborted: Commercial SaaS mode (ENABLE_SUBSCRIPTIONS=true) requires AI_API_KEY for cloud inference.")
             raise RuntimeError("Startup aborted: Missing AI_API_KEY for Groq Cloud deployment.")
 
@@ -156,8 +158,10 @@ _LANDING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
+app.include_router(paddle_router, prefix="/api/v1")
 app.include_router(simulate_router, prefix="/api/v1")
 app.include_router(internal_jobs_router)
+
 
 @app.get("/", include_in_schema=False)
 async def root():

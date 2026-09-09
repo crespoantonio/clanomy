@@ -18,7 +18,7 @@ class Family(SQLModel, table=True):
     notion_database_name: Optional[str] = Field(default=None)
     notion_connected_at: Optional[datetime] = Field(default=None)
 
-    # Subscription Tracking (Epic 7)
+    # Subscription Tracking (Epic 7 & Paddle)
     plan_type: str = Field(default="free")
     subscription_status: str = Field(default="active")
     monthly_tx_count: int = Field(default=0)
@@ -31,6 +31,13 @@ class Family(SQLModel, table=True):
     customer_portal_url: Optional[str] = Field(default=None)
     notified_day_50: bool = Field(default=False)
     notified_day_60: bool = Field(default=False)
+
+    # Paddle Billing Integration
+    paddle_customer_id: Optional[str] = Field(default=None, index=True)
+    paddle_subscription_id: Optional[str] = Field(default=None, index=True)
+    paddle_price_id: Optional[str] = Field(default=None)
+    scheduled_change_action: Optional[str] = Field(default=None)
+    scheduled_change_effective_at: Optional[datetime] = Field(default=None)
 
     # Household Currency Configuration
     default_currency: str = Field(default="USD", sa_column_kwargs={"server_default": "USD"}, max_length=3)
@@ -144,3 +151,15 @@ class ScheduledBill(SQLModel, table=True):
     family: Family = Relationship(back_populates="scheduled_bills")
     user: Optional[User] = Relationship(back_populates="scheduled_bills")
     transaction: Optional[Transaction] = Relationship()
+
+class ProcessedWebhook(SQLModel, table=True):
+    """
+    Idempotency ledger for incoming webhook events (Paddle, etc.).
+    Ensures that retry deliveries or duplicate network packets are handled safely.
+    """
+    __tablename__ = "processed_webhook"
+
+    event_id: str = Field(primary_key=True, max_length=100)
+    event_type: str = Field(index=True, max_length=100)
+    received_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+

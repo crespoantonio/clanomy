@@ -20,11 +20,33 @@ def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         op.execute("ALTER TABLE scheduled_bill ENABLE ROW LEVEL SECURITY;")
-        op.execute("REVOKE ALL ON TABLE scheduled_bill FROM anon, authenticated;")
+        op.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                    REVOKE ALL ON TABLE scheduled_bill FROM anon;
+                END IF;
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                    REVOKE ALL ON TABLE scheduled_bill FROM authenticated;
+                END IF;
+            END
+            $$;
+        """)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         op.execute("ALTER TABLE scheduled_bill DISABLE ROW LEVEL SECURITY;")
-        op.execute("GRANT ALL ON TABLE scheduled_bill TO anon, authenticated;")
+        op.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                    GRANT ALL ON TABLE scheduled_bill TO anon;
+                END IF;
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                    GRANT ALL ON TABLE scheduled_bill TO authenticated;
+                END IF;
+            END
+            $$;
+        """)

@@ -111,3 +111,20 @@ SUBSCRIPTION_TIERS: Dict[str, SubscriptionTier] = {
 def get_tier_config(code: str) -> Optional[SubscriptionTier]:
     """Retrieve tier config by code."""
     return SUBSCRIPTION_TIERS.get(code)
+
+def get_paddle_price_id_for_tier(code: str) -> Optional[str]:
+    """
+    Retrieves the configured Paddle Price ID for the given tier code from settings.
+    Returns None if not configured.
+    """
+    from src.core.config import settings
+    mapping = {
+        "solo_pro": settings.PADDLE_PRICE_ID_SOLO_PRO,
+        "solo_pro_annual": settings.PADDLE_PRICE_ID_SOLO_PRO_ANNUAL,
+        "duo_pro": settings.PADDLE_PRICE_ID_DUO_PRO,
+        "duo_pro_annual": settings.PADDLE_PRICE_ID_DUO_PRO_ANNUAL,
+        "family_pro": settings.PADDLE_PRICE_ID_FAMILY_PRO,
+        "family_pro_annual": settings.PADDLE_PRICE_ID_FAMILY_PRO_ANNUAL,
+    }
+    return mapping.get(code)
+

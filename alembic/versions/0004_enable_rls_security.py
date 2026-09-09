@@ -23,10 +23,23 @@ def upgrade() -> None:
         for table in tables:
             op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
             
-        # Revoke public PostgREST API access from anon and authenticated roles
-        op.execute("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;")
-        op.execute("REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;")
-        op.execute("REVOKE ALL ON ALL ROUTINES IN SCHEMA public FROM anon, authenticated;")
+        # Revoke public PostgREST API access from anon and authenticated roles if they exist
+        op.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;
+                    REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon;
+                    REVOKE ALL ON ALL ROUTINES IN SCHEMA public FROM anon;
+                END IF;
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                    REVOKE ALL ON ALL TABLES IN SCHEMA public FROM authenticated;
+                    REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM authenticated;
+                    REVOKE ALL ON ALL ROUTINES IN SCHEMA public FROM authenticated;
+                END IF;
+            END
+            $$;
+        """)
 
 
 def downgrade() -> None:
@@ -35,6 +48,19 @@ def downgrade() -> None:
         tables = ['alembic_version', 'family', 'familyinvite', '"transaction"', '"user"']
         for table in tables:
             op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;")
-        op.execute("GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;")
-        op.execute("GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;")
-        op.execute("GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;")
+        op.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+                    GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
+                    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;
+                    GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon;
+                END IF;
+                IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+                    GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+                    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+                    GRANT ALL ON ALL ROUTINES IN SCHEMA public TO authenticated;
+                END IF;
+            END
+            $$;
+        """)

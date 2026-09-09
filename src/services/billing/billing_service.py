@@ -31,12 +31,29 @@ logger = logging.getLogger(__name__)
 class BillingService:
     def __init__(self, telegram_service: Optional[TelegramService] = None):
         self.telegram_service = telegram_service or TelegramService()
+        self._active_family: Optional[Family] = None
+        self._active_user: Optional[User] = None
 
     async def _get_checkout_or_info_url(self, plan_code: str) -> str:
         """
-        Returns an interactive deep-link for the tier.
-        When a new payment processor is integrated, this will generate hosted checkout URLs.
+        Returns an interactive checkout URL for the tier.
+        When Paddle is configured, attempts to generate a hosted checkout URL;
+        otherwise falls back to the deep-link info URL.
         """
+        if settings.ENABLE_SUBSCRIPTIONS and self._active_family and self._active_user:
+            try:
+                from src.services.billing.paddle_service import PaddleService
+                paddle_svc = PaddleService()
+                checkout_url = await paddle_svc.create_checkout_url(
+                    family_id=str(self._active_family.id),
+                    user_id=str(self._active_user.id),
+                    plan_code=plan_code
+                )
+                if checkout_url:
+                    return checkout_url
+            except Exception as e:
+                logger.warning(f"Could not generate Paddle checkout URL for {plan_code}: {e}")
+
         bot_username = await self.telegram_service.get_bot_username()
         if bot_username and bot_username != "UnknownBot":
             return f"https://t.me/{bot_username}?start=upgrade_{plan_code}"
@@ -63,144 +80,150 @@ class BillingService:
             )
             return {"status": "ok"}
 
-        parts = text.split()
-        arg = "_".join(parts[1:]).lower() if len(parts) > 1 else ""
+        self._active_family = family
+        self._active_user = user
+        try:
+            parts = text.split()
+            arg = "_".join(parts[1:]).lower() if len(parts) > 1 else ""
 
-        fam_service = FamilyService()
-        is_admin = getattr(user, "is_admin", False)
-        if not is_admin and family and user and getattr(user, "id", None):
-            try:
-                is_admin = fam_service.is_family_admin(family.id, user.id)
-            except Exception:
-                is_admin = True
-        elif not user or not family:
-            is_admin = True
-
-        is_graduation = bool(family and not is_admin)
-
-        if arg in ("annual", "yearly", "annually"):
-            solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual")
-            duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual")
-            fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual")
-            reply_markup = {
-                "inline_keyboard": [
-                    [{"text": "💳 Solo Pro Annual ($49.99/yr)", "url": solo_annual_url}],
-                    [{"text": "💳 Duo Pro Annual ($79.99/yr) ⭐", "url": duo_annual_url}],
-                    [{"text": "💳 Family Pro Annual ($119.99/yr)", "url": fam_annual_url}]
-                ]
-            }
-            background_tasks.add_task(
-                self.telegram_service.send_message,
-                chat_id=chat_id,
-                text=UPGRADE_MENU_ANNUAL_INTRO,
-                reply_markup=reply_markup
-            )
-            return {"status": "ok"}
-
-        elif arg in ("solo", "solo_pro", "single"):
-            solo_url = await self._get_checkout_or_info_url("solo_pro")
-            reply_markup = {
-                "inline_keyboard": [
-                    [{"text": "💳 Upgrade to Solo Pro ($4.99/mo)", "url": solo_url}]
-                ]
-            }
-            if is_graduation:
-                intro = (
-                    "⭐️ <b>Upgrade to Your Own Solo Pro Workspace</b>\n\n"
-                    "Upgrading will create your own personal workspace and migrate all your personal transactions with you.\n\n"
-                    "Tap below to select your upgrade:"
-                )
-            else:
-                intro = "⭐️ <b>Upgrade to Clanomy Solo Pro</b>\n\nTap below to select your upgrade:"
-
-            background_tasks.add_task(
-                self.telegram_service.send_message,
-                chat_id=chat_id,
-                text=intro,
-                reply_markup=reply_markup
-            )
-            return {"status": "ok"}
-
-        elif arg in ("duo", "duo_pro", "couple", "couples", "pair"):
-            duo_url = await self._get_checkout_or_info_url("duo_pro")
-            reply_markup = {
-                "inline_keyboard": [
-                    [{"text": "💳 Duo Pro ($7.99/mo)", "url": duo_url}]
-                ]
-            }
-            if is_graduation:
-                intro = (
-                    "👫 <b>Upgrade to Your Own Duo Pro Workspace</b>\n\n"
-                    "Upgrading will create your own couples workspace as Admin for you and your partner, migrating all your personal transactions.\n\n"
-                    "Tap below to select your upgrade:"
-                )
-            else:
-                intro = "👫 <b>Upgrade to Clanomy Duo Pro</b>\n\nTap below to select your upgrade for 2 partners:"
-
-            background_tasks.add_task(
-                self.telegram_service.send_message,
-                chat_id=chat_id,
-                text=intro,
-                reply_markup=reply_markup
-            )
-            return {"status": "ok"}
-
-        elif arg in ("family", "family_pro", "fam"):
-            fam_url = await self._get_checkout_or_info_url("family_pro")
-            reply_markup = {
-                "inline_keyboard": [
-                    [{"text": "💳 Upgrade to Family Pro ($11.99/mo)", "url": fam_url}]
-                ]
-            }
-            if is_graduation:
-                intro = (
-                    "👨‍👩‍👧‍👦 <b>Start Your Own Family Pro Workspace</b>\n\n"
-                    "Upgrading will create your own family workspace as Admin and migrate all your personal transactions.\n\n"
-                    "Tap below to select your upgrade for up to 5 family members:"
-                )
-            else:
-                intro = "👨‍👩‍👧‍👦 <b>Upgrade to Clanomy Family Pro</b>\n\nTap below to select your upgrade for up to 5 family members:"
-
-            background_tasks.add_task(
-                self.telegram_service.send_message,
-                chat_id=chat_id,
-                text=intro,
-                reply_markup=reply_markup
-            )
-            return {"status": "ok"}
-
-        else:
-            solo_url = await self._get_checkout_or_info_url("solo_pro")
-            duo_url = await self._get_checkout_or_info_url("duo_pro")
-            fam_url = await self._get_checkout_or_info_url("family_pro")
-            reply_markup = {
-                "inline_keyboard": [
-                    [{"text": "💳 Solo Pro ($4.99 / mo)", "url": solo_url}],
-                    [{"text": "💳 Duo Pro ($7.99 / mo) ⭐", "url": duo_url}],
-                    [{"text": "💳 Family Pro ($11.99 / mo)", "url": fam_url}]
-                ]
-            }
-            if is_graduation and family:
-                admin_name = "your Admin"
+            fam_service = FamilyService()
+            is_admin = getattr(user, "is_admin", False)
+            if not is_admin and family and user and getattr(user, "id", None):
                 try:
-                    with Session(fam_service.engine) as s:
-                        members = s.exec(select(User).where(User.family_id == family.id)).all()
-                        admin_user = next((u for u in members if fam_service.is_family_admin(family.id, u.id)), None)
-                        if admin_user:
-                            admin_name = f"@{admin_user.username}" if admin_user.username else (admin_user.full_name or "Admin")
+                    is_admin = fam_service.is_family_admin(family.id, user.id)
                 except Exception:
-                    pass
-                intro_text = format_non_admin_upgrade_intro(family.name, admin_name)
-            else:
-                intro_text = UPGRADE_MENU_INTRO
+                    is_admin = True
+            elif not user or not family:
+                is_admin = True
 
-            background_tasks.add_task(
-                self.telegram_service.send_message,
-                chat_id=chat_id,
-                text=intro_text,
-                reply_markup=reply_markup
-            )
-            return {"status": "ok"}
+            is_graduation = bool(family and not is_admin)
+
+            if arg in ("annual", "yearly", "annually"):
+                solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual")
+                duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual")
+                fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual")
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Solo Pro Annual ($49.99/yr)", "url": solo_annual_url}],
+                        [{"text": "💳 Duo Pro Annual ($79.99/yr) ⭐", "url": duo_annual_url}],
+                        [{"text": "💳 Family Pro Annual ($119.99/yr)", "url": fam_annual_url}]
+                    ]
+                }
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=UPGRADE_MENU_ANNUAL_INTRO,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
+            elif arg in ("solo", "solo_pro", "single"):
+                solo_url = await self._get_checkout_or_info_url("solo_pro")
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Upgrade to Solo Pro ($4.99/mo)", "url": solo_url}]
+                    ]
+                }
+                if is_graduation:
+                    intro = (
+                        "⭐️ <b>Upgrade to Your Own Solo Pro Workspace</b>\n\n"
+                        "Upgrading will create your own personal workspace and migrate all your personal transactions with you.\n\n"
+                        "Tap below to select your upgrade:"
+                    )
+                else:
+                    intro = "⭐️ <b>Upgrade to Clanomy Solo Pro</b>\n\nTap below to select your upgrade:"
+
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
+            elif arg in ("duo", "duo_pro", "couple", "couples", "pair"):
+                duo_url = await self._get_checkout_or_info_url("duo_pro")
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Duo Pro ($7.99/mo)", "url": duo_url}]
+                    ]
+                }
+                if is_graduation:
+                    intro = (
+                        "👫 <b>Upgrade to Your Own Duo Pro Workspace</b>\n\n"
+                        "Upgrading will create your own couples workspace as Admin for you and your partner, migrating all your personal transactions.\n\n"
+                        "Tap below to select your upgrade:"
+                    )
+                else:
+                    intro = "👫 <b>Upgrade to Clanomy Duo Pro</b>\n\nTap below to select your upgrade for 2 partners:"
+
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
+            elif arg in ("family", "family_pro", "fam"):
+                fam_url = await self._get_checkout_or_info_url("family_pro")
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Upgrade to Family Pro ($11.99/mo)", "url": fam_url}]
+                    ]
+                }
+                if is_graduation:
+                    intro = (
+                        "👨‍👩‍👧‍👦 <b>Start Your Own Family Pro Workspace</b>\n\n"
+                        "Upgrading will create your own family workspace as Admin and migrate all your personal transactions.\n\n"
+                        "Tap below to select your upgrade for up to 5 family members:"
+                    )
+                else:
+                    intro = "👨‍👩‍👧‍👦 <b>Upgrade to Clanomy Family Pro</b>\n\nTap below to select your upgrade for up to 5 family members:"
+
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
+            else:
+                solo_url = await self._get_checkout_or_info_url("solo_pro")
+                duo_url = await self._get_checkout_or_info_url("duo_pro")
+                fam_url = await self._get_checkout_or_info_url("family_pro")
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Solo Pro ($4.99 / mo)", "url": solo_url}],
+                        [{"text": "💳 Duo Pro ($7.99 / mo) ⭐", "url": duo_url}],
+                        [{"text": "💳 Family Pro ($11.99 / mo)", "url": fam_url}]
+                    ]
+                }
+                if is_graduation and family:
+                    admin_name = "your Admin"
+                    try:
+                        with Session(fam_service.engine) as s:
+                            members = s.exec(select(User).where(User.family_id == family.id)).all()
+                            admin_user = next((u for u in members if fam_service.is_family_admin(family.id, u.id)), None)
+                            if admin_user:
+                                admin_name = f"@{admin_user.username}" if admin_user.username else (admin_user.full_name or "Admin")
+                    except Exception:
+                        pass
+                    intro_text = format_non_admin_upgrade_intro(family.name, admin_name)
+                else:
+                    intro_text = UPGRADE_MENU_INTRO
+
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro_text,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+        finally:
+            self._active_family = None
+            self._active_user = None
 
     async def handle_billing_command(
         self,
@@ -241,7 +264,22 @@ class BillingService:
             )
             return {"status": "ok"}
 
-        portal_url = family.customer_portal_url if family else None
+        portal_url = None
+        if family and family.paddle_customer_id:
+            try:
+                from src.services.billing.paddle_service import PaddleService
+                paddle_svc = PaddleService()
+                sub_ids = [family.paddle_subscription_id] if family.paddle_subscription_id else None
+                portal_url = await paddle_svc.create_customer_portal_session(
+                    customer_id=family.paddle_customer_id,
+                    subscription_ids=sub_ids
+                )
+            except Exception as e:
+                logger.warning(f"Error requesting dynamic Paddle customer portal session: {e}")
+
+        if not portal_url and family:
+            portal_url = family.customer_portal_url
+
         if portal_url:
             reply_markup = {
                 "inline_keyboard": [
@@ -265,3 +303,4 @@ class BillingService:
                 )
             )
         return {"status": "ok"}
+

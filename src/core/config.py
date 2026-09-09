@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # - /api/internal/jobs/trial-lifecycle: Internal scheduled jobs (authenticated separately via CRON_SECRET)
     CLOUDFLARE_ORIGIN_EXEMPT_PATHS: set[str] = {
         "/health",
+        "/pay",
         "/api/v1/telegram/webhook",
         "/api/v1/paddle/webhook",
         "/api/internal/jobs/trial-lifecycle",
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     ENABLE_SUBSCRIPTIONS: bool = False
     ALLOW_LOCAL_AI_WITH_SUBSCRIPTIONS: bool = False
     PADDLE_API_KEY: Optional[str] = None
+    PADDLE_CLIENT_SIDE_TOKEN: Optional[str] = None
     PADDLE_WEBHOOK_SECRET_KEY: Optional[str] = None
     PADDLE_ENVIRONMENT: str = "sandbox"  # "sandbox" or "production"
     PADDLE_PRICE_ID_SOLO_PRO: Optional[str] = None

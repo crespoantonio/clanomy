@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Response, Request, status
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db, run_migrations
 from src.core.config import settings
@@ -177,6 +177,33 @@ async def landing_page():
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return Response(status_code=404)
+
+@app.get("/pay", include_in_schema=False)
+async def pay_page():
+    pay_path = os.path.join(_LANDING_DIR, "pay.html")
+    if not os.path.exists(pay_path):
+        return Response(status_code=404)
+    with open(pay_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    bot_username = "clanomy-bot"
+    try:
+        from src.services.telegram_service import TelegramService
+        tg = TelegramService()
+        fetched = await tg.get_bot_username()
+        if fetched and fetched != "UnknownBot":
+            bot_username = fetched
+    except Exception:
+        pass
+
+    token = settings.PADDLE_CLIENT_SIDE_TOKEN or ""
+    env = settings.PADDLE_ENVIRONMENT or "sandbox"
+
+    html = html.replace("{{ PADDLE_CLIENT_SIDE_TOKEN }}", token)
+    html = html.replace("{{ PADDLE_ENVIRONMENT }}", env)
+    html = html.replace("{{ BOT_USERNAME }}", bot_username)
+
+    return HTMLResponse(content=html, status_code=200)
 
 @app.get("/styles.css", include_in_schema=False)
 async def landing_styles():

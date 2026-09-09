@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clanomy — Secure Checkout</title>
+  <meta name="description" content="Secure Paddle Checkout for Clanomy subscription plans.">
+  <link rel="icon" type="image/jpeg" href="/assets/favicon.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+  <style>
+    :root {
+      --bg-dark: #090D16;
+      --card-bg: rgba(15, 23, 42, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #10B981;
+      --primary-hover: #059669;
+      --primary-glow: rgba(16, 185, 129, 0.25);
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --accent-blue: #3B82F6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 10%, rgba(16, 185, 129, 0.15), transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.1), transparent 40%);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+    }
+
+    .checkout-card {
+      width: 100%;
+      max-width: 460px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(16, 185, 129, 0.08);
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+      text-decoration: none;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.5px;
+    }
+
+    .state {
+      display: none;
+    }
+
+    .state.active {
+      display: block;
+    }
+
+    .spinner-ring {
+      display: inline-block;
+      width: 54px;
+      height: 54px;
+      border: 4px solid rgba(16, 185, 129, 0.15);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin-bottom: 24px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .icon-badge {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin-bottom: 20px;
+    }
+
+    .icon-badge.success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #10B981;
+    }
+
+    .icon-badge.info {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #3B82F6;
+    }
+
+    .icon-badge.warn {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #F59E0B;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #FFFFFF;
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin-bottom: 28px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #042F2E;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      margin-top: 10px;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .footer-secure {
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: #64748B;
+    }
+
+    .footer-secure svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="checkout-card">
+    <a href="/landing" class="brand">
+      <img src="/assets/clanomy_logo.jpg" alt="Clanomy" class="brand-logo" onerror="this.style.display='none'">
+      <span class="brand-title">Clanomy</span>
+    </a>
+
+    <!-- 1. LOADING & LAUNCHING STATE -->
+    <div id="state-loading" class="state active">
+      <div class="spinner-ring"></div>
+      <h1>Opening Secure Checkout</h1>
+      <p>Please wait a moment while we connect to Paddle's encrypted payment gateway...</p>
+    </div>
+
+    <!-- 2. SUCCESS STATE -->
+    <div id="state-success" class="state">
+      <div class="icon-badge success">✓</div>
+      <h1>Subscription Active! 🎉</h1>
+      <p>Thank you for subscribing to Clanomy! Your workspace is upgraded with full unlimited features. You can return to Telegram now.</p>
+      <a id="btn-success-tg" href="https://t.me/{{ BOT_USERNAME }}" class="btn btn-primary">
+        🚀 Open Clanomy Bot
+      </a>
+    </div>
+
+    <!-- 3. CHECKOUT CLOSED / REOPEN STATE -->
+    <div id="state-closed" class="state">
+      <div class="icon-badge warn">⏸</div>
+      <h1>Checkout Paused</h1>
+      <p>The checkout window was closed before completing payment. Tap below if you'd like to resume or return to Telegram.</p>
+      <button id="btn-reopen" type="button" class="btn btn-primary">
+        💳 Reopen Checkout
+      </button>
+      <a id="btn-closed-tg" href="https://t.me/{{ BOT_USERNAME }}" class="btn btn-secondary">
+        Return to Telegram
+      </a>
+    </div>
+
+    <!-- 4. DIRECT VISIT (NO TRANSACTION ID) STATE -->
+    <div id="state-direct" class="state">
+      <div class="icon-badge info">⭐️</div>
+      <h1>Clanomy Subscriptions</h1>
+      <p>To upgrade your workspace or change your tier, open the Clanomy bot in Telegram and type <b>/upgrade</b>.</p>
+      <a id="btn-direct-tg" href="https://t.me/{{ BOT_USERNAME }}" class="btn btn-primary">
+        Open Clanomy in Telegram
+      </a>
+    </div>
+
+    <div class="footer-secure">
+      <svg viewBox="0 0 24 24"><path d="M12 2C9.24 2 7 4.24 7 7v3H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2h-1V7c0-2.76-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3v3H9V7c0-1.66 1.34-3 3-3zm-1 11.72V17h2v-1.28c.6-.35 1-.99 1-1.72 0-1.1-.9-2-2-2s-2 .9-2 2c0 .73.4 1.37 1 1.72z"/></svg>
+      <span>Encrypted &amp; Secured by Paddle Merchant of Record</span>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const txnId = urlParams.get('_ptxn');
+      const token = "{{ PADDLE_CLIENT_SIDE_TOKEN }}";
+      const env = "{{ PADDLE_ENVIRONMENT }}";
+      const botUsername = "{{ BOT_USERNAME }}";
+
+      const stateLoading = document.getElementById('state-loading');
+      const stateSuccess = document.getElementById('state-success');
+      const stateClosed = document.getElementById('state-closed');
+      const stateDirect = document.getElementById('state-direct');
+      const btnReopen = document.getElementById('btn-reopen');
+
+      function switchState(targetState) {
+        [stateLoading, stateSuccess, stateClosed, stateDirect].forEach(s => s.classList.remove('active'));
+        targetState.classList.add('active');
+      }
+
+      if (!txnId) {
+        switchState(stateDirect);
+        return;
+      }
+
+      try {
+        if (env === 'sandbox') {
+          Paddle.Environment.set('sandbox');
+        }
+
+        Paddle.Initialize({
+          token: token,
+          eventCallback: function(data) {
+            console.log('[Paddle Event]', data.name, data);
+            if (data.name === 'checkout.completed') {
+              switchState(stateSuccess);
+            } else if (data.name === 'checkout.closed') {
+              if (!stateSuccess.classList.contains('active')) {
+                switchState(stateClosed);
+              }
+            }
+          }
+        });
+
+        // Launch checkout overlay
+        Paddle.Checkout.open({
+          transactionId: txnId,
+          settings: {
+            displayMode: 'overlay',
+            theme: 'dark',
+            locale: 'en'
+          }
+        });
+
+        if (btnReopen) {
+          btnReopen.addEventListener('click', function() {
+            switchState(stateLoading);
+            Paddle.Checkout.open({
+              transactionId: txnId,
+              settings: {
+                displayMode: 'overlay',
+                theme: 'dark',
+                locale: 'en'
+              }
+            });
+          });
+        }
+      } catch (err) {
+        console.error('Failed to initialize Paddle Checkout:', err);
+        switchState(stateClosed);
+      }
+    })();
+  </script>
+</body>
+</html>

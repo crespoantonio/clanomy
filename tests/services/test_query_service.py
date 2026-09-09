@@ -24,6 +24,16 @@ def test_parsed_query_intent_category_normalization():
     intent3 = ParsedQueryIntent(intent="query", timeframe="today", category="InvalidCategory")
     assert intent3.category == "Other"
 
+def test_parsed_query_intent_classification_fallback():
+    # Test handling raw Ollama output: {"classification": "Expense", "category": "Food"}
+    intent = ParsedQueryIntent.model_validate({"classification": "Expense", "category": "Food"})
+    assert intent.intent == "spending_summary"
+    assert intent.category == "Food/Drink"
+
+    # Test handling raw output with action and income
+    intent_inc = ParsedQueryIntent.model_validate({"action": "income", "timeframe": "this_month"})
+    assert intent_inc.intent == "income_summary"
+
 def test_query_processing_error():
     err = QueryProcessingError("Test error")
     assert str(err) == "Test error"

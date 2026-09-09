@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, AsyncMock
 from src.core.config import settings
 
 def test_webhook_invalid_secret(app_client, telegram_payload_factory):
@@ -116,8 +117,9 @@ def test_webhook_log_text_income(app_client, mock_telegram, telegram_payload_fac
     assert "Total In:" in response_text
     assert "Net Savings:" in response_text
 
-def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_payload_factory):
+def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_payload_factory, monkeypatch):
     """[P0] Webhook should handle /upgrade and dispatch tier explanation and both invoices."""
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
     # Register user
     app_client.post(
         "/api/v1/telegram/webhook",
@@ -128,11 +130,12 @@ def test_webhook_upgrade_command_general(app_client, mock_telegram, telegram_pay
 
     # Trigger /upgrade
     payload = telegram_payload_factory(text="/upgrade", user_id=4441)
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
+    with patch("src.services.billing.paddle_service.PaddleService.create_checkout_url", AsyncMock(return_value="https://checkout.paddle.com/test_txn")):
+        response = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 
@@ -165,11 +168,12 @@ def test_webhook_upgrade_command_solo_tier(app_client, mock_telegram, telegram_p
     mock_telegram.messages.clear()
 
     payload = telegram_payload_factory(text="/upgrade solo", user_id=4442)
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
+    with patch("src.services.billing.paddle_service.PaddleService.create_checkout_url", AsyncMock(return_value="https://checkout.paddle.com/test_txn")):
+        response = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
     assert response.status_code == 200
     assert len(mock_telegram.messages) == 1
     msg = mock_telegram.messages[0]
@@ -190,11 +194,12 @@ def test_webhook_upgrade_command_family_tier(app_client, mock_telegram, telegram
     mock_telegram.messages.clear()
 
     payload = telegram_payload_factory(text="/upgrade family", user_id=4443)
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
+    with patch("src.services.billing.paddle_service.PaddleService.create_checkout_url", AsyncMock(return_value="https://checkout.paddle.com/test_txn")):
+        response = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
     assert response.status_code == 200
     assert len(mock_telegram.messages) == 1
     msg = mock_telegram.messages[0]
@@ -248,11 +253,12 @@ def test_webhook_upgrade_command_saas(app_client, mock_telegram, telegram_payloa
         text="/upgrade",
         user_id=9001
     )
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
+    with patch("src.services.billing.paddle_service.PaddleService.create_checkout_url", AsyncMock(return_value="https://checkout.paddle.com/test_txn")):
+        response = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
     assert response.status_code == 200
     assert len(mock_telegram.messages) == 1
     msg = mock_telegram.messages[0]
@@ -271,11 +277,12 @@ def test_webhook_tier_command_alias(app_client, mock_telegram, telegram_payload_
         text="/tier",
         user_id=9002
     )
-    response = app_client.post(
-        "/api/v1/telegram/webhook",
-        json=payload,
-        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
-    )
+    with patch("src.services.billing.paddle_service.PaddleService.create_checkout_url", AsyncMock(return_value="https://checkout.paddle.com/test_txn")):
+        response = app_client.post(
+            "/api/v1/telegram/webhook",
+            json=payload,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+        )
     assert response.status_code == 200
     assert len(mock_telegram.messages) == 1
     msg = mock_telegram.messages[0]

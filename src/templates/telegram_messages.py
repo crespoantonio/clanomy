@@ -318,17 +318,148 @@ def format_leave_family_member_prompt(family_name: str, admin_name: str) -> str:
     )
 
 
-def format_non_admin_upgrade_intro(family_name: str, admin_name: str) -> str:
+def format_date_localized(dt: datetime, is_spanish: bool = False) -> str:
+    """Formats a datetime into a friendly localized date string without relying on system C locale."""
+    months_en = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    months_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    day = dt.day
+    year = dt.year
+    month_idx = max(0, min(11, dt.month - 1))
+    if is_spanish:
+        return f"{day} de {months_es[month_idx]} de {year}"
+    return f"{months_en[month_idx]} {day}, {year}"
+
+
+def is_family_spanish(family: Optional[Any], session: Optional[Any] = None) -> bool:
+    """
+    Infers whether a family primarily communicates in Spanish based on:
+    1. Family timezone (e.g., America/Argentina, America/Santiago, America/Bogota, etc.)
+    2. Family default currency (e.g., ARS, CLP, COP, MXN, PEN, UYU)
+    Defaults to False (English).
+    """
+    if not family:
+        return False
+    tz = (getattr(family, "timezone", None) or "").lower()
+    spanish_tz_prefixes = (
+        "america/argentina", "america/santiago", "america/bogota", "america/caracas",
+        "america/lima", "america/la_paz", "america/asuncion", "america/montevideo",
+        "america/mexico_city", "america/guatemala", "america/costa_rica", "america/panama",
+        "europe/madrid"
+    )
+    if any(tz.startswith(p) for p in spanish_tz_prefixes):
+        return True
+    curr = (getattr(family, "default_currency", None) or "").upper()
+    if curr in ("ARS", "CLP", "COP", "MXN", "PEN", "UYU", "BOB", "PYG"):
+        return True
+    return False
+
+
+def format_non_admin_upgrade_intro(family_name: str, admin_name: str, is_spanish: bool = False) -> str:
     escaped_family = html.escape(family_name, quote=False)
     escaped_admin = html.escape(admin_name, quote=False)
+    if is_spanish:
+        return (
+            f"⭐️ <b>Crea tu propia familia independiente</b>\n\n"
+            f"Actualmente eres miembro de <b>{escaped_family}</b> (administrada por {escaped_admin}).\n\n"
+            "⚠️ <b>Aviso importante:</b> Solo puedes tener acceso a <b>una sola familia a la vez</b>. Al mejorar tu plan, "
+            f"saldrás de <b>{escaped_family}</b> y comenzarás tu propia familia como Administrador/a. "
+            "<b>Todo tu historial personal de transacciones se migrará contigo</b> automáticamente:\n\n"
+            "1️⃣ <b>Solo Pro ($4.99 / mes)</b> — Registro personal ilimitado y Notion privado (1 Usuario).\n\n"
+            "2️⃣ <b>Duo Pro ($7.99 / mes) ⭐</b> — Espacio compartido para ti y tu pareja (2 Miembros).\n\n"
+            "3️⃣ <b>Family Pro ($11.99 / mes)</b> — Tu propia familia de hasta 5 miembros con registro compartido.\n\n"
+            "<i>Toca un botón abajo para elegir tu plan y comenzar tu propia familia:</i>"
+        )
     return (
-        f"⭐️ <b>Upgrade to Your Own Sovereign Workspace</b>\n\n"
+        f"⭐️ <b>Start Your Own Independent Family Workspace</b>\n\n"
         f"You are currently a member of <b>{escaped_family}</b> (managed by {escaped_admin}).\n\n"
-        "Upgrading will create your own independent workspace and <b>migrate all your personal transaction history with you</b>, without disrupting the current family group:\n\n"
+        "⚠️ <b>Important Notice:</b> You can only have access to <b>one family workspace at a time</b>. Upgrading will "
+        f"transition you out of <b>{escaped_family}</b> and start your own separate family workspace as Admin. "
+        "<b>All your personal transaction history will migrate with you</b> seamlessly:\n\n"
         "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging &amp; private Notion sync (1 User).\n\n"
-        "2️⃣ <b>Duo Pro ($7.99 / mo)</b> — Shared workspace for you and your partner (2 Members).\n\n"
+        "2️⃣ <b>Duo Pro ($7.99 / mo) ⭐</b> — Shared workspace for you and your partner (2 Members).\n\n"
         "3️⃣ <b>Family Pro ($11.99 / mo)</b> — Start your own family workspace for up to 5 members.\n\n"
         "<i>Tap a button below to choose your plan and launch your new workspace:</i>"
+    )
+
+
+def format_subscription_activated_message(
+    tier_name: str,
+    interval: str = "month",
+    period_end: Optional[datetime] = None,
+    is_spanish: bool = False
+) -> str:
+    """Sent ONLY to the paying user/admin upon successful checkout or tier upgrade."""
+    escaped_tier = html.escape(tier_name, quote=False)
+    cadence_str = "anual" if "year" in interval.lower() or "annual" in interval.lower() else "mensual"
+    cadence_en = "yearly" if "year" in interval.lower() or "annual" in interval.lower() else "monthly"
+
+    end_str = ""
+    if period_end:
+        date_formatted = format_date_localized(period_end, is_spanish=is_spanish)
+        if is_spanish:
+            end_str = f"• <b>Próxima fecha de renovación:</b> {date_formatted}\n"
+        else:
+            end_str = f"• <b>Next renewal date:</b> {date_formatted}\n"
+
+    if is_spanish:
+        return (
+            f"🎉 <b>¡Suscripción Confirmada! Bienvenido a {escaped_tier}</b>\n\n"
+            f"Tu pago se ha procesado con éxito y tu espacio familiar ya cuenta con <b>{escaped_tier}</b> activo.\n\n"
+            f"📋 <b>Detalles de tu suscripción:</b>\n"
+            f"• <b>Plan:</b> {escaped_tier}\n"
+            f"• <b>Facturación:</b> Cobro automático {cadence_str}\n"
+            f"{end_str}"
+            f"• <b>Cancelación:</b> Puedes cancelar en cualquier momento desde /billing.\n\n"
+            f"¡Ya tienes acceso a todas las funcionalidades premium! 🚀"
+        )
+    return (
+        f"🎉 <b>Subscription Confirmed! Welcome to {escaped_tier}</b>\n\n"
+        f"Your payment was successful and your family workspace is now active on <b>{escaped_tier}</b>.\n\n"
+        f"📋 <b>Subscription Details:</b>\n"
+        f"• <b>Plan:</b> {escaped_tier}\n"
+        f"• <b>Billing:</b> Auto-renews {cadence_en}\n"
+        f"{end_str}"
+        f"• <b>Cancel Anytime:</b> You can cancel anytime directly via /billing.\n\n"
+        f"You are all set with full premium access! 🚀"
+    )
+
+
+def format_subscription_canceled_message(
+    tier_name: str,
+    effective_end: Optional[datetime] = None,
+    is_spanish: bool = False
+) -> str:
+    """Broadcast to ALL family members when a subscription cancellation is confirmed."""
+    escaped_tier = html.escape(tier_name, quote=False)
+
+    if effective_end:
+        end_date_str = format_date_localized(effective_end, is_spanish=is_spanish)
+        last_day_en = f"You will continue to have full access to <b>{escaped_tier}</b> until <b>{end_date_str}</b> (the end of your current billing period)."
+        last_day_es = f"Seguirán teniendo acceso completo a <b>{escaped_tier}</b> hasta el <b>{end_date_str}</b> (fin del período de facturación actual)."
+    else:
+        last_day_en = f"Your access to <b>{escaped_tier}</b> has ended."
+        last_day_es = f"El acceso a <b>{escaped_tier}</b> ha finalizado."
+
+    if is_spanish:
+        return (
+            f"ℹ️ <b>Cancelación de Suscripción Confirmada</b>\n\n"
+            f"Se ha procesado la cancelación de la suscripción a <b>{escaped_tier}</b> para su espacio familiar.\n\n"
+            f"📅 <b>Período de acceso:</b>\n"
+            f"{last_day_es}\n\n"
+            f"📉 <b>Próximo plan (Gratuito):</b>\n"
+            f"Luego de esa fecha, su espacio pasará al plan <b>Free</b> con un límite de <b>50 transacciones por mes</b> (hasta 5 miembros). "
+            f"Todo su historial de gastos e información permanece 100% seguro y guardado.\n\n"
+            f"💡 <i>Pueden volver a suscribirse a Premium en cualquier momento enviando /upgrade.</i>"
+        )
+    return (
+        f"ℹ️ <b>Subscription Cancellation Confirmed</b>\n\n"
+        f"The subscription for <b>{escaped_tier}</b> has been cancelled for your family workspace.\n\n"
+        f"📅 <b>Access Period:</b>\n"
+        f"{last_day_en}\n\n"
+        f"📉 <b>Upcoming Plan (Free):</b>\n"
+        f"After that date, your workspace will move to the <b>Free</b> plan with a limit of <b>50 transactions per month</b> (up to 5 members). "
+        f"All your transaction history and data remain completely safe and intact.\n\n"
+        f"💡 <i>You can resubscribe to Premium anytime by typing /upgrade.</i>"
     )
 
 

@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 from src.core.config import settings
 from src.core.subscription_config import get_tier_config, SUBSCRIPTION_TIERS
 from src.db.session import get_session
-from src.db.models import Family, ProcessedWebhook
+from src.db.models import Family, User, ProcessedWebhook
 from src.services.billing.paddle_service import PaddleService
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,48 @@ def _resolve_plan_type_and_members(plan_code: Optional[str], price_id: Optional[
                 return tier.internal_plan, tier.max_members
 
     return None, None
+
+
+def _resolve_tier_display_name(plan_type: Optional[str], plan_code: Optional[str] = None) -> str:
+    if plan_code:
+        tier = get_tier_config(plan_code)
+        if tier:
+            return tier.title
+    plan_map = {
+        "solo_pro": "Solo Pro",
+        "duo_pro": "Duo Pro",
+        "family_pro": "Family Pro",
+        "free": "Free"
+    }
+    return plan_map.get(plan_type or "", "Clanomy Pro")
+
+
+async def _safe_send_telegram(chat_id: int, text: str) -> None:
+    try:
+        from src.services.telegram_service import TelegramService
+        tg = TelegramService()
+        await tg.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Failed to deliver Paddle Telegram notification to {chat_id}: {e}")
+
+
+async def _broadcast_cancellation_to_family(
+    session: Session,
+    family: Family,
+    tier_name: str,
+    effective_end: Optional[datetime]
+) -> None:
+    from src.templates.telegram_messages import format_subscription_canceled_message, is_family_spanish
+    is_sp = is_family_spanish(family, session)
+    text = format_subscription_canceled_message(
+        tier_name=tier_name,
+        effective_end=effective_end,
+        is_spanish=is_sp
+    )
+    users = session.exec(select(User).where(User.family_id == family.id)).all()
+    for u in users:
+        if u.telegram_id:
+            await _safe_send_telegram(u.telegram_id, text)
 
 
 @router.post("/paddle/webhook", status_code=status.HTTP_200_OK)
@@ -159,6 +201,26 @@ async def paddle_webhook(
 
     try:
         family = _find_family(session, data, custom_data)
+        prev_plan = family.plan_type if family else None
+        prev_status = family.subscription_status if family else None
+        prev_sched_action = family.scheduled_change_action if family else None
+
+        # Check for non-admin member graduation
+        user_id_str = custom_data.get("user_id")
+        paying_user = None
+        if user_id_str:
+            try:
+                user_uuid = UUID(user_id_str)
+                paying_user = session.get(User, user_uuid)
+                if paying_user and family and paying_user.family_id == family.id and not paying_user.is_admin:
+                    from src.services.family_service import FamilyService
+                    fam_service = FamilyService()
+                    plan_code_candidate = custom_data.get("plan_code")
+                    cand_plan, _ = _resolve_plan_type_and_members(plan_code_candidate, None)
+                    family = fam_service.graduate_member_to_new_workspace(paying_user.id, target_plan=cand_plan or "solo_pro")
+                    logger.info(f"Graduated user {paying_user.id} into new workspace {family.id} on webhook")
+            except Exception as grad_err:
+                logger.error(f"Error checking member graduation on webhook: {grad_err}")
 
         if event_type in ("subscription.created", "subscription.updated"):
             sub_id = data.get("id")
@@ -202,10 +264,39 @@ async def paddle_webhook(
                 family.scheduled_change_effective_at = sched_effective_at
 
                 session.add(family)
+                session.flush()
                 logger.info(
                     f"Updated Family {family.id}: plan_type={family.plan_type}, "
                     f"status={family.subscription_status}, period_end={family.current_period_end}"
                 )
+
+                tier_display = _resolve_tier_display_name(family.plan_type, plan_code)
+
+                # 1. Activation Notification: ONLY to paying user/admin upon new activation / tier upgrade
+                is_activation = (event_type == "subscription.created") or (prev_plan in ("free", None) and family.plan_type not in ("free", None)) or (prev_plan != family.plan_type and family.plan_type not in ("free", None))
+                if is_activation and sub_status == "active":
+                    if not paying_user:
+                        paying_user = session.exec(select(User).where(User.family_id == family.id, User.is_admin == True)).first()
+                        if not paying_user:
+                            paying_user = session.exec(select(User).where(User.family_id == family.id)).first()
+
+                    if paying_user and paying_user.telegram_id:
+                        from src.templates.telegram_messages import format_subscription_activated_message, is_family_spanish
+                        interval = "year" if ("annual" in (plan_code or "").lower() or "yearly" in (plan_code or "").lower()) else "month"
+                        is_sp = is_family_spanish(family, session)
+                        act_msg = format_subscription_activated_message(
+                            tier_name=tier_display,
+                            interval=interval,
+                            period_end=family.current_period_end,
+                            is_spanish=is_sp
+                        )
+                        await _safe_send_telegram(paying_user.telegram_id, act_msg)
+
+                # 2. Scheduled Cancellation Notification: Broadcast to ALL family members
+                if sched_action == "cancel" and prev_sched_action != "cancel":
+                    effective_end = sched_effective_at or family.current_period_end
+                    await _broadcast_cancellation_to_family(session, family, tier_display, effective_end)
+
             else:
                 logger.warning(
                     f"No matching Family found for Paddle event {event_id} ({event_type}), "
@@ -226,7 +317,13 @@ async def paddle_webhook(
                     family.max_members = 5
 
                 session.add(family)
+                session.flush()
                 logger.info(f"Subscription canceled for Family {family.id}. Status set to 'canceled'.")
+
+                # If not previously notified via scheduled_change, broadcast cancellation to all family members
+                if prev_status != "canceled" and prev_sched_action != "cancel":
+                    tier_display = _resolve_tier_display_name(prev_plan, None)
+                    await _broadcast_cancellation_to_family(session, family, tier_display, family.current_period_end)
             else:
                 logger.warning(f"Family not found for subscription.canceled sub_id={sub_id}")
 

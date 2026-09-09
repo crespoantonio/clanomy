@@ -4,6 +4,7 @@ Handles plan tier presentation, /upgrade command menus,
 and self-serve customer billing portal links.
 """
 
+import html
 import logging
 from typing import Optional
 from fastapi import BackgroundTasks
@@ -86,6 +87,9 @@ class BillingService:
             arg = "_".join(parts[1:]).lower() if len(parts) > 1 else ""
 
             fam_service = FamilyService()
+            from src.templates.telegram_messages import is_family_spanish
+            is_sp = is_family_spanish(family)
+
             is_admin = getattr(user, "is_admin", False)
             if not is_admin and family and user and getattr(user, "id", None):
                 try:
@@ -117,10 +121,32 @@ class BillingService:
                         [{"text": "💳 Family Pro Annual ($119.99/yr)", "url": fam_annual_url}]
                     ]
                 }
+                if is_graduation and family:
+                    fam_name = html.escape(family.name or "Family", quote=False)
+                    intro_text = (
+                        "⭐️ <b>Crea tu propia familia independiente (Planes Anuales)</b>\n\n"
+                        f"Actualmente eres miembro de <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Aviso importante:</b> Solo puedes pertenecer a <b>una sola familia a la vez</b>. "
+                        "Al contratar un plan anual, saldrás de tu grupo actual y comenzarás tu propia familia como Administrador/a. "
+                        "Todas tus transacciones personales se migrarán contigo automáticamente.\n\n"
+                        "🎁 <i>¡Ahorra 17% (2 meses gratis) en planes anuales!</i>\n\n"
+                        "<i>Toca un botón abajo para comenzar:</i>"
+                        if is_sp else
+                        "⭐️ <b>Start Your Own Independent Family (Annual Plans)</b>\n\n"
+                        f"You are currently a member of <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Important Notice:</b> You can only have access to <b>one family workspace at a time</b>. "
+                        "Subscribing to an annual plan will transition you out of your current family and launch your own separate family workspace as Admin. "
+                        "All your personal transactions will migrate with you seamlessly.\n\n"
+                        "🎁 <i>Save 17% (2 months free) on annual billing!</i>\n\n"
+                        "<i>Tap a button below to launch your workspace:</i>"
+                    )
+                else:
+                    intro_text = UPGRADE_MENU_ANNUAL_INTRO
+
                 background_tasks.add_task(
                     self.telegram_service.send_message,
                     chat_id=chat_id,
-                    text=UPGRADE_MENU_ANNUAL_INTRO,
+                    text=intro_text,
                     reply_markup=reply_markup
                 )
                 return {"status": "ok"}
@@ -213,11 +239,22 @@ class BillingService:
                         [{"text": "💳 Upgrade to Solo Pro ($4.99/mo)", "url": solo_url}]
                     ]
                 }
-                if is_graduation:
+                if is_graduation and family:
+                    fam_name = html.escape(family.name or "Family", quote=False)
                     intro = (
+                        "⭐️ <b>Crea tu propio espacio Solo Pro</b>\n\n"
+                        f"Actualmente perteneces a <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Aviso importante:</b> Solo puedes pertenecer a <b>una sola familia a la vez</b>. Al mejorar tu plan, "
+                        "saldrás de tu grupo actual y comenzarás tu propia familia como Administrador/a. "
+                        "Tus transacciones personales se migrarán contigo.\n\n"
+                        "<i>Toca abajo para elegir tu mejora:</i>"
+                        if is_sp else
                         "⭐️ <b>Upgrade to Your Own Solo Pro Workspace</b>\n\n"
-                        "Upgrading will create your own personal workspace and migrate all your personal transactions with you.\n\n"
-                        "Tap below to select your upgrade:"
+                        f"You are currently a member of <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Important Notice:</b> You can only have access to <b>one family workspace at a time</b>. Upgrading will "
+                        "transition you out of your current family and launch your own separate workspace as Admin. "
+                        "All your personal transactions will migrate with you.\n\n"
+                        "<i>Tap below to select your upgrade:</i>"
                     )
                 else:
                     intro = "⭐️ <b>Upgrade to Clanomy Solo Pro</b>\n\nTap below to select your upgrade:"
@@ -246,11 +283,21 @@ class BillingService:
                         [{"text": "💳 Duo Pro ($7.99/mo)", "url": duo_url}]
                     ]
                 }
-                if is_graduation:
+                if is_graduation and family:
+                    fam_name = html.escape(family.name or "Family", quote=False)
                     intro = (
+                        "👫 <b>Crea tu propio espacio Duo Pro</b>\n\n"
+                        f"Actualmente perteneces a <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Aviso importante:</b> Solo puedes pertenecer a <b>una sola familia a la vez</b>. Al mejorar tu plan, "
+                        "saldrás de tu grupo actual y comenzarás tu propia familia como Administrador/a para ti y tu pareja. "
+                        "Tus transacciones personales se migrarán contigo.\n\n"
+                        "<i>Toca abajo para elegir tu mejora:</i>"
+                        if is_sp else
                         "👫 <b>Upgrade to Your Own Duo Pro Workspace</b>\n\n"
-                        "Upgrading will create your own couples workspace as Admin for you and your partner, migrating all your personal transactions.\n\n"
-                        "Tap below to select your upgrade:"
+                        f"You are currently a member of <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Important Notice:</b> You can only have access to <b>one family workspace at a time</b>. Upgrading will "
+                        "create your own couples workspace as Admin for you and your partner, migrating all your personal transactions.\n\n"
+                        "<i>Tap below to select your upgrade:</i>"
                     )
                 else:
                     intro = "👫 <b>Upgrade to Clanomy Duo Pro</b>\n\nTap below to select your upgrade for 2 partners:"
@@ -279,11 +326,21 @@ class BillingService:
                         [{"text": "💳 Upgrade to Family Pro ($11.99/mo)", "url": fam_url}]
                     ]
                 }
-                if is_graduation:
+                if is_graduation and family:
+                    fam_name = html.escape(family.name or "Family", quote=False)
                     intro = (
+                        "👨‍👩‍👧‍👦 <b>Crea tu propia familia Family Pro</b>\n\n"
+                        f"Actualmente perteneces a <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Aviso importante:</b> Solo puedes pertenecer a <b>una sola familia a la vez</b>. Al mejorar tu plan, "
+                        "saldrás de tu grupo actual y comenzarás tu propia familia como Administrador/a de hasta 5 miembros. "
+                        "Tus transacciones personales se migrarán contigo.\n\n"
+                        "<i>Toca abajo para elegir tu mejora:</i>"
+                        if is_sp else
                         "👨‍👩‍👧‍👦 <b>Start Your Own Family Pro Workspace</b>\n\n"
-                        "Upgrading will create your own family workspace as Admin and migrate all your personal transactions.\n\n"
-                        "Tap below to select your upgrade for up to 5 family members:"
+                        f"You are currently a member of <b>{fam_name}</b>.\n"
+                        "⚠️ <b>Important Notice:</b> You can only have access to <b>one family workspace at a time</b>. Upgrading will "
+                        "create your own family workspace as Admin and migrate all your personal transactions.\n\n"
+                        "<i>Tap below to select your upgrade for up to 5 family members:</i>"
                     )
                 else:
                     intro = "👨‍👩‍👧‍👦 <b>Upgrade to Clanomy Family Pro</b>\n\nTap below to select your upgrade for up to 5 family members:"
@@ -326,7 +383,7 @@ class BillingService:
                                 admin_name = f"@{admin_user.username}" if admin_user.username else (admin_user.full_name or "Admin")
                     except Exception:
                         pass
-                    intro_text = format_non_admin_upgrade_intro(family.name, admin_name)
+                    intro_text = format_non_admin_upgrade_intro(family.name, admin_name, is_spanish=is_sp)
                 else:
                     intro_text = UPGRADE_MENU_INTRO
 

@@ -19,7 +19,7 @@ async def test_billing_service_graduation_flows():
     admin_id = uuid4()
     member_id = uuid4()
 
-    family = Family(id=fid, name="The Smiths")
+    family = Family(id=fid, name="The Smiths", timezone="UTC")
     admin_user = User(id=admin_id, family_id=fid, username="smith_admin", is_admin=True)
     member_user = User(id=member_id, family_id=fid, username="smith_member", is_admin=False)
 

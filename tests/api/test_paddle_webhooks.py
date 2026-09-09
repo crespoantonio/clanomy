@@ -333,3 +333,206 @@ def test_paddle_webhook_transaction_completed(paddle_test_setup):
         updated_family = session.get(Family, family_id)
         assert updated_family.paddle_customer_id == "ctm_paddle_002"
         assert updated_family.telegram_payment_charge_id == "txn_paddle_001"
+
+
+def test_paddle_webhook_activation_notification_to_admin(paddle_test_setup):
+    """Verify subscription activation notification is sent ONLY to the paying admin."""
+    from unittest.mock import patch, AsyncMock
+    from src.db.models import User
+
+    secret = paddle_test_setup
+    client = TestClient(app)
+
+    family_id = uuid4()
+    admin_user_id = uuid4()
+    member_user_id = uuid4()
+
+    with Session(engine) as session:
+        family = Family(id=family_id, name="Pro Family", plan_type="free")
+        session.add(family)
+        admin_user = User(
+            id=admin_user_id,
+            telegram_id=987654321,
+            family_id=family_id,
+            is_admin=True,
+            username="admin_tony"
+        )
+        member_user = User(
+            id=member_user_id,
+            telegram_id=123456789,
+            family_id=family_id,
+            is_admin=False,
+            username="member_jane"
+        )
+        session.add(admin_user)
+        session.add(member_user)
+        session.commit()
+
+    now_ts = int(time.time())
+    payload = {
+        "event_id": "evt_sub_created_notify_001",
+        "event_type": "subscription.created",
+        "data": {
+            "id": "sub_act_001",
+            "customer_id": "ctm_act_001",
+            "status": "active",
+            "current_billing_period": {
+                "starts_at": "2026-09-01T00:00:00Z",
+                "ends_at": "2026-10-01T00:00:00Z"
+            },
+            "custom_data": {
+                "family_id": str(family_id),
+                "user_id": str(admin_user_id),
+                "plan_code": "solo_pro"
+            }
+        }
+    }
+    raw_body = json.dumps(payload)
+    sig = _generate_paddle_signature(raw_body, secret, now_ts)
+
+    with patch("src.services.telegram_service.TelegramService.send_message", new_callable=AsyncMock) as mock_send:
+        res = client.post("/api/v1/paddle/webhook", content=raw_body, headers={"Paddle-Signature": sig})
+        assert res.status_code == 200
+
+        # Must be called ONLY for the admin who paid
+        assert mock_send.call_count == 1
+        called_chat_id = mock_send.call_args.kwargs.get("chat_id")
+        called_text = mock_send.call_args.kwargs.get("text")
+        assert called_chat_id == 987654321
+        assert "Solo Pro" in called_text
+        assert "/billing" in called_text
+
+
+def test_paddle_webhook_scheduled_cancellation_broadcasts_to_all_members(paddle_test_setup):
+    """Verify scheduled cancellation is broadcast to ALL family members with expiration date and free tier details."""
+    from unittest.mock import patch, AsyncMock
+    from src.db.models import User
+
+    secret = paddle_test_setup
+    client = TestClient(app)
+
+    family_id = uuid4()
+    admin_user_id = uuid4()
+    member_user_id = uuid4()
+
+    with Session(engine) as session:
+        family = Family(
+            id=family_id,
+            name="Canceling Family",
+            plan_type="family_pro",
+            subscription_status="active",
+            paddle_subscription_id="sub_canceling_002"
+        )
+        session.add(family)
+        admin_user = User(
+            id=admin_user_id,
+            telegram_id=987654321,
+            family_id=family_id,
+            is_admin=True,
+            username="admin_tony"
+        )
+        member_user = User(
+            id=member_user_id,
+            telegram_id=123456789,
+            family_id=family_id,
+            is_admin=False,
+            username="member_jane"
+        )
+        session.add(admin_user)
+        session.add(member_user)
+        session.commit()
+
+    now_ts = int(time.time())
+    payload = {
+        "event_id": "evt_sub_sched_cancel_002",
+        "event_type": "subscription.updated",
+        "data": {
+            "id": "sub_canceling_002",
+            "status": "active",
+            "current_billing_period": {
+                "ends_at": "2026-10-15T00:00:00Z"
+            },
+            "scheduled_change": {
+                "action": "cancel",
+                "effective_at": "2026-10-15T00:00:00Z"
+            },
+            "custom_data": {
+                "family_id": str(family_id)
+            }
+        }
+    }
+    raw_body = json.dumps(payload)
+    sig = _generate_paddle_signature(raw_body, secret, now_ts)
+
+    with patch("src.services.telegram_service.TelegramService.send_message", new_callable=AsyncMock) as mock_send:
+        res = client.post("/api/v1/paddle/webhook", content=raw_body, headers={"Paddle-Signature": sig})
+        assert res.status_code == 200
+
+        # Broadcasted to BOTH users
+        assert mock_send.call_count == 2
+        notified_chats = {call.kwargs.get("chat_id") for call in mock_send.call_args_list}
+        assert notified_chats == {987654321, 123456789}
+
+        # Check message content
+        sample_text = mock_send.call_args_list[0].kwargs.get("text")
+        assert "Family Pro" in sample_text
+        assert "Free" in sample_text
+        assert "50" in sample_text
+        assert "/upgrade" in sample_text
+
+
+def test_paddle_webhook_routine_renewal_does_not_resend_welcome_message(paddle_test_setup):
+    """Verify routine renewal (same plan, active status) does NOT resend welcome notification."""
+    from unittest.mock import patch, AsyncMock
+    from src.db.models import User
+
+    secret = paddle_test_setup
+    client = TestClient(app)
+
+    family_id = uuid4()
+    admin_user_id = uuid4()
+
+    with Session(engine) as session:
+        family = Family(
+            id=family_id,
+            name="Ongoing Family",
+            plan_type="solo_pro",
+            subscription_status="active",
+            paddle_subscription_id="sub_renewal_003"
+        )
+        session.add(family)
+        admin_user = User(
+            id=admin_user_id,
+            telegram_id=987654321,
+            family_id=family_id,
+            is_admin=True,
+            username="admin_tony"
+        )
+        session.add(admin_user)
+        session.commit()
+
+    now_ts = int(time.time())
+    payload = {
+        "event_id": "evt_sub_renewal_003",
+        "event_type": "subscription.updated",
+        "data": {
+            "id": "sub_renewal_003",
+            "status": "active",
+            "current_billing_period": {
+                "starts_at": "2026-10-01T00:00:00Z",
+                "ends_at": "2026-11-01T00:00:00Z"
+            },
+            "custom_data": {
+                "family_id": str(family_id),
+                "plan_code": "solo_pro"
+            }
+        }
+    }
+    raw_body = json.dumps(payload)
+    sig = _generate_paddle_signature(raw_body, secret, now_ts)
+
+    with patch("src.services.telegram_service.TelegramService.send_message", new_callable=AsyncMock) as mock_send:
+        res = client.post("/api/v1/paddle/webhook", content=raw_body, headers={"Paddle-Signature": sig})
+        assert res.status_code == 200
+        # Routine renewal should NOT send any activation notification
+        assert mock_send.call_count == 0

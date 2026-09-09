@@ -64,6 +64,7 @@ def test_vuln02_bill_edit_tenant_isolation():
             user_id=uuid.uuid4(),
             amount=1500.0,
             concept="Secret Medical Expense",
+            category="Services",
             due_date=datetime.now(timezone.utc)
         )
         session.add(bill_b)
@@ -317,12 +318,12 @@ def test_vuln11_bounded_pending_edit_store():
     store[103] = {"bill_id": uuid.uuid4(), "timestamp": time.time()}
 
     assert len(store) == 3
-    assert 101 in store
-
-    # Exceed capacity: 101 should be evicted (LRU)
+    # Exceed capacity: 101 is the oldest and should be evicted
     store[104] = {"bill_id": uuid.uuid4(), "timestamp": time.time()}
     assert len(store) == 3
     assert 101 not in store
+    assert 102 in store
+    assert 103 in store
     assert 104 in store
 
     # Test TTL expiration

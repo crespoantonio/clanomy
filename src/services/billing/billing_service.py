@@ -224,7 +224,12 @@ class BillingService:
             return {"status": "ok"}
 
         fam_service = FamilyService()
-        is_admin = fam_service.is_family_admin(family.id, user.id)
+        is_admin = getattr(user, "is_admin", False)
+        if not is_admin and getattr(family, "id", None) and getattr(user, "id", None):
+            try:
+                is_admin = fam_service.is_family_admin(family.id, user.id)
+            except Exception:
+                is_admin = False
         if not is_admin:
             background_tasks.add_task(
                 self.telegram_service.send_message,

@@ -57,7 +57,7 @@ def get_day_60_trial_families(session: Session, now: Optional[datetime] = None) 
         Family.trial_ends_at.is_not(None),
         Family.trial_ends_at <= current_time,
         Family.plan_type == "trial",
-        Family.subscription_status != "active"
+        Family.plan_type.notin_(["solo_pro", "duo_pro", "family_pro", "lifetime_pro"])
     )
     candidates = session.exec(statement).all()
 

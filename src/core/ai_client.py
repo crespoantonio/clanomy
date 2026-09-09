@@ -22,8 +22,12 @@ def sanitize_prompt_input(text: str) -> str:
         return ""
     # Replace triple backticks to prevent markdown fence breakout
     sanitized = text.replace("```", "'''")
-    # Neutralize user_input and system_context XML boundary delimiters (case-insensitive)
-    tags_to_strip = ["<user_input>", "</user_input>", "<system_context>", "</system_context>"]
+    # Neutralize XML boundary delimiters (case-insensitive)
+    tags_to_strip = [
+        "<user_input>", "</user_input>",
+        "<system_context>", "</system_context>",
+        "<data_records>", "</data_records>"
+    ]
     for tag in tags_to_strip:
         sanitized = re.sub(re.escape(tag), "", sanitized, flags=re.IGNORECASE)
     return sanitized.strip()

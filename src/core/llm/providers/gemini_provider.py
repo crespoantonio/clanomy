@@ -6,7 +6,6 @@ from tenacity import retry, stop_after_attempt, retry_if_exception
 
 from src.core.config import settings
 from src.core.http_client import get_http_client, make_timeout
-from src.core.ai_client import sanitize_prompt_input
 from src.core.llm.base import BaseLLMProvider, PayloadTruncatedError
 from src.core.llm.retry import is_retryable_provider_error, ProviderRateLimitWait
 
@@ -153,7 +152,6 @@ class GeminiProvider(BaseLLMProvider):
             "Content-Type": "application/json",
             "x-goog-api-key": self.api_key or ""
         }
-        sanitized_user = sanitize_prompt_input(user_prompt)
 
         raw_schema = schema.model_json_schema()
         gemini_schema = clean_gemini_schema(raw_schema)
@@ -165,7 +163,7 @@ class GeminiProvider(BaseLLMProvider):
             "contents": [
                 {
                     "role": "user",
-                    "parts": [{"text": sanitized_user}]
+                    "parts": [{"text": user_prompt}]
                 }
             ],
             "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
@@ -228,14 +226,13 @@ class GeminiProvider(BaseLLMProvider):
             "Content-Type": "application/json",
             "x-goog-api-key": self.api_key or ""
         }
-        sanitized_user = sanitize_prompt_input(user_prompt)
 
         payload = {
             "systemInstruction": {
                 "parts": [{"text": system_prompt}]
             },
             "contents": [
-                {"role": "user", "parts": [{"text": sanitized_user}]}
+                {"role": "user", "parts": [{"text": user_prompt}]}
             ],
             "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
             "generationConfig": {

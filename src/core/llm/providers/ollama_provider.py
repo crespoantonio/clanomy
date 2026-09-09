@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from src.core.config import settings
-from src.core.ai_client import get_global_ollama_semaphore, sanitize_prompt_input
+from src.core.ai_client import get_global_ollama_semaphore
 from src.core.llm.base import BaseLLMProvider
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,6 @@ class OllamaProvider(BaseLLMProvider):
         max_tokens: int = 600
     ) -> str:
 
-        sanitized_user = sanitize_prompt_input(user_prompt)
         logger.info(f"Calling Ollama model {self.model} for structured completion...")
         async with get_global_ollama_semaphore():
             response = await asyncio.wait_for(
@@ -44,7 +43,7 @@ class OllamaProvider(BaseLLMProvider):
                     model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": sanitized_user}
+                        {"role": "user", "content": user_prompt}
                     ],
                     format=schema.model_json_schema(),
                     options={"temperature": temperature, "num_predict": max_tokens}
@@ -69,7 +68,6 @@ class OllamaProvider(BaseLLMProvider):
         temperature: float = 0.0,
         timeout: float = 30.0
     ) -> str:
-        sanitized_user = sanitize_prompt_input(user_prompt)
         logger.info(f"Calling Ollama model {self.model} for text completion...")
         async with get_global_ollama_semaphore():
             response = await asyncio.wait_for(
@@ -77,7 +75,7 @@ class OllamaProvider(BaseLLMProvider):
                     model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": sanitized_user}
+                        {"role": "user", "content": user_prompt}
                     ],
                     options={"temperature": temperature} if temperature > 0 else None
                 ),

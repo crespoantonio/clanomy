@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Response, Request, status
 from fastapi.responses import JSONResponse, FileResponse
@@ -194,11 +195,19 @@ async def landing_translations():
         return FileResponse(trans_path, media_type="application/javascript")
     return Response(status_code=404)
 
+_ASSETS_DIR = (Path(_LANDING_DIR) / "assets").resolve()
+
 @app.get("/assets/{file_path:path}", include_in_schema=False)
 async def landing_assets(file_path: str):
-    asset_file = os.path.join(_LANDING_DIR, "assets", file_path)
-    if os.path.exists(asset_file) and os.path.isfile(asset_file):
-        return FileResponse(asset_file)
+    try:
+        target_path = (_ASSETS_DIR / file_path).resolve()
+        if not target_path.is_relative_to(_ASSETS_DIR) or target_path == _ASSETS_DIR:
+            logger.warning(f"Path traversal or directory access attempt rejected: {file_path}")
+            return Response(status_code=404)
+        if target_path.is_file():
+            return FileResponse(str(target_path))
+    except (ValueError, OSError):
+        pass
     return Response(status_code=404)
 
 

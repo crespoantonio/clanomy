@@ -7,6 +7,9 @@ import time
 import threading
 from typing import Optional, Tuple, Union, BinaryIO, TYPE_CHECKING, Any
 import httpx
+import ipaddress
+import socket
+from urllib.parse import urlparse
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
 from src.core.config import settings
@@ -14,6 +17,34 @@ from src.core.http_client import get_http_client, make_timeout
 from src.core.security import sanitize_exception_message
 
 logger = logging.getLogger("clanomy.whisper")
+
+
+def validate_safe_audio_url(url: str) -> None:
+    """
+    Validates audio URL against SSRF attacks:
+    - Enforces HTTP/HTTPS schemes.
+    - Disallows loopback, link-local, private RFC1918, and reserved IP ranges.
+    """
+    if not url:
+        raise ValueError("URL cannot be empty")
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(f"Invalid URL scheme '{parsed.scheme}'. Only HTTP/HTTPS permitted.")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid URL: missing hostname.")
+    
+    if hostname.lower() in ("localhost", "127.0.0.1", "::1"):
+        raise ValueError("Loopback addresses are not permitted.")
+
+    try:
+        ip_addresses = socket.getaddrinfo(hostname, None)
+        for _, _, _, _, sockaddr in ip_addresses:
+            ip_obj = ipaddress.ip_address(sockaddr[0])
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_multicast:
+                raise ValueError(f"Target host resolves to a restricted network address ({ip_obj}).")
+    except socket.gaierror as e:
+        raise ValueError(f"Failed to resolve host '{hostname}': {e}")
 
 class InferenceError(Exception):
     """Raised when audio transcription or inference fails."""
@@ -98,6 +129,7 @@ class WhisperService:
 
         # 2. Download audio if URL is provided
         if audio_url is not None:
+            validate_safe_audio_url(audio_url)
             try:
                 client = get_http_client()
                 response = await client.get(audio_url, timeout=make_timeout(10.0, connect=3.0, pool=3.0))

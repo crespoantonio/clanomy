@@ -220,6 +220,22 @@ class BillingService:
             )
             return {"status": "ok"}
 
+        if not family or not user:
+            return {"status": "ok"}
+
+        fam_service = FamilyService()
+        is_admin = fam_service.is_family_admin(family.id, user.id)
+        if not is_admin:
+            background_tasks.add_task(
+                self.telegram_service.send_message,
+                chat_id=chat_id,
+                text=(
+                    "🔒 <b>Admin Access Required</b>\n\n"
+                    "Only the workspace administrator can access subscription settings and billing management."
+                )
+            )
+            return {"status": "ok"}
+
         portal_url = family.customer_portal_url if family else None
         if portal_url:
             reply_markup = {

@@ -10,7 +10,6 @@ from tenacity.wait import wait_base
 
 from src.core.config import settings
 from src.core.http_client import get_http_client, make_timeout
-from src.core.ai_client import sanitize_prompt_input
 from src.core.llm.base import BaseLLMProvider, PayloadTruncatedError
 from src.core.llm.retry import is_retryable_provider_error, ProviderRateLimitWait
 
@@ -74,8 +73,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        sanitized_user = sanitize_prompt_input(user_prompt)
-        
+
         # Include schema description in system prompt for OpenAI compatible endpoints
         schema_json = schema.model_json_schema()
         full_system_prompt = f"{system_prompt}\n\nRequired JSON Schema:\n{schema_json}"
@@ -84,7 +82,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             "model": self.model,
             "messages": [
                 {"role": "system", "content": full_system_prompt},
-                {"role": "user", "content": sanitized_user}
+                {"role": "user", "content": user_prompt}
             ],
             "response_format": {"type": "json_object"},
             "temperature": temperature,
@@ -128,13 +126,12 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        sanitized_user = sanitize_prompt_input(user_prompt)
 
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": sanitized_user}
+                {"role": "user", "content": user_prompt}
             ],
             "temperature": temperature,
             "max_tokens": 300

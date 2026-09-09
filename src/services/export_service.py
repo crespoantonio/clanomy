@@ -5,7 +5,7 @@ import json
 import time
 import logging
 import asyncio
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any
 from uuid import UUID
 from datetime import datetime, timezone
 from sqlmodel import Session, select
@@ -17,6 +17,14 @@ from src.services.telegram_service import TelegramService
 from src.services.query import DecryptedTransaction
 
 logger = logging.getLogger(__name__)
+
+def sanitize_csv_cell(value: Any) -> str:
+    """Neutralizes CSV / DDE formula injection characters (=, +, -, @, \t, \r, |)."""
+    str_val = str(value or "")
+    if str_val and str_val[0] in ("=", "+", "-", "@", "\t", "\r", "|"):
+        return f"'{str_val}"
+    return str_val
+
 
 class ExportService:
     _instance = None
@@ -64,18 +72,18 @@ class ExportService:
             return None
 
     def generate_csv(self, transactions: List[DecryptedTransaction], file_path: str) -> None:
-        """Generates a CSV file from a list of decrypted transactions."""
+        """Generates a hardened CSV file from a list of decrypted transactions."""
         with open(file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow(["Date", "Type", "Amount", "Currency", "Concept", "Category"])
             for tx in transactions:
                 writer.writerow([
                     tx.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
-                    tx.type,
+                    sanitize_csv_cell(tx.type),
                     tx.amount,
-                    tx.currency,
-                    tx.concept,
-                    tx.category
+                    sanitize_csv_cell(tx.currency),
+                    sanitize_csv_cell(tx.concept),
+                    sanitize_csv_cell(tx.category)
                 ])
 
     def generate_json(self, transactions: List[DecryptedTransaction], family_id: UUID, file_path: str) -> None:

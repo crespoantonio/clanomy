@@ -10,7 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from src.core.config import settings
-from src.core.security import verify_simulation_secret
+from src.core.security import verify_simulation_secret, sanitize_exception_message
 from src.core.llm.factory import get_llm_provider
 from src.core.llm.providers.gemini_provider import GeminiProvider
 from src.core.llm.providers.ollama_provider import OllamaProvider
@@ -109,7 +109,8 @@ async def simulate_message(
         return result
     except Exception as e:
         logger.error(f"Error executing message simulation: {e}", exc_info=True)
+        sanitized_msg = sanitize_exception_message(e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Simulation failed: {str(e)}"
+            detail=f"Simulation failed: {sanitized_msg}"
         )

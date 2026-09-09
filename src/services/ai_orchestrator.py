@@ -503,8 +503,17 @@ class AIOrchestrator:
 
         return format_unhandled_query_message(is_spanish=_is_spanish(raw_text))
 
-    async def orchestrate(self, user_id: str, text: Optional[str], audio_file_id: Optional[str], chat_id: int, message_id: Optional[int] = None):
-        async with self._user_locks[str(user_id)]:
+    async def orchestrate(
+        self,
+        user_id: str,
+        text: Optional[str],
+        audio_file_id: Optional[str],
+        chat_id: int,
+        message_id: Optional[int] = None,
+        family_id: Optional[str] = None
+    ):
+        lock_key = f"family_{family_id}" if family_id else f"user_{user_id}"
+        async with self._user_locks[lock_key]:
             await self._orchestrate_impl(
                 user_id=user_id,
                 text=text,
@@ -512,7 +521,8 @@ class AIOrchestrator:
                 chat_id=chat_id,
                 message_id=message_id,
                 send_telegram=True,
-                dry_run=False
+                dry_run=False,
+                family_id=family_id
             )
 
     async def simulate_message(
@@ -534,7 +544,8 @@ class AIOrchestrator:
             send_telegram=False,
             dry_run=dry_run,
             default_currency=default_currency,
-            extraction_service=extraction_service
+            extraction_service=extraction_service,
+            family_id=family_id
         )
 
     async def _orchestrate_impl(
@@ -547,7 +558,8 @@ class AIOrchestrator:
         send_telegram: bool = True,
         dry_run: bool = False,
         default_currency: Optional[str] = None,
-        extraction_service: Optional[ExtractionService] = None
+        extraction_service: Optional[ExtractionService] = None,
+        family_id: Optional[str] = None
     ) -> dict:
         start_time = time.time()
         status = "success"
@@ -760,6 +772,29 @@ class AIOrchestrator:
                             response_text = res
                         else:
                             # action == "log_transaction"
+                            if not dry_run and send_telegram and chat_id and family_id:
+                                with Session(engine) as s:
+                                    try:
+                                        f_uuid = UUID(family_id) if isinstance(family_id, str) else family_id
+                                        fam_rec = s.get(Family, f_uuid) if f_uuid else None
+                                        if fam_rec:
+                                            from src.services.subscription_service import check_transaction_allowance
+                                            allowed, reason, limit_val = check_transaction_allowance(fam_rec)
+                                            if not allowed:
+                                                from src.templates.telegram_messages import DAILY_LIMIT_REACHED_MESSAGE, format_monthly_free_limit_reached
+                                                from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
+                                                if reason == "daily_limit":
+                                                    quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val)
+                                                else:
+                                                    is_adm = FamilyService().is_family_admin(fam_rec.id, user_uuid)
+                                                    is_sp = _is_spanish(raw_text)
+                                                    quota_msg = format_monthly_free_limit_reached(is_admin=is_adm, limit=FREE_TIER_MONTHLY_LIMIT, is_spanish=is_sp)
+                                                telegram_service = TelegramService()
+                                                await telegram_service.send_message(chat_id=chat_id, text=quota_msg)
+                                                return {"status": "ok", "response": quota_msg}
+                                    except Exception as q_err:
+                                        logger.warning(f"In-lock quota check encountered error: {q_err}")
+
                             all_items = unified.get_all_items() if hasattr(unified, "get_all_items") else []
                             if len(all_items) > 1 or (len(all_items) == 1 and all_items[0].is_scheduled_bill):
                                 if not dry_run:

@@ -6,6 +6,7 @@ from typing import Optional
 from pydantic import ValidationError
 
 from src.core.config import settings
+from src.core.ai_client import sanitize_prompt_input
 from src.core.llm.base import BaseLLMProvider
 from src.core.llm.factory import get_llm_provider
 from src.services.extraction.models import ExtractionResult, UnifiedResult, ExtractionError
@@ -48,6 +49,7 @@ class ExtractionService:
         current_date_str = ref.strftime("%Y-%m-%d")
         effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
 
+        clean_text = sanitize_prompt_input(text)
         system_prompt = UNIFIED_SYSTEM_PROMPT
         user_prompt = (
             "<system_context>\n"
@@ -55,7 +57,7 @@ class ExtractionService:
             f"Current Reference Date: {current_date_str}\n"
             "</system_context>\n\n"
             "Classify intent and extract details from this text:\n"
-            f"<user_input>\n{text}\n</user_input>"
+            f"<user_input>\n{clean_text}\n</user_input>"
         )
 
         start_time = time.time()
@@ -105,6 +107,7 @@ class ExtractionService:
         current_date_str = ref.strftime("%Y-%m-%d")
         effective_default_currency = (default_currency or settings.DEFAULT_CURRENCY or "USD").upper()
 
+        clean_text = sanitize_prompt_input(text)
         system_prompt = EXTRACTION_SYSTEM_PROMPT
         user_prompt = (
             "<system_context>\n"
@@ -112,7 +115,7 @@ class ExtractionService:
             f"Current Reference Date: {current_date_str}\n"
             "</system_context>\n\n"
             "Extract transaction details from this text:\n"
-            f"<user_input>\n{text}\n</user_input>"
+            f"<user_input>\n{clean_text}\n</user_input>"
         )
 
         start_time = time.time()

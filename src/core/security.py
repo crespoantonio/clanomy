@@ -83,6 +83,8 @@ def sanitize_auth_tokens(error_or_text: object) -> str:
     text = re.sub(r"gsk_[A-Za-z0-9]{20,}", "gsk_[REDACTED]", text)
     # Redact OpenAI keys (sk-...)
     text = re.sub(r"sk-[A-Za-z0-9]{20,}", "sk-[REDACTED]", text)
+    # Redact Google Gemini API keys (AIzaSy...)
+    text = re.sub(r"AIzaSy[A-Za-z0-9_\-]{33}", "AIzaSy[REDACTED]", text)
     # Redact Telegram Bot tokens: \d{8,10}:[A-Za-z0-9_-]{30,40}
     text = re.sub(r"\b\d{8,10}:[A-Za-z0-9_-]{30,40}\b", "[TELEGRAM_TOKEN_REDACTED]", text)
     return text

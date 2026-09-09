@@ -97,9 +97,48 @@ class BoundedCooldownStore:
         return False
 
 
+class BoundedPendingEditStore:
+    """LRU-bounded store for in-flight bill edit callback states with TTL expiration."""
+    def __init__(self, max_entries: int = 5000, ttl_seconds: float = 600.0):
+        self._store: OrderedDict[int, Dict[str, Any]] = OrderedDict()
+        self._max = max_entries
+        self._ttl = ttl_seconds
+
+    def __setitem__(self, user_id: int, data: Dict[str, Any]) -> None:
+        if user_id in self._store:
+            self._store.move_to_end(user_id)
+        self._store[user_id] = data
+        if len(self._store) > self._max:
+            self._store.popitem(last=False)
+
+    def __getitem__(self, user_id: int) -> Dict[str, Any]:
+        val = self.get(user_id)
+        if val is None:
+            raise KeyError(user_id)
+        return val
+
+    def __contains__(self, user_id: int) -> bool:
+        return self.get(user_id) is not None
+
+    def get(self, user_id: int, default: Any = None) -> Optional[Dict[str, Any]]:
+        entry = self._store.get(user_id)
+        if not entry:
+            return default
+        if (time.time() - entry.get("timestamp", 0)) > self._ttl:
+            self._store.pop(user_id, None)
+            return default
+        self._store.move_to_end(user_id)
+        return entry
+
+    def pop(self, user_id: int, default: Any = None) -> Any:
+        return self._store.pop(user_id, default)
+
+    def __len__(self) -> int:
+        return len(self._store)
+
 _cooldown_store = BoundedCooldownStore()
 _tz_finder = None
-_pending_bill_edits: Dict[int, Dict[str, Any]] = {}
+_pending_bill_edits = BoundedPendingEditStore()
 
 
 def get_timezone_finder():
@@ -368,19 +407,38 @@ async def telegram_webhook(
                     except (ValueError, IndexError):
                         target_bill_id = None
 
-                    if target_bill_id:
+                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                    if target_bill_id and family:
                         with Session(engine) as s:
-                            b = s.get(ScheduledBill, target_bill_id)
+                            b = s.exec(
+                                select(ScheduledBill).where(
+                                    ScheduledBill.id == target_bill_id,
+                                    ScheduledBill.family_id == family.id
+                                )
+                            ).first()
+
+                            if not b:
+                                logger.warning(
+                                    f"Unauthorized bill access attempt: user_id={user_id}, "
+                                    f"family_id={family.id}, target_bill_id={target_bill_id}"
+                                )
+                                if cb_id:
+                                    await telegram_service.answer_callback_query(
+                                        callback_query_id=cb_id,
+                                        text="Factura no encontrada." if is_spanish else "Bill not found."
+                                    )
+                                return {"status": "ok"}
+
                             enc_s = EncryptionService()
-                            cpt = (enc_s.decrypt(b.concept) if b else None) or "Bill"
+                            cpt = enc_s.decrypt(b.concept) or "Bill"
 
                         _pending_bill_edits[user_id] = {
                             "bill_id": target_bill_id,
+                            "family_id": family.id,
                             "concept": cpt,
                             "timestamp": time.time()
                         }
 
-                        is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
                         prompt, toast = format_bill_edit_prompt(target_bill_id, cpt, is_spanish=is_spanish)
 
                         await telegram_service.send_message(
@@ -392,7 +450,10 @@ async def telegram_webhook(
                             await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
                     else:
                         if cb_id:
-                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Invalid bill")
+                            await telegram_service.answer_callback_query(
+                                callback_query_id=cb_id,
+                                text="Factura no encontrada." if is_spanish else "Invalid bill"
+                            )
                     return {"status": "ok"}
 
             if cb_id:
@@ -846,7 +907,8 @@ async def telegram_webhook(
             text=text,
             audio_file_id=audio_file_id,
             chat_id=chat_id,
-            message_id=message_id
+            message_id=message_id,
+            family_id=str(family.id) if family else None
         )
         return {"status": "ok"}
     except Exception as e:

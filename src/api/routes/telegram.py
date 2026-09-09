@@ -574,6 +574,11 @@ async def telegram_webhook(
             parts = text.split(maxsplit=1)
             if len(parts) > 1:
                 token = parts[1].strip()
+                if token.startswith("upgrade"):
+                    sub_arg = token[8:] if token.startswith("upgrade_") else token[7:]
+                    upgrade_cmd = f"/upgrade {sub_arg}".strip()
+                    return await billing_service.handle_upgrade_command(background_tasks, upgrade_cmd, user, family, chat_id)
+
                 if token.startswith("join_"):
                     token = token[5:]
                 family_service = FamilyService()

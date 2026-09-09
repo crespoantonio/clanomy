@@ -34,11 +34,11 @@ class BillingService:
         self._active_family: Optional[Family] = None
         self._active_user: Optional[User] = None
 
-    async def _get_checkout_or_info_url(self, plan_code: str) -> str:
+    async def _get_checkout_or_info_url(self, plan_code: str) -> Optional[str]:
         """
         Returns an interactive checkout URL for the tier.
         When Paddle is configured, attempts to generate a hosted checkout URL;
-        otherwise falls back to the deep-link info URL.
+        otherwise returns None if checkout generation fails.
         """
         if settings.ENABLE_SUBSCRIPTIONS and self._active_family and self._active_user:
             try:
@@ -54,10 +54,7 @@ class BillingService:
             except Exception as e:
                 logger.warning(f"Could not generate Paddle checkout URL for {plan_code}: {e}")
 
-        bot_username = await self.telegram_service.get_bot_username()
-        if bot_username and bot_username != "UnknownBot":
-            return f"https://t.me/{bot_username}?start=upgrade_{plan_code}"
-        return f"https://t.me/clanomy_bot?start=upgrade_{plan_code}"
+        return None
 
     async def handle_upgrade_command(
         self,
@@ -70,7 +67,9 @@ class BillingService:
         """
         Handles /upgrade commands:
         - When ENABLE_SUBSCRIPTIONS is False: returns friendly self-hosted / closed beta message.
-        - When ENABLE_SUBSCRIPTIONS is True: displays subscription tier options.
+        - When ENABLE_SUBSCRIPTIONS is True: displays subscription tier options with Paddle checkouts.
+        - If checkout generation fails (e.g. Paddle downtime or configuration error): gracefully falls
+          back to the beta/in-progress message (SELF_HOSTED_UPGRADE_MESSAGE) so users are never broken.
         """
         if not settings.ENABLE_SUBSCRIPTIONS:
             background_tasks.add_task(
@@ -102,6 +101,15 @@ class BillingService:
                 solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual")
                 duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual")
                 fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual")
+                if not (solo_annual_url and duo_annual_url and fam_annual_url):
+                    logger.warning("Paddle checkout generation failed for annual tiers. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+
                 reply_markup = {
                     "inline_keyboard": [
                         [{"text": "💳 Solo Pro Annual ($49.99/yr)", "url": solo_annual_url}],
@@ -117,8 +125,89 @@ class BillingService:
                 )
                 return {"status": "ok"}
 
+            elif arg in ("solo_annual", "solo_pro_annual", "solo_yearly"):
+                solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual")
+                if not solo_annual_url:
+                    logger.warning("Paddle checkout generation failed for solo_pro_annual. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Solo Pro Annual ($49.99/yr)", "url": solo_annual_url}]
+                    ]
+                }
+                intro = "⭐️ <b>Upgrade to Clanomy Solo Pro (Annual)</b>\n\nTap below to select your upgrade:"
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
+            elif arg in ("duo_annual", "duo_pro_annual", "duo_yearly"):
+                duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual")
+                if not duo_annual_url:
+                    logger.warning("Paddle checkout generation failed for duo_pro_annual. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Duo Pro Annual ($79.99/yr)", "url": duo_annual_url}]
+                    ]
+                }
+                intro = "👫 <b>Upgrade to Clanomy Duo Pro (Annual)</b>\n\nTap below to select your upgrade for 2 partners:"
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
+            elif arg in ("family_annual", "family_pro_annual", "family_yearly", "fam_annual"):
+                fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual")
+                if not fam_annual_url:
+                    logger.warning("Paddle checkout generation failed for family_pro_annual. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+                reply_markup = {
+                    "inline_keyboard": [
+                        [{"text": "💳 Family Pro Annual ($119.99/yr)", "url": fam_annual_url}]
+                    ]
+                }
+                intro = "👨‍👩‍👧‍👦 <b>Upgrade to Clanomy Family Pro (Annual)</b>\n\nTap below to select your upgrade for up to 5 family members:"
+                background_tasks.add_task(
+                    self.telegram_service.send_message,
+                    chat_id=chat_id,
+                    text=intro,
+                    reply_markup=reply_markup
+                )
+                return {"status": "ok"}
+
             elif arg in ("solo", "solo_pro", "single"):
                 solo_url = await self._get_checkout_or_info_url("solo_pro")
+                if not solo_url:
+                    logger.warning("Paddle checkout generation failed for solo_pro. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+
                 reply_markup = {
                     "inline_keyboard": [
                         [{"text": "💳 Upgrade to Solo Pro ($4.99/mo)", "url": solo_url}]
@@ -143,6 +232,15 @@ class BillingService:
 
             elif arg in ("duo", "duo_pro", "couple", "couples", "pair"):
                 duo_url = await self._get_checkout_or_info_url("duo_pro")
+                if not duo_url:
+                    logger.warning("Paddle checkout generation failed for duo_pro. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+
                 reply_markup = {
                     "inline_keyboard": [
                         [{"text": "💳 Duo Pro ($7.99/mo)", "url": duo_url}]
@@ -167,6 +265,15 @@ class BillingService:
 
             elif arg in ("family", "family_pro", "fam"):
                 fam_url = await self._get_checkout_or_info_url("family_pro")
+                if not fam_url:
+                    logger.warning("Paddle checkout generation failed for family_pro. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+
                 reply_markup = {
                     "inline_keyboard": [
                         [{"text": "💳 Upgrade to Family Pro ($11.99/mo)", "url": fam_url}]
@@ -193,6 +300,15 @@ class BillingService:
                 solo_url = await self._get_checkout_or_info_url("solo_pro")
                 duo_url = await self._get_checkout_or_info_url("duo_pro")
                 fam_url = await self._get_checkout_or_info_url("family_pro")
+                if not (solo_url and duo_url and fam_url):
+                    logger.warning("Paddle checkout generation failed for monthly tiers. Falling back to in-progress message.")
+                    background_tasks.add_task(
+                        self.telegram_service.send_message,
+                        chat_id=chat_id,
+                        text=SELF_HOSTED_UPGRADE_MESSAGE
+                    )
+                    return {"status": "ok"}
+
                 reply_markup = {
                     "inline_keyboard": [
                         [{"text": "💳 Solo Pro ($4.99 / mo)", "url": solo_url}],
@@ -221,6 +337,14 @@ class BillingService:
                     reply_markup=reply_markup
                 )
                 return {"status": "ok"}
+        except Exception as e:
+            logger.error(f"Error handling upgrade command: {e}", exc_info=True)
+            background_tasks.add_task(
+                self.telegram_service.send_message,
+                chat_id=chat_id,
+                text=SELF_HOSTED_UPGRADE_MESSAGE
+            )
+            return {"status": "ok"}
         finally:
             self._active_family = None
             self._active_user = None

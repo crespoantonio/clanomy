@@ -781,13 +781,17 @@ class AIOrchestrator:
                                             from src.services.subscription_service import check_transaction_allowance
                                             allowed, reason, limit_val = check_transaction_allowance(fam_rec)
                                             if not allowed:
-                                                from src.templates.telegram_messages import DAILY_LIMIT_REACHED_MESSAGE, format_monthly_free_limit_reached
+                                                from src.templates.telegram_messages import (
+                                                    DAILY_LIMIT_REACHED_MESSAGE,
+                                                    format_daily_limit_reached,
+                                                    format_monthly_free_limit_reached
+                                                )
                                                 from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
+                                                is_sp = _is_spanish(raw_text)
                                                 if reason == "daily_limit":
-                                                    quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val)
+                                                    quota_msg = format_daily_limit_reached(limit=limit_val, is_spanish=is_sp)
                                                 else:
                                                     is_adm = FamilyService().is_family_admin(fam_rec.id, user_uuid)
-                                                    is_sp = _is_spanish(raw_text)
                                                     quota_msg = format_monthly_free_limit_reached(is_admin=is_adm, limit=FREE_TIER_MONTHLY_LIMIT, is_spanish=is_sp)
                                                 telegram_service = TelegramService()
                                                 await telegram_service.send_message(chat_id=chat_id, text=quota_msg)

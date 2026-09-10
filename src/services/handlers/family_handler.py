@@ -44,13 +44,24 @@ async def handle_family_info(user_uuid: UUID, is_spanish: bool = False) -> str:
     empty_label = "• No se encontraron integrantes" if is_spanish else "• No members found"
     members_formatted = "\n".join(members_str) if members_str else empty_label
     plan_type = info.get("plan_type", "free")
-    plan_desc = plan_type.replace("_", " ").title()
     if plan_type == "free":
+        plan_desc = "Gratuito" if is_spanish else "Free"
         cmd_hint = "(⚡ Los comandos son 100% gratuitos e ilimitados)" if is_spanish else "(⚡ Commands are 100% free &amp; unlimited)"
-        tx_info = f"{info.get('monthly_tx_count', 0)} / 20 {cmd_hint}"
+        month_label = "este mes" if is_spanish else "this month"
+        tx_info = f"{info.get('monthly_tx_count', 0)} / 20 {month_label} {cmd_hint}"
     else:
-        unlimited_hint = "(Ilimitado)" if is_spanish else "(Unlimited)"
-        tx_info = f"{info.get('monthly_tx_count', 0)} {unlimited_hint}"
+        if plan_type == "trial":
+            plan_desc = "Prueba Duo Pro (60 días)" if is_spanish else "Duo Pro Trial (60 days)"
+        else:
+            plan_desc = plan_type.replace("_", " ").title()
+            
+        daily_count = info.get("daily_tx_count", 0)
+        from src.services.subscription_service import get_daily_fair_use_limit
+        daily_limit = info.get("daily_limit") or get_daily_fair_use_limit(plan_type)
+        if is_spanish:
+            tx_info = f"{daily_count} / {daily_limit} hoy (límite diario)"
+        else:
+            tx_info = f"{daily_count} / {daily_limit} today (daily limit)"
         
     return format_family_info_text(
         name=str(info['name']),

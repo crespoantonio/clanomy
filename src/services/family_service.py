@@ -303,12 +303,16 @@ class FamilyService:
                 })
                 
             self._log_3s_audit("get_family_info", start_time)
+            from src.services.subscription_service import get_daily_fair_use_limit
+            daily_tx = getattr(family, "daily_tx_count", 0) or 0
             return {
                 "id": family.id,
                 "name": family.name,
                 "plan_type": family.plan_type,
                 "subscription_status": family.subscription_status,
                 "monthly_tx_count": family.monthly_tx_count,
+                "daily_tx_count": daily_tx,
+                "daily_limit": get_daily_fair_use_limit(family.plan_type),
                 "trial_ends_at": family.trial_ends_at,
                 "admin_id": str(admin_user.id) if admin_user else None,
                 "is_current_user_admin": bool(admin_user and user.id == admin_user.id),

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-05-09
-last_updated: 2026-09-04 12:00:00
+last_updated: 2026-09-11 10:30:00
 project: Clanomy
 tracking_system: file-system
 story_location: { implementation_artifacts }
@@ -186,3 +186,12 @@ development_status:
   22-2-authorized-message-simulation-route: done
   22-3-multilingual-llm-evaluation-harness-and-dataset: done
   epic-22-retrospective: optional
+
+  epic-23: done
+  23-1-paddle-billing-database-schema-and-idempotency-ledger: done
+  23-2-paddle-billing-service-and-transaction-checkout-generation: done
+  23-3-cryptographic-paddle-webhook-verification-and-subscription-lifecycle: done
+  23-4-customer-portal-and-non-admin-member-graduation-workflow: done
+  23-5-public-checkout-web-route-and-telegram-deep-linking: done
+  epic-23-retrospective: optional
+

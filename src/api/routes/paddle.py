@@ -216,8 +216,10 @@ async def paddle_webhook(
                     from src.services.family_service import FamilyService
                     fam_service = FamilyService()
                     plan_code_candidate = custom_data.get("plan_code")
-                    cand_plan, _ = _resolve_plan_type_and_members(plan_code_candidate, None)
-                    family = fam_service.graduate_member_to_new_workspace(paying_user.id, target_plan=cand_plan or "solo_pro")
+                    graduated_family = fam_service.graduate_member_to_new_workspace(paying_user.id, target_plan=cand_plan or "solo_pro")
+                    # Re-fetch managed instances within the active request session
+                    family = session.get(Family, graduated_family.id) or graduated_family
+                    paying_user = session.get(User, paying_user.id) or paying_user
                     logger.info(f"Graduated user {paying_user.id} into new workspace {family.id} on webhook")
             except Exception as grad_err:
                 logger.error(f"Error checking member graduation on webhook: {grad_err}")

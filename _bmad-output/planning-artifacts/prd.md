@@ -233,6 +233,15 @@ Mateo creates a new workspace and invites Carla. They receive an automatic 60-da
 *   **FR59:** System provides an authorized `/simulate/message` endpoint protected by `SIMULATION_SECRET` enabling offline and automated evaluation of LLM extraction models without requiring live Telegram webhooks.
 *   **FR60:** System serves a responsive bilingual (EN/ES) static landing page directly from FastAPI on `/` showcasing features, live interactive previews, and pricing.
 
+### 5.20 Paddle Merchant of Record & Sovereign Household Billing
+*   **FR61:** System integrates with Paddle Billing as the Merchant of Record, automatically generating custom-data-bound hosted checkout transactions (`POST /transactions`) for Solo Pro, Duo Pro, and Family Pro in monthly and annual cadences.
+*   **FR62:** System processes signed webhook notifications from Paddle (`POST /api/v1/paddle/webhook`), enforcing HMAC-SHA256 signature verification (`Paddle-Signature`), 5-second replay attack drift prevention, and idempotent event processing via the `processed_webhook` database ledger.
+*   **FR63:** System updates family subscription state upon `subscription.created`, `subscription.updated`, and `subscription.canceled` events, automatically syncing `plan_type`, `subscription_status`, `max_members`, `current_period_end`, and scheduled changes.
+*   **FR64:** System provides self-service authenticated Customer Portal sessions (`POST /customers/{id}/portal-sessions`) via `/billing` command, enabling administrators to manage payment methods, download invoices, or cancel subscriptions.
+*   **FR65:** System supports non-admin member graduation: when a non-admin user upgrades to their own plan via checkout or `/upgrade`, the system automatically provisions a sovereign workspace, migrates the user's personal transaction history, and assigns workspace admin rights.
+*   **FR66:** System serves a secure Paddle overlay checkout web page (`/pay`) with encrypted theme and client-side token binding, gated strictly by `ENABLE_SUBSCRIPTIONS=true`.
+*   **FR67:** Outbound Telegram notifications for billing events are role-aware: subscription activations are sent privately to the paying admin, while cancellations and expirations are broadcast to all workspace members with localized formatting in English and Spanish.
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance
@@ -251,6 +260,8 @@ Mateo creates a new workspace and invites Carla. They receive an automatic 60-da
 *   **NFR14 (Timezone Boundary Consistency):** All financial boundary queries (start-of-day, start-of-month) must resolve against the household's configured timezone before database UTC projection to prevent time-shift errors.
 *   **NFR15 (Cryptographic Webhook Verification):** 100% of external billing webhooks and cron maintenance triggers must cryptographically verify signatures or secrets before reading or acting upon request payloads.
 *   **NFR16 (Prompt Caching Invariance):** System prompts and tool definitions must maintain prefix stability to optimize upstream LLM prompt cache hit rates and reduce latency/cost.
+*   **NFR18 (Webhook Replay & Idempotency Resilience):** All incoming Paddle Billing webhooks must enforce cryptographic HMAC-SHA256 signature validation, reject timestamp drift >5s, and guarantee zero duplicate execution via a persistent deduplication ledger (`processed_webhook`).
+*   **NFR19 (Open-Core & Self-Hosting Isolation):** When `ENABLE_SUBSCRIPTIONS=false`, all commercial billing endpoints (`/api/v1/paddle/webhook`, `/pay`) must return HTTP 404, ensuring zero external billing dependencies or leakage in self-hosted community environments.
 
 ### 6.3 Reliability & Quality
 *   **Persistence:** Transactional DB writes to ensure zero data loss on system failure.

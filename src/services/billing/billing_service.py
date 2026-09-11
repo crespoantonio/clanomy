@@ -35,19 +35,26 @@ class BillingService:
         self._active_family: Optional[Family] = None
         self._active_user: Optional[User] = None
 
-    async def _get_checkout_or_info_url(self, plan_code: str) -> Optional[str]:
+    async def _get_checkout_or_info_url(
+        self,
+        plan_code: str,
+        family: Optional[Family] = None,
+        user: Optional[User] = None
+    ) -> Optional[str]:
         """
         Returns an interactive checkout URL for the tier.
         When Paddle is configured, attempts to generate a hosted checkout URL;
         otherwise returns None if checkout generation fails.
         """
-        if settings.ENABLE_SUBSCRIPTIONS and self._active_family and self._active_user:
+        fam = family if family is not None else self._active_family
+        usr = user if user is not None else self._active_user
+        if settings.ENABLE_SUBSCRIPTIONS and fam and usr:
             try:
                 from src.services.billing.paddle_service import PaddleService
                 paddle_svc = PaddleService()
                 checkout_url = await paddle_svc.create_checkout_url(
-                    family_id=str(self._active_family.id),
-                    user_id=str(self._active_user.id),
+                    family_id=str(fam.id),
+                    user_id=str(usr.id),
                     plan_code=plan_code
                 )
                 if checkout_url:
@@ -102,9 +109,9 @@ class BillingService:
             is_graduation = bool(family and not is_admin)
 
             if arg in ("annual", "yearly", "annually"):
-                solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual")
-                duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual")
-                fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual")
+                solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual", family=family, user=user)
+                duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual", family=family, user=user)
+                fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual", family=family, user=user)
                 if not (solo_annual_url and duo_annual_url and fam_annual_url):
                     logger.warning("Paddle checkout generation failed for annual tiers. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -152,7 +159,7 @@ class BillingService:
                 return {"status": "ok"}
 
             elif arg in ("solo_annual", "solo_pro_annual", "solo_yearly"):
-                solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual")
+                solo_annual_url = await self._get_checkout_or_info_url("solo_pro_annual", family=family, user=user)
                 if not solo_annual_url:
                     logger.warning("Paddle checkout generation failed for solo_pro_annual. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -176,7 +183,7 @@ class BillingService:
                 return {"status": "ok"}
 
             elif arg in ("duo_annual", "duo_pro_annual", "duo_yearly"):
-                duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual")
+                duo_annual_url = await self._get_checkout_or_info_url("duo_pro_annual", family=family, user=user)
                 if not duo_annual_url:
                     logger.warning("Paddle checkout generation failed for duo_pro_annual. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -200,7 +207,7 @@ class BillingService:
                 return {"status": "ok"}
 
             elif arg in ("family_annual", "family_pro_annual", "family_yearly", "fam_annual"):
-                fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual")
+                fam_annual_url = await self._get_checkout_or_info_url("family_pro_annual", family=family, user=user)
                 if not fam_annual_url:
                     logger.warning("Paddle checkout generation failed for family_pro_annual. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -224,7 +231,7 @@ class BillingService:
                 return {"status": "ok"}
 
             elif arg in ("solo", "solo_pro", "single"):
-                solo_url = await self._get_checkout_or_info_url("solo_pro")
+                solo_url = await self._get_checkout_or_info_url("solo_pro", family=family, user=user)
                 if not solo_url:
                     logger.warning("Paddle checkout generation failed for solo_pro. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -268,7 +275,7 @@ class BillingService:
                 return {"status": "ok"}
 
             elif arg in ("duo", "duo_pro", "couple", "couples", "pair"):
-                duo_url = await self._get_checkout_or_info_url("duo_pro")
+                duo_url = await self._get_checkout_or_info_url("duo_pro", family=family, user=user)
                 if not duo_url:
                     logger.warning("Paddle checkout generation failed for duo_pro. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -311,7 +318,7 @@ class BillingService:
                 return {"status": "ok"}
 
             elif arg in ("family", "family_pro", "fam"):
-                fam_url = await self._get_checkout_or_info_url("family_pro")
+                fam_url = await self._get_checkout_or_info_url("family_pro", family=family, user=user)
                 if not fam_url:
                     logger.warning("Paddle checkout generation failed for family_pro. Falling back to in-progress message.")
                     background_tasks.add_task(
@@ -354,9 +361,9 @@ class BillingService:
                 return {"status": "ok"}
 
             else:
-                solo_url = await self._get_checkout_or_info_url("solo_pro")
-                duo_url = await self._get_checkout_or_info_url("duo_pro")
-                fam_url = await self._get_checkout_or_info_url("family_pro")
+                solo_url = await self._get_checkout_or_info_url("solo_pro", family=family, user=user)
+                duo_url = await self._get_checkout_or_info_url("duo_pro", family=family, user=user)
+                fam_url = await self._get_checkout_or_info_url("family_pro", family=family, user=user)
                 if not (solo_url and duo_url and fam_url):
                     logger.warning("Paddle checkout generation failed for monthly tiers. Falling back to in-progress message.")
                     background_tasks.add_task(

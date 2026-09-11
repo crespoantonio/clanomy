@@ -477,7 +477,8 @@ def test_paddle_webhook_scheduled_cancellation_broadcasts_to_all_members(paddle_
         sample_text = mock_send.call_args_list[0].kwargs.get("text")
         assert "Family Pro" in sample_text
         assert "Free" in sample_text
-        assert "50" in sample_text
+        from src.core.subscription_config import FREE_TIER_MONTHLY_LIMIT
+        assert str(FREE_TIER_MONTHLY_LIMIT) in sample_text
         assert "/upgrade" in sample_text
 
 

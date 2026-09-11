@@ -178,7 +178,7 @@ async def test_handle_upgrade_command_shows_all_three_tiers():
     mock_bg = MagicMock()
 
     with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
-         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan: f"https://checkout.test/{plan}")):
+         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan, *args, **kwargs: f"https://checkout.test/{plan}")):
         
         await billing_service.handle_upgrade_command(
             background_tasks=mock_bg,
@@ -214,7 +214,7 @@ async def test_handle_upgrade_annual_shows_all_three_tiers():
     mock_bg = MagicMock()
 
     with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
-         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan: f"https://checkout.test/{plan}")):
+         patch.object(billing_service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan, *args, **kwargs: f"https://checkout.test/{plan}")):
         
         await billing_service.handle_upgrade_command(
             background_tasks=mock_bg,

@@ -521,7 +521,7 @@ def format_subscription_canceled_message(
             f"📅 <b>Período de acceso:</b>\n"
             f"{last_day_es}\n\n"
             f"📉 <b>Próximo plan (Gratuito):</b>\n"
-            f"Luego de esa fecha, su espacio pasará al plan <b>Free</b> con un límite de <b>50 transacciones por mes</b> (hasta 5 miembros). "
+            f"Luego de esa fecha, su espacio pasará al plan <b>Free</b> con un límite de <b>{FREE_TIER_MONTHLY_LIMIT} transacciones por mes</b> (hasta 5 miembros). "
             f"Todo su historial de gastos e información permanece 100% seguro y guardado.\n\n"
             f"💡 <i>Pueden volver a suscribirse a Premium en cualquier momento enviando /upgrade.</i>"
         )
@@ -531,7 +531,7 @@ def format_subscription_canceled_message(
         f"📅 <b>Access Period:</b>\n"
         f"{last_day_en}\n\n"
         f"📉 <b>Upcoming Plan (Free):</b>\n"
-        f"After that date, your workspace will move to the <b>Free</b> plan with a limit of <b>50 transactions per month</b> (up to 5 members). "
+        f"After that date, your workspace will move to the <b>Free</b> plan with a limit of <b>{FREE_TIER_MONTHLY_LIMIT} transactions per month</b> (up to 5 members). "
         f"All your transaction history and data remain completely safe and intact.\n\n"
         f"💡 <i>You can resubscribe to Premium anytime by typing /upgrade.</i>"
     )

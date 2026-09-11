@@ -14,6 +14,7 @@ async def test_lifespan_saas_mode_fails_fast_without_ai_api_key(monkeypatch):
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
          patch.object(settings, "AI_API_KEY", None), \
+         patch.object(settings, "ALLOW_LOCAL_AI_WITH_SUBSCRIPTIONS", False), \
          patch.object(settings, "DATABASE_URL", "postgresql+psycopg://user:pass@host/db"):
         with pytest.raises(RuntimeError, match="Missing AI_API_KEY for Groq Cloud deployment"):
             async with lifespan(mock_app):

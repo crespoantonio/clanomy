@@ -180,6 +180,8 @@ async def landing_page():
 
 @app.get("/pay", include_in_schema=False)
 async def pay_page():
+    if not settings.ENABLE_SUBSCRIPTIONS:
+        return Response(status_code=404)
     pay_path = os.path.join(_LANDING_DIR, "pay.html")
     if not os.path.exists(pay_path):
         return Response(status_code=404)
@@ -196,12 +198,14 @@ async def pay_page():
     except Exception:
         pass
 
+    import html as html_lib
+    safe_bot_username = html_lib.escape(bot_username, quote=True)
     token = settings.PADDLE_CLIENT_SIDE_TOKEN or ""
     env = settings.PADDLE_ENVIRONMENT or "sandbox"
 
     html = html.replace("{{ PADDLE_CLIENT_SIDE_TOKEN }}", token)
     html = html.replace("{{ PADDLE_ENVIRONMENT }}", env)
-    html = html.replace("{{ BOT_USERNAME }}", bot_username)
+    html = html.replace("{{ BOT_USERNAME }}", safe_bot_username)
 
     return HTMLResponse(content=html, status_code=200)
 

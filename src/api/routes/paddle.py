@@ -314,7 +314,10 @@ async def paddle_webhook(
 
                 # Check if current_period_end has already passed
                 now_utc = datetime.now(timezone.utc)
-                if family.current_period_end and family.current_period_end <= now_utc:
+                period_end_cmp = family.current_period_end
+                if period_end_cmp and period_end_cmp.tzinfo is None:
+                    period_end_cmp = period_end_cmp.replace(tzinfo=timezone.utc)
+                if period_end_cmp and period_end_cmp <= now_utc:
                     family.plan_type = "free"
                     family.max_members = 5
 

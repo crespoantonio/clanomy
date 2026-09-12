@@ -23,8 +23,10 @@ if not settings.DATABASE_URL.startswith("sqlite"):
         "pool_timeout": 30.0,
     })
 else:
+    from sqlalchemy.pool import StaticPool
     engine_kwargs.update({
-        "connect_args": {"check_same_thread": False}
+        "connect_args": {"check_same_thread": False},
+        "poolclass": StaticPool,
     })
 
 engine = create_engine(settings.DATABASE_URL, **engine_kwargs)

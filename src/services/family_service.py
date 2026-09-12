@@ -672,51 +672,80 @@ class FamilyService:
             if close_session:
                 session.close()
 
-    def graduate_member_to_new_workspace(self, user_id: UUID, target_plan: str = "solo_pro") -> Family:
+    def graduate_member_to_new_workspace(
+        self,
+        user_id: UUID,
+        target_plan: str = "solo_pro",
+        session: Optional[Session] = None
+    ) -> Family:
         """
         Graduates an existing family member (usually non-admin) into their own sovereign workspace
         when they upgrade to Solo Pro or Family Pro.
-        Migrates ONLY this user's personal transactions to the new workspace.
+        Migrates ONLY this user's personal transactions and scheduled bills to the new workspace.
         The host family remains completely intact.
         """
         start_time = time.time()
+        close_session = False
+        if session is None:
+            session = Session(self.engine, expire_on_commit=False)
+            close_session = True
+
         try:
-            with Session(self.engine, expire_on_commit=False) as session:
-                user = session.get(User, user_id)
-                if not user:
-                    raise ValueError(f"User {user_id} not found")
+            user = session.get(User, user_id)
+            if not user:
+                raise ValueError(f"User {user_id} not found")
 
-                old_family = session.get(Family, user.family_id) if user.family_id else None
-                default_currency = (old_family.default_currency if old_family else None) or "USD"
+            old_family = session.get(Family, user.family_id) if user.family_id else None
+            default_currency = (old_family.default_currency if old_family else None) or "USD"
+            tz = (old_family.timezone if old_family else None) or "America/Argentina/Buenos_Aires"
 
-                new_family_name = f"{user.full_name or user.username or 'User'}'s Workspace"
-                new_family = Family(
-                    name=new_family_name,
-                    plan_type=target_plan,
-                    default_currency=default_currency,
-                    monthly_tx_count=0
-                )
-                session.add(new_family)
-                session.flush()
+            max_members = 1 if target_plan == "solo_pro" else (2 if target_plan == "duo_pro" else 5)
+            new_family_name = f"{user.full_name or user.username or 'User'}'s Workspace"
+            new_family = Family(
+                name=new_family_name,
+                plan_type=target_plan,
+                max_members=max_members,
+                default_currency=default_currency,
+                timezone=tz,
+                monthly_tx_count=0,
+                daily_tx_count=0
+            )
+            session.add(new_family)
+            session.flush()
 
-                user.family_id = new_family.id
-                user.is_admin = True
-                session.add(user)
+            user.family_id = new_family.id
+            user.is_admin = True
+            session.add(user)
 
-                from sqlalchemy import update
-                session.exec(
-                    update(Transaction)
-                    .where(Transaction.user_id == user.id)
-                    .values(family_id=new_family.id)
-                )
+            from sqlalchemy import update
+            session.exec(
+                update(Transaction)
+                .where(Transaction.user_id == user.id)
+                .values(family_id=new_family.id)
+            )
 
+            from src.db.models import ScheduledBill
+            session.exec(
+                update(ScheduledBill)
+                .where(ScheduledBill.user_id == user.id)
+                .values(family_id=new_family.id)
+            )
+
+            session.flush()
+            if close_session:
                 session.commit()
                 session.refresh(new_family)
-                self._log_3s_audit("graduate_member_to_new_workspace", start_time)
-                return new_family
+
+            self._log_3s_audit("graduate_member_to_new_workspace", start_time)
+            return new_family
         except Exception as e:
-            logger.error(f"Failed to graduate member {user_id} to new workspace: {e}")
+            logger.error(f"Failed to graduate member {user_id} to new workspace: {e}", exc_info=True)
+            if close_session:
+                session.rollback()
             raise
+        finally:
+            if close_session:
+                session.close()
 
     def get_family_default_currency(self, family_id: UUID) -> str:
         """

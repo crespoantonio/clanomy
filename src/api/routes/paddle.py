@@ -63,6 +63,18 @@ def _find_family(session: Session, data: Dict[str, Any], custom_data: Dict[str, 
         if family:
             return family
 
+    user_id_str = custom_data.get("user_id")
+    if user_id_str:
+        try:
+            user_uuid = UUID(user_id_str)
+            user = session.get(User, user_uuid)
+            if user and user.family_id:
+                fam = session.get(Family, user.family_id)
+                if fam:
+                    return fam
+        except (ValueError, TypeError):
+            pass
+
     return None
 
 
@@ -206,6 +218,12 @@ async def paddle_webhook(
         prev_status = family.subscription_status if family else None
         prev_sched_action = family.scheduled_change_action if family else None
 
+        # Resolve target plan and members early so graduation and update both use it
+        items = data.get("items", [])
+        price_id = items[0].get("price", {}).get("id") if items else None
+        plan_code = custom_data.get("plan_code")
+        target_plan, target_members = _resolve_plan_type_and_members(plan_code, price_id)
+
         # Check for non-admin member graduation
         user_id_str = custom_data.get("user_id")
         paying_user = None
@@ -216,25 +234,28 @@ async def paddle_webhook(
                 if paying_user and family and paying_user.family_id == family.id and not paying_user.is_admin:
                     from src.services.family_service import FamilyService
                     fam_service = FamilyService()
-                    plan_code_candidate = custom_data.get("plan_code")
-                    graduated_family = fam_service.graduate_member_to_new_workspace(paying_user.id, target_plan=cand_plan or "solo_pro")
+                    effective_target = target_plan or "solo_pro"
+                    graduated_family = fam_service.graduate_member_to_new_workspace(
+                        paying_user.id,
+                        target_plan=effective_target,
+                        session=session
+                    )
                     # Re-fetch managed instances within the active request session
-                    family = session.get(Family, graduated_family.id) or graduated_family
+                    family = graduated_family
                     paying_user = session.get(User, paying_user.id) or paying_user
-                    logger.info(f"Graduated user {paying_user.id} into new workspace {family.id} on webhook")
+                    target_members = target_members or (1 if effective_target == "solo_pro" else (2 if effective_target == "duo_pro" else 5))
+                    prev_plan = None  # Reset so activation notification fires for new workspace
+                    logger.info(
+                        f"Graduated user {paying_user.id} into new workspace {family.id} "
+                        f"({effective_target}, max_members={target_members}) on webhook"
+                    )
             except Exception as grad_err:
-                logger.error(f"Error checking member graduation on webhook: {grad_err}")
+                logger.error(f"Error checking member graduation on webhook: {grad_err}", exc_info=True)
 
         if event_type in ("subscription.created", "subscription.updated"):
             sub_id = data.get("id")
             customer_id = data.get("customer_id")
             sub_status = data.get("status", "active")
-
-            items = data.get("items", [])
-            price_id = items[0].get("price", {}).get("id") if items else None
-
-            plan_code = custom_data.get("plan_code")
-            target_plan, target_members = _resolve_plan_type_and_members(plan_code, price_id)
 
             period_end = None
             billing_period = data.get("current_billing_period")

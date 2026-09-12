@@ -560,69 +560,117 @@ class FamilyService:
             logger.error(f"Failed to leave family for user_id={user_id}: {e}")
             return False, f"An error occurred while leaving the family: {e}", None
 
-    def split_family_on_downgrade(self, family_id: UUID) -> Tuple[Optional[Family], list]:
+    def split_family_on_downgrade(
+        self,
+        family_id: UUID,
+        session: Optional[Session] = None,
+        admin_user_id: Optional[UUID] = None
+    ) -> Tuple[Optional[Family], Optional[Family], Optional[User]]:
         """
-        Splits a family workspace when the admin downgrades from Family Pro to Solo Pro.
-        The Admin retains family_id on Solo Pro (max 1 user).
-        All non-admin members are clustered into a new shared Family workspace on the Free tier,
-        with the oldest non-admin appointed as the new Admin.
-        All non-admin personal transactions are migrated to the new workspace.
+        Splits a family workspace when the admin downgrades from Family Pro to Solo Pro:
+        - The existing Family workspace transitions to the Free tier (max 5 members).
+        - The oldest remaining non-admin member is appointed as the new Admin of the existing Family.
+        - The Solo user (admin) receives a dedicated, new Solo workspace (plan_type="solo_pro", max 1 member).
+        - The Solo user's personal transactions and scheduled bills are migrated to their new Solo workspace.
+        - Returns (solo_family, existing_family_free, new_admin_user).
         """
         start_time = time.time()
+        close_session = False
+        if session is None:
+            session = Session(self.engine, expire_on_commit=False)
+            close_session = True
+
         try:
-            with Session(self.engine, expire_on_commit=False) as session:
-                family = session.get(Family, family_id)
-                if not family:
-                    return None, []
+            family = session.get(Family, family_id)
+            if not family:
+                return None, None, None
 
-                members = session.exec(
-                    select(User).where(User.family_id == family_id).order_by(User.created_at.asc())
-                ).all()
+            members = session.exec(
+                select(User).where(User.family_id == family_id).order_by(User.created_at.asc())
+            ).all()
 
-                admin_user = next((u for u in members if self.is_family_admin(family_id, u.id)), members[0] if members else None)
-                if not admin_user:
-                    return None, []
+            if admin_user_id:
+                admin_user = next((u for u in members if u.id == admin_user_id), None)
+            else:
+                admin_user = next((u for u in members if u.is_admin), members[0] if members else None)
 
-                non_admins = [u for u in members if u.id != admin_user.id]
-                if not non_admins:
-                    return None, []
+            if not admin_user:
+                return None, None, None
 
-                new_admin = non_admins[0]  # oldest non-admin
-                new_family_name = f"{new_admin.full_name or new_admin.username or 'Family'}'s Group"
+            non_admins = [u for u in members if u.id != admin_user.id]
+            if not non_admins:
+                # Only the admin in the workspace, no other members to split
+                return family, None, None
 
-                new_family = Family(
-                    name=new_family_name,
-                    plan_type="free",
-                    default_currency=family.default_currency or "USD",
-                    monthly_tx_count=0
-                )
-                session.add(new_family)
-                session.flush()
+            # 1. Oldest non-admin becomes new admin of the existing family
+            new_admin = non_admins[0]
+            new_admin.is_admin = True
+            session.add(new_admin)
 
-                non_admin_ids = []
-                for member in non_admins:
-                    member.family_id = new_family.id
-                    if member.id == new_admin.id:
-                        member.is_admin = True
-                    else:
-                        member.is_admin = False
-                    session.add(member)
-                    non_admin_ids.append(member.id)
+            # 2. Existing family reverts to Free tier and detaches paddle subscription
+            family.plan_type = "free"
+            family.max_members = 5
+            family.paddle_subscription_id = None
+            family.paddle_customer_id = None
+            family.paddle_price_id = None
+            family.current_period_end = None
+            family.scheduled_change_action = None
+            family.scheduled_change_effective_at = None
+            session.add(family)
 
-                from sqlalchemy import update
-                session.exec(
-                    update(Transaction)
-                    .where(Transaction.user_id.in_(non_admin_ids))
-                    .values(family_id=new_family.id)
-                )
+            # 3. Create new sovereign Solo workspace for the downgrading user
+            solo_family_name = f"{admin_user.full_name or admin_user.username or 'Solo'}'s Workspace"
+            solo_family = Family(
+                name=solo_family_name,
+                plan_type="solo_pro",
+                max_members=1,
+                subscription_status="active",
+                default_currency=family.default_currency or "USD",
+                timezone=family.timezone or "America/Argentina/Buenos_Aires",
+                monthly_tx_count=0,
+                daily_tx_count=0
+            )
+            session.add(solo_family)
+            session.flush()
 
+            # 4. Move admin_user into the new Solo workspace
+            admin_user.family_id = solo_family.id
+            admin_user.is_admin = True
+            session.add(admin_user)
+
+            # 5. Migrate admin_user's personal transactions to the Solo workspace
+            from sqlalchemy import update
+            session.exec(
+                update(Transaction)
+                .where(Transaction.user_id == admin_user.id)
+                .values(family_id=solo_family.id)
+            )
+
+            # 6. Migrate admin_user's scheduled bills to the Solo workspace
+            from src.db.models import ScheduledBill
+            session.exec(
+                update(ScheduledBill)
+                .where(ScheduledBill.user_id == admin_user.id)
+                .values(family_id=solo_family.id)
+            )
+
+            session.flush()
+            if close_session:
                 session.commit()
-                session.refresh(new_family)
-                self._log_3s_audit("split_family_on_downgrade", start_time)
-                return new_family, non_admins
+                session.refresh(solo_family)
+                session.refresh(family)
+                session.refresh(new_admin)
+
+            self._log_3s_audit("split_family_on_downgrade", start_time)
+            return solo_family, family, new_admin
         except Exception as e:
-            logger.error(f"Failed to split family {family_id} on downgrade: {e}")
-            return None, []
+            logger.error(f"Failed to split family {family_id} on downgrade: {e}", exc_info=True)
+            if close_session:
+                session.rollback()
+            return None, None, None
+        finally:
+            if close_session:
+                session.close()
 
     def graduate_member_to_new_workspace(self, user_id: UUID, target_plan: str = "solo_pro") -> Family:
         """

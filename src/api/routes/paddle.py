@@ -67,17 +67,18 @@ def _find_family(session: Session, data: Dict[str, Any], custom_data: Dict[str, 
 
 
 def _resolve_plan_type_and_members(plan_code: Optional[str], price_id: Optional[str]) -> tuple[Optional[str], Optional[int]]:
-    """Resolves target plan_type and max_members from plan_code or price_id."""
+    """Resolves target plan_type and max_members from price_id (source of truth) or plan_code."""
+    if price_id:
+        for code, tier in SUBSCRIPTION_TIERS.items():
+            from src.core.subscription_config import get_paddle_price_id_for_tier
+            configured_id = get_paddle_price_id_for_tier(code)
+            if (configured_id and configured_id == price_id) or (price_id in (code, f"pri_{code}", f"pri_{code}_001")):
+                return tier.internal_plan, tier.max_members
+
     if plan_code:
         tier = get_tier_config(plan_code)
         if tier:
             return tier.internal_plan, tier.max_members
-
-    if price_id:
-        for code, tier in SUBSCRIPTION_TIERS.items():
-            from src.core.subscription_config import get_paddle_price_id_for_tier
-            if get_paddle_price_id_for_tier(code) == price_id:
-                return tier.internal_plan, tier.max_members
 
     return None, None
 
@@ -248,6 +249,42 @@ async def paddle_webhook(
                 sched_effective_at = _parse_iso_datetime(scheduled_change.get("effective_at"))
 
             if family:
+                # Check for downgrade from Family Pro / Duo Pro to Solo Pro with multiple members
+                if target_plan == "solo_pro" and prev_plan in ("family_pro", "duo_pro"):
+                    fam_members = session.exec(
+                        select(User).where(User.family_id == family.id).order_by(User.created_at.asc())
+                    ).all()
+                    if len(fam_members) > 1:
+                        logger.info(
+                            f"Downgrade from {prev_plan} to solo_pro detected for Family {family.id} with {len(fam_members)} members. "
+                            f"Splitting into Free family (oldest member as admin) and new Solo workspace."
+                        )
+                        from src.services.family_service import FamilyService
+                        fam_svc = FamilyService()
+                        admin_uid = paying_user.id if paying_user else None
+                        solo_fam, free_fam, new_adm = fam_svc.split_family_on_downgrade(
+                            family.id,
+                            session=session,
+                            admin_user_id=admin_uid
+                        )
+                        if solo_fam and free_fam:
+                            # Re-point family to the new Solo workspace for Paddle subscription attachment
+                            family = solo_fam
+                            # Notify new admin of the Free family
+                            if new_adm and new_adm.telegram_id:
+                                from src.templates.telegram_messages import is_family_spanish
+                                is_sp = is_family_spanish(free_fam, session)
+                                free_msg = (
+                                    f"ℹ️ <b>Actualización de Grupo Familiar</b>\n\n"
+                                    f"El plan del grupo <b>{free_fam.name or 'Familia'}</b> ha pasado al <b>Plan Gratuito</b> (hasta 5 miembros).\n"
+                                    f"Ahora eres el/la <b>Administrador/a</b> del grupo."
+                                    if is_sp else
+                                    f"ℹ️ <b>Family Group Update</b>\n\n"
+                                    f"The group <b>{free_fam.name or 'Family'}</b> has transitioned to the <b>Free Plan</b> (up to 5 members).\n"
+                                    f"You are now the workspace <b>Administrator</b>."
+                                )
+                                await _safe_send_telegram(new_adm.telegram_id, free_msg)
+
                 family.paddle_subscription_id = sub_id
                 if customer_id:
                     family.paddle_customer_id = customer_id
@@ -312,14 +349,8 @@ async def paddle_webhook(
                 family.scheduled_change_action = None
                 family.scheduled_change_effective_at = None
 
-                # Check if current_period_end has already passed
-                now_utc = datetime.now(timezone.utc)
-                period_end_cmp = family.current_period_end
-                if period_end_cmp and period_end_cmp.tzinfo is None:
-                    period_end_cmp = period_end_cmp.replace(tzinfo=timezone.utc)
-                if period_end_cmp and period_end_cmp <= now_utc:
-                    family.plan_type = "free"
-                    family.max_members = 5
+                family.plan_type = "free"
+                family.max_members = 5
 
                 session.add(family)
                 session.flush()

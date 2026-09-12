@@ -351,3 +351,183 @@ def test_e2e_paddle_webhook_activation_and_cancellation_lifecycle(app_client, mo
         f = session.get(Family, family_id)
         assert f.plan_type == "free"
         assert f.max_members == 5
+
+
+def test_e2e_full_lifecycle_payment_transitions_with_commands(
+    app_client,
+    mock_telegram,
+    telegram_payload_factory,
+    paddle_webhook_factory,
+    monkeypatch
+):
+    """
+    [E2E] Full multi-phase conversational and billing lifecycle:
+    1. Free Family with Admin Alice (92006) and Member Bob (92007).
+    2. Upgrade to Family Pro via Paddle webhook:
+       - F1 becomes family_pro (max 5). /invite is unblocked.
+    3. Downgrade to Solo Pro via Paddle webhook with multiple members:
+       - F1 reverts to Free (max 5); Bob becomes Admin of F1.
+       - Alice moves to dedicated Solo workspace (plan_type="solo_pro", max 1).
+       - Alice runs /invite -> BLOCKED (Solo Pro limit).
+       - Bob runs /balance -> unblocked on Free family.
+    4. Upgrade Solo workspace back to Family Pro:
+       - Alice's workspace becomes family_pro (max 5). /invite is UNBLOCKED.
+    5. Cancellation via Paddle webhook:
+       - Alice's workspace reverts to Free (max 5).
+    """
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+    secret_header = {"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    alice_tg_id = 92006
+    bob_tg_id = 92007
+
+    # 1. Onboard Alice
+    app_client.post("/api/v1/telegram/webhook", json=telegram_payload_factory(text="/start", user_id=alice_tg_id, first_name="Alice"), headers=secret_header)
+    app_client.post("/api/v1/telegram/webhook", json={
+        "callback_query": {
+            "id": "cb_tos_92006",
+            "from": {"id": alice_tg_id, "first_name": "Alice"},
+            "message": {"message_id": 101, "chat": {"id": alice_tg_id}},
+            "data": "accept_tos"
+        }
+    }, headers=secret_header)
+
+    with Session(e2e_test_engine) as session:
+        alice_u = session.exec(select(User).where(User.telegram_id == alice_tg_id)).first()
+        f1_id = alice_u.family_id
+        alice_uid = alice_u.id
+
+    # Onboard Bob and place into Alice's family
+    app_client.post("/api/v1/telegram/webhook", json=telegram_payload_factory(text="/start", user_id=bob_tg_id, first_name="Bob"), headers=secret_header)
+    app_client.post("/api/v1/telegram/webhook", json={
+        "callback_query": {
+            "id": "cb_tos_92007",
+            "from": {"id": bob_tg_id, "first_name": "Bob"},
+            "message": {"message_id": 102, "chat": {"id": bob_tg_id}},
+            "data": "accept_tos"
+        }
+    }, headers=secret_header)
+
+    with Session(e2e_test_engine) as session:
+        bob_u = session.exec(select(User).where(User.telegram_id == bob_tg_id)).first()
+        bob_u.family_id = f1_id
+        bob_u.is_admin = False
+        bob_uid = bob_u.id
+        session.add(bob_u)
+        session.commit()
+
+    # 2. Upgrade to Family Pro via Webhook
+    sub_id = "sub_e2e_flow_888"
+    cust_id = "ctm_e2e_flow_888"
+    now_ts = int(time.time())
+    fam_upgrade_data = {
+        "id": sub_id,
+        "customer_id": cust_id,
+        "status": "active",
+        "custom_data": {"family_id": str(f1_id), "user_id": str(alice_uid), "plan_code": "family_pro"},
+        "items": [{"price": {"id": "pri_family_pro_001"}}],
+        "current_billing_period": {"ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}
+    }
+    raw_fam, sig_fam = paddle_webhook_factory("subscription.created", fam_upgrade_data, event_id=f"evt_fam_{now_ts}")
+    res = app_client.post("/api/v1/paddle/webhook", content=raw_fam, headers={"Paddle-Signature": sig_fam})
+    assert res.status_code == 200
+
+    with Session(e2e_test_engine) as session:
+        f = session.get(Family, f1_id)
+        assert f.plan_type == "family_pro"
+        assert f.max_members == 5
+
+    # Verify Alice can generate an invite on Family Pro
+    mock_telegram.messages.clear()
+    app_client.post("/api/v1/telegram/webhook", json=telegram_payload_factory(text="/invite", user_id=alice_tg_id), headers=secret_header)
+    assert len(mock_telegram.messages) == 1
+    assert "join_" in mock_telegram.messages[0]["text"] or "invitación" in mock_telegram.messages[0]["text"].lower() or "invite" in mock_telegram.messages[0]["text"].lower()
+
+    # 3. Downgrade to Solo Pro via Webhook (with multiple members)
+    solo_downgrade_data = {
+        "id": sub_id,
+        "customer_id": cust_id,
+        "status": "active",
+        "custom_data": {"family_id": str(f1_id), "user_id": str(alice_uid), "plan_code": "solo_pro"},
+        "items": [{"price": {"id": "pri_solo_pro_001"}}],
+        "current_billing_period": {"ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}
+    }
+    raw_solo, sig_solo = paddle_webhook_factory("subscription.updated", solo_downgrade_data, event_id=f"evt_solo_{now_ts + 1}")
+    res = app_client.post("/api/v1/paddle/webhook", content=raw_solo, headers={"Paddle-Signature": sig_solo})
+    assert res.status_code == 200
+
+    solo_fam_id = None
+    with Session(e2e_test_engine) as session:
+        # F1 is now Free tier, Bob is Admin
+        f1_db = session.get(Family, f1_id)
+        assert f1_db.plan_type == "free"
+        assert f1_db.max_members == 5
+        assert f1_db.paddle_subscription_id is None
+
+        bob_db = session.get(User, bob_uid)
+        assert bob_db.family_id == f1_id
+        assert bob_db.is_admin is True
+
+        # Alice is in new Solo workspace
+        alice_db = session.get(User, alice_uid)
+        assert alice_db.family_id != f1_id
+        assert alice_db.is_admin is True
+        solo_fam_id = alice_db.family_id
+
+        solo_fam = session.get(Family, solo_fam_id)
+        assert solo_fam.plan_type == "solo_pro"
+        assert solo_fam.max_members == 1
+        assert solo_fam.paddle_subscription_id == sub_id
+
+    # Verify Alice running /invite on Solo Pro is BLOCKED
+    mock_telegram.messages.clear()
+    app_client.post("/api/v1/telegram/webhook", json=telegram_payload_factory(text="/invite", user_id=alice_tg_id), headers=secret_header)
+    assert len(mock_telegram.messages) == 1
+    solo_block_msg = mock_telegram.messages[0]["text"]
+    assert "Solo Pro" in solo_block_msg or "/upgrade" in solo_block_msg
+
+    # Verify Bob running /balance on Free family works cleanly
+    mock_telegram.messages.clear()
+    app_client.post("/api/v1/telegram/webhook", json=telegram_payload_factory(text="/balance", user_id=bob_tg_id), headers=secret_header)
+    assert len(mock_telegram.messages) == 1
+    assert "Balance" in mock_telegram.messages[0]["text"]
+
+    # 4. Upgrade Alice's Solo Workspace back to Family Pro
+    upgrade_back_data = {
+        "id": sub_id,
+        "customer_id": cust_id,
+        "status": "active",
+        "custom_data": {"family_id": str(solo_fam_id), "user_id": str(alice_uid), "plan_code": "family_pro"},
+        "items": [{"price": {"id": "pri_family_pro_001"}}],
+        "current_billing_period": {"ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}
+    }
+    raw_up, sig_up = paddle_webhook_factory("subscription.updated", upgrade_back_data, event_id=f"evt_up_{now_ts + 2}")
+    res = app_client.post("/api/v1/paddle/webhook", content=raw_up, headers={"Paddle-Signature": sig_up})
+    assert res.status_code == 200
+
+    with Session(e2e_test_engine) as session:
+        solo_fam_db = session.get(Family, solo_fam_id)
+        assert solo_fam_db.plan_type == "family_pro"
+        assert solo_fam_db.max_members == 5
+
+    # Verify Alice running /invite on newly upgraded Family Pro is now UNBLOCKED
+    mock_telegram.messages.clear()
+    app_client.post("/api/v1/telegram/webhook", json=telegram_payload_factory(text="/invite", user_id=alice_tg_id), headers=secret_header)
+    assert len(mock_telegram.messages) == 1
+    assert "join_" in mock_telegram.messages[0]["text"] or "invitación" in mock_telegram.messages[0]["text"].lower() or "invite" in mock_telegram.messages[0]["text"].lower()
+
+    # 5. Cancel Subscription via Webhook
+    cancel_data = {
+        "id": sub_id,
+        "customer_id": cust_id,
+        "status": "canceled"
+    }
+    raw_cancel, sig_cancel = paddle_webhook_factory("subscription.canceled", cancel_data, event_id=f"evt_term_{now_ts + 3}")
+    res = app_client.post("/api/v1/paddle/webhook", content=raw_cancel, headers={"Paddle-Signature": sig_cancel})
+    assert res.status_code == 200
+
+    with Session(e2e_test_engine) as session:
+        solo_fam_db = session.get(Family, solo_fam_id)
+        assert solo_fam_db.subscription_status == "canceled"
+        assert solo_fam_db.plan_type == "free"
+        assert solo_fam_db.max_members == 5
+

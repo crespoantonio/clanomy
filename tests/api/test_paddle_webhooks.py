@@ -537,3 +537,292 @@ def test_paddle_webhook_routine_renewal_does_not_resend_welcome_message(paddle_t
         assert res.status_code == 200
         # Routine renewal should NOT send any activation notification
         assert mock_send.call_count == 0
+
+
+def test_paddle_webhook_full_upgrade_downgrade_cancel_lifecycle(paddle_test_setup):
+    """
+    Comprehensive verification of the entire customer payment and tier lifecycle:
+    1. Initial State: Free tier family with Admin Alice and Member Bob.
+    2. Upgrade: Admin Alice upgrades to Solo Pro -> family becomes solo_pro (max 1 user).
+    3. Change: Upgrades to Family Pro -> family becomes family_pro (max 5 users), Bob is present.
+    4. Downgrade: Downgrades to Solo Pro with multiple members:
+       - Existing family stays Free (max 5 members).
+       - Oldest non-admin (Bob) is promoted to Admin of the Free family.
+       - Admin Alice is separated into a dedicated Solo Pro workspace (max 1 member) with Paddle sub attached.
+       - Alice's personal transactions are migrated to her new Solo workspace (zero crosstalk).
+    5. Upgrade Back: Alice upgrades her Solo workspace back to Family Pro -> becomes family_pro (max 5).
+    6. Scheduled Cancellation: Cancellation scheduled mid-period -> status active, action=cancel.
+    7. Terminal Cancellation: Subscription expires/canceled -> status canceled, plan reverts to free.
+    """
+    from unittest.mock import patch, AsyncMock
+    from src.db.models import User, Transaction
+
+    secret = paddle_test_setup
+    client = TestClient(app)
+
+    f1_id = uuid4()
+    alice_id = uuid4()
+    bob_id = uuid4()
+    t_alice_id = uuid4()
+    t_bob_id = uuid4()
+
+    # 1. Initial State: Free family with Alice (Admin) and Bob (Member)
+    with Session(engine) as session:
+        f1 = Family(
+            id=f1_id,
+            name="The Smiths",
+            plan_type="free",
+            subscription_status="active",
+            max_members=5
+        )
+        session.add(f1)
+        alice = User(
+            id=alice_id,
+            telegram_id=1111101,
+            family_id=f1_id,
+            is_admin=True,
+            full_name="Alice Smith",
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc)
+        )
+        session.add(alice)
+        bob = User(
+            id=bob_id,
+            telegram_id=2222202,
+            family_id=f1_id,
+            is_admin=False,
+            full_name="Bob Smith",
+            created_at=datetime(2026, 1, 2, tzinfo=timezone.utc)
+        )
+        session.add(bob)
+
+        # Add initial transactions
+        from src.core.encryption import EncryptionService
+        enc = EncryptionService()
+        t_alice = Transaction(
+            id=t_alice_id,
+            family_id=f1_id,
+            user_id=alice_id,
+            amount=enc.encrypt("50.00"),
+            concept=enc.encrypt("Groceries"),
+            category="Food/Drink"
+        )
+        t_bob = Transaction(
+            id=t_bob_id,
+            family_id=f1_id,
+            user_id=bob_id,
+            amount=enc.encrypt("25.00"),
+            concept=enc.encrypt("Cinema"),
+            category="Entertainment"
+        )
+        session.add(t_alice)
+        session.add(t_bob)
+        session.commit()
+
+    sub_id = "sub_lifecycle_999"
+    cust_id = "ctm_lifecycle_999"
+    now_ts = int(time.time())
+
+    with patch("src.services.telegram_service.TelegramService.send_message", new_callable=AsyncMock) as mock_tg:
+        # ---------------------------------------------------------------------
+        # Phase 1: Upgrade to Family Pro
+        # ---------------------------------------------------------------------
+        payload_upgrade_fam = {
+            "event_id": "evt_lc_001",
+            "event_type": "subscription.created",
+            "data": {
+                "id": sub_id,
+                "customer_id": cust_id,
+                "status": "active",
+                "custom_data": {"family_id": str(f1_id), "user_id": str(alice_id), "plan_code": "family_pro"},
+                "items": [{"price": {"id": "pri_family_pro_001"}}],
+                "current_billing_period": {"ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}
+            }
+        }
+        raw = json.dumps(payload_upgrade_fam)
+        res = client.post("/api/v1/paddle/webhook", content=raw, headers={"Paddle-Signature": _generate_paddle_signature(raw, secret, now_ts)})
+        assert res.status_code == 200
+
+        with Session(engine) as session:
+            f = session.get(Family, f1_id)
+            assert f.plan_type == "family_pro"
+            assert f.max_members == 5
+            assert f.paddle_subscription_id == sub_id
+            assert f.subscription_status == "active"
+
+        # ---------------------------------------------------------------------
+        # Phase 2: Downgrade from Family Pro to Solo Pro with Multiple Members
+        # ---------------------------------------------------------------------
+        payload_downgrade_solo = {
+            "event_id": "evt_lc_002",
+            "event_type": "subscription.updated",
+            "data": {
+                "id": sub_id,
+                "customer_id": cust_id,
+                "status": "active",
+                "custom_data": {"family_id": str(f1_id), "user_id": str(alice_id), "plan_code": "solo_pro"},
+                "items": [{"price": {"id": "pri_solo_pro_001"}}],
+                "current_billing_period": {"ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}
+            }
+        }
+        raw = json.dumps(payload_downgrade_solo)
+        res = client.post("/api/v1/paddle/webhook", content=raw, headers={"Paddle-Signature": _generate_paddle_signature(raw, secret, now_ts)})
+        assert res.status_code == 200
+
+        solo_fam_id = None
+        with Session(engine) as session:
+            # 1. Verify Existing Family (F1)
+            f1_db = session.get(Family, f1_id)
+            assert f1_db.plan_type == "free"
+            assert f1_db.max_members == 5
+            assert f1_db.paddle_subscription_id is None
+            assert f1_db.subscription_status == "active"
+
+            # Bob should now be the new Admin of F1
+            bob_db = session.get(User, bob_id)
+            assert bob_db.family_id == f1_id
+            assert bob_db.is_admin is True
+
+            # Bob's transaction remained in F1
+            t_bob_db = session.get(Transaction, t_bob_id)
+            assert t_bob_db.family_id == f1_id
+
+            # 2. Verify New Solo Family (Alice)
+            alice_db = session.get(User, alice_id)
+            assert alice_db.family_id != f1_id
+            assert alice_db.is_admin is True
+            solo_fam_id = alice_db.family_id
+
+            solo_fam = session.get(Family, solo_fam_id)
+            assert solo_fam.plan_type == "solo_pro"
+            assert solo_fam.max_members == 1
+            assert solo_fam.paddle_subscription_id == sub_id
+            assert solo_fam.paddle_customer_id == cust_id
+            assert solo_fam.subscription_status == "active"
+
+            # Alice's transaction was migrated to her new Solo workspace
+            t_alice_db = session.get(Transaction, t_alice_id)
+            assert t_alice_db.family_id == solo_fam_id
+
+        # ---------------------------------------------------------------------
+        # Phase 3: Upgrade Solo Workspace back to Family Pro
+        # ---------------------------------------------------------------------
+        payload_upgrade_back = {
+            "event_id": "evt_lc_003",
+            "event_type": "subscription.updated",
+            "data": {
+                "id": sub_id,
+                "customer_id": cust_id,
+                "status": "active",
+                "custom_data": {"family_id": str(solo_fam_id), "user_id": str(alice_id), "plan_code": "family_pro"},
+                "items": [{"price": {"id": "pri_family_pro_001"}}],
+                "current_billing_period": {"ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}
+            }
+        }
+        raw = json.dumps(payload_upgrade_back)
+        res = client.post("/api/v1/paddle/webhook", content=raw, headers={"Paddle-Signature": _generate_paddle_signature(raw, secret, now_ts)})
+        assert res.status_code == 200
+
+        with Session(engine) as session:
+            solo_fam_db = session.get(Family, solo_fam_id)
+            assert solo_fam_db.plan_type == "family_pro"
+            assert solo_fam_db.max_members == 5
+            assert solo_fam_db.subscription_status == "active"
+
+        # ---------------------------------------------------------------------
+        # Phase 4: Scheduled Cancellation mid-period
+        # ---------------------------------------------------------------------
+        cancel_effective = (datetime.now(timezone.utc) + timedelta(days=14)).isoformat()
+        payload_sched_cancel = {
+            "event_id": "evt_lc_004",
+            "event_type": "subscription.updated",
+            "data": {
+                "id": sub_id,
+                "customer_id": cust_id,
+                "status": "active",
+                "scheduled_change": {
+                    "action": "cancel",
+                    "effective_at": cancel_effective
+                }
+            }
+        }
+        raw = json.dumps(payload_sched_cancel)
+        res = client.post("/api/v1/paddle/webhook", content=raw, headers={"Paddle-Signature": _generate_paddle_signature(raw, secret, now_ts)})
+        assert res.status_code == 200
+
+        with Session(engine) as session:
+            solo_fam_db = session.get(Family, solo_fam_id)
+            assert solo_fam_db.subscription_status == "active"
+            assert solo_fam_db.scheduled_change_action == "cancel"
+            assert solo_fam_db.scheduled_change_effective_at is not None
+
+        # ---------------------------------------------------------------------
+        # Phase 5: Terminal Cancellation (Period Ends)
+        # ---------------------------------------------------------------------
+        payload_canceled = {
+            "event_id": "evt_lc_005",
+            "event_type": "subscription.canceled",
+            "data": {
+                "id": sub_id,
+                "status": "canceled"
+            }
+        }
+        raw = json.dumps(payload_canceled)
+        res = client.post("/api/v1/paddle/webhook", content=raw, headers={"Paddle-Signature": _generate_paddle_signature(raw, secret, now_ts)})
+        assert res.status_code == 200
+
+        with Session(engine) as session:
+            solo_fam_db = session.get(Family, solo_fam_id)
+            assert solo_fam_db.subscription_status == "canceled"
+            assert solo_fam_db.plan_type == "free"
+            assert solo_fam_db.max_members == 5
+            assert solo_fam_db.scheduled_change_action is None
+
+
+def test_paddle_webhook_portal_price_change_precedence(paddle_test_setup, monkeypatch):
+    """
+    Verify that when a user updates their plan in the Paddle Customer Portal,
+    items[0].price.id takes precedence over stale custom_data.plan_code.
+    """
+    secret = paddle_test_setup
+    client = TestClient(app)
+
+    configured_fam_price = "pri_live_family_pro_abc"
+    monkeypatch.setattr(settings, "PADDLE_PRICE_ID_FAMILY_PRO", configured_fam_price)
+
+    family_id = uuid4()
+    with Session(engine) as session:
+        family = Family(
+            id=family_id,
+            name="Portal Family",
+            plan_type="solo_pro",
+            max_members=1,
+            paddle_subscription_id="sub_portal_001"
+        )
+        session.add(family)
+        session.commit()
+
+    now_ts = int(time.time())
+    # Payload has stale plan_code "solo_pro" in custom_data, but new price_id for family_pro
+    payload = {
+        "event_id": "evt_portal_precedence_001",
+        "event_type": "subscription.updated",
+        "data": {
+            "id": "sub_portal_001",
+            "status": "active",
+            "custom_data": {"family_id": str(family_id), "plan_code": "solo_pro"},
+            "items": [{"price": {"id": configured_fam_price}}]
+        }
+    }
+    raw = json.dumps(payload)
+    sig = _generate_paddle_signature(raw, secret, now_ts)
+
+    res = client.post("/api/v1/paddle/webhook", content=raw, headers={"Paddle-Signature": sig})
+    assert res.status_code == 200
+
+    with Session(engine) as session:
+        updated = session.get(Family, family_id)
+        # Authoritative price_id updated workspace to family_pro despite stale custom_data
+        assert updated.plan_type == "family_pro"
+        assert updated.max_members == 5
+        assert updated.paddle_price_id == configured_fam_price
+

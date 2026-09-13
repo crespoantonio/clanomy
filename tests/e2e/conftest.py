@@ -10,15 +10,9 @@ from sqlalchemy.pool import StaticPool
 from src.core.config import settings
 settings.USER_COOLDOWN_SECONDS = 0.0
 
-from tests.api.conftest import (
-    test_engine as e2e_test_engine,
-    app,
-    mock_telegram,
-    telegram_payload_factory,
-    get_test_session,
-)
-
 import src.db.session
+from src.db.session import engine as e2e_test_engine
+from src.main import app
 import src.db.models
 
 @pytest.fixture(autouse=True)

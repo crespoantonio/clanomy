@@ -549,30 +549,35 @@ def test_split_family_on_downgrade(session: Session, family_service: FamilyServi
     session.commit()
 
     # Execute split
-    new_fam, non_admins = family_service.split_family_on_downgrade(family.id)
-    assert new_fam is not None
-    assert len(non_admins) == 2
-    assert new_fam.plan_type == "free"
+    solo_fam, free_fam, new_admin = family_service.split_family_on_downgrade(family.id, session=session)
+    assert solo_fam is not None
+    assert free_fam is not None
+    assert new_admin is not None
+    assert solo_fam.plan_type == "solo_pro"
+    assert solo_fam.max_members == 1
+    assert free_fam.plan_type == "free"
+    assert free_fam.max_members == 5
 
-    # Admin stays in original family
+    # Admin moved to new solo workspace
     session.refresh(admin)
-    assert admin.family_id == family.id
+    assert admin.family_id == solo_fam.id
+    assert admin.is_admin is True
 
-    # Non-admins moved to new family; m1 is the new admin
+    # Non-admins remain in existing family; m1 is appointed the new admin
     session.refresh(m1)
     session.refresh(m2)
-    assert m1.family_id == new_fam.id
+    assert m1.family_id == free_fam.id
     assert m1.is_admin is True
-    assert m2.family_id == new_fam.id
+    assert m2.family_id == free_fam.id
     assert m2.is_admin is False
 
     # Transactions correctly partitioned
     session.refresh(tx_admin)
     session.refresh(tx_m1)
     session.refresh(tx_m2)
-    assert tx_admin.family_id == family.id
-    assert tx_m1.family_id == new_fam.id
-    assert tx_m2.family_id == new_fam.id
+    assert tx_admin.family_id == solo_fam.id
+    assert tx_m1.family_id == free_fam.id
+    assert tx_m2.family_id == free_fam.id
 
 
 def test_graduate_member_to_new_workspace(session: Session, family_service: FamilyService):

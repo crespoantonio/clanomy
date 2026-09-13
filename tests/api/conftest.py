@@ -17,6 +17,7 @@ test_engine = create_engine(
 # Patch the engine globally before importing the app or routes
 import src.db.session
 src.db.session.engine = test_engine
+import src.db.models
 
 # Now we can safely import app
 from src.main import app

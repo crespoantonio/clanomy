@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Security
     ENCRYPTION_KEY: str
     TELEGRAM_BOT_TOKEN: str
-    TELEGRAM_BOT_USERNAME: Optional[str] = None
+    TELEGRAM_BOT_USERNAME: Optional[str] = "clanomy_bot"
     MESSAGING_WEBHOOK_SECRET: str
     CRON_SECRET: Optional[str] = None  # Secret header token required to invoke internal background jobs (e.g. via GCP Cloud Scheduler)
     ENABLE_INTERNAL_SCHEDULER: bool = False  # Set to True only if running without an external cron trigger (defaults to False)
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     CLOUDFLARE_ORIGIN_EXEMPT_PATHS: set[str] = {
         "/health",
         "/pay",
+        "/welcome",
         "/api/v1/telegram/webhook",
         "/api/v1/paddle/webhook",
         "/api/internal/jobs/trial-lifecycle",

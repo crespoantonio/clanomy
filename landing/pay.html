@@ -229,7 +229,7 @@
       <div class="icon-badge success">✓</div>
       <h1>Subscription Active! 🎉</h1>
       <p>Thank you for subscribing to Clanomy! Your workspace is upgraded with full unlimited features. You can return to Telegram now.</p>
-      <a id="btn-success-tg" href="https://t.me/{{ BOT_USERNAME }}" class="btn btn-primary">
+      <a id="btn-success-tg" href="https://t.me/clanomy_bot" class="btn btn-primary">
         🚀 Open Clanomy Bot
       </a>
     </div>
@@ -242,7 +242,7 @@
       <button id="btn-reopen" type="button" class="btn btn-primary">
         💳 Reopen Checkout
       </button>
-      <a id="btn-closed-tg" href="https://t.me/{{ BOT_USERNAME }}" class="btn btn-secondary">
+      <a id="btn-closed-tg" href="https://t.me/clanomy_bot" class="btn btn-secondary">
         Return to Telegram
       </a>
     </div>
@@ -252,7 +252,7 @@
       <div class="icon-badge info">⭐️</div>
       <h1>Clanomy Subscriptions</h1>
       <p>To upgrade your workspace or change your tier, open the Clanomy bot in Telegram and type <b>/upgrade</b>.</p>
-      <a id="btn-direct-tg" href="https://t.me/{{ BOT_USERNAME }}" class="btn btn-primary">
+      <a id="btn-direct-tg" href="https://t.me/clanomy_bot" class="btn btn-primary">
         Open Clanomy in Telegram
       </a>
     </div>
@@ -269,7 +269,7 @@
       const txnId = urlParams.get('_ptxn');
       const token = "{{ PADDLE_CLIENT_SIDE_TOKEN }}";
       const env = "{{ PADDLE_ENVIRONMENT }}";
-      const botUsername = "{{ BOT_USERNAME }}";
+      const botUsername = "clanomy_bot";
 
       const stateLoading = document.getElementById('state-loading');
       const stateSuccess = document.getElementById('state-success');
@@ -312,7 +312,9 @@
           settings: {
             displayMode: 'overlay',
             theme: 'dark',
-            locale: 'en'
+            locale: 'en',
+            variant: 'one-page',
+            successUrl: `${window.location.origin}/welcome`
           }
         });
 
@@ -324,7 +326,9 @@
               settings: {
                 displayMode: 'overlay',
                 theme: 'dark',
-                locale: 'en'
+                locale: 'en',
+                variant: 'one-page',
+                successUrl: `${window.location.origin}/welcome`
               }
             });
           });

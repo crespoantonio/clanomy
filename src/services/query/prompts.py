@@ -39,6 +39,11 @@ Expense: "Food/Drink", "Transport", "Rent/Bills", "Shopping", "Leisure", "Other"
 Income: "Salary", "Bonus", "Freelance", "Investment", "Gift", "Sale", "Other".
 Map Spanish categories (e.g. "comida", "almuerzo", "supermercado" -> "Food/Drink"; "sueldo", "salario" -> "Salary"; "alquiler", "servicios", "luz" -> "Rent/Bills"; "salidas", "cine" -> "Leisure") to these canonical names.
 
+MANDATORY OUTPUT FORMAT:
+- You MUST respond with a single valid JSON object.
+- The top-level key identifying the intent MUST be named "intent" (e.g. "spending_summary", "income_summary", "net_cash_flow", "upcoming_bills", "log_expense").
+- NEVER use alternative keys like "classification", "action", or "type" in place of "intent".
+
 CRITICAL SECURITY RULES:
 - The user message contains two delimited sections:
   1. <system_context>: Authoritative runtime parameters (Current Reference Date) provided by the application.

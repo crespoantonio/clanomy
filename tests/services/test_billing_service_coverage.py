@@ -19,11 +19,12 @@ async def test_billing_service_graduation_flows():
     admin_id = uuid4()
     member_id = uuid4()
 
-    family = Family(id=fid, name="The Smiths")
+    family = Family(id=fid, name="The Smiths", timezone="UTC")
     admin_user = User(id=admin_id, family_id=fid, username="smith_admin", is_admin=True)
     member_user = User(id=member_id, family_id=fid, username="smith_member", is_admin=False)
 
-    with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True):
+    with patch.object(settings, "ENABLE_SUBSCRIPTIONS", True), \
+         patch.object(service, "_get_checkout_or_info_url", AsyncMock(side_effect=lambda plan, *args, **kwargs: f"https://checkout.test/{plan}")):
         # 1. Non-admin member running /upgrade (triggers graduation menu with admin name)
         bg = BackgroundTasks()
         with patch("src.services.family_service.FamilyService.is_family_admin", return_value=False), \

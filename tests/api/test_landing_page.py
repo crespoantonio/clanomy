@@ -117,4 +117,30 @@ def test_all_html_data_i18n_keys_exist_in_translations():
     assert not missing_in_en, f"HTML keys missing in translations.js EN: {missing_in_en}"
     assert not missing_in_es, f"HTML keys missing in translations.js ES: {missing_in_es}"
 
+def test_welcome_page_serves_html():
+    client = TestClient(app)
+    response = client.get("/welcome")
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    content = response.text
+    assert "Subscription Active" in content
+    assert "Back to Telegram" in content
+    assert "Paddle Merchant of Record" in content
+    assert "https://t.me/" in content
+    # Ensure no extra parameters on the redirect button
+    assert "t.me/" in content and "?start=" not in content
+
+def test_landing_page_pricing_links_and_elements():
+    client = TestClient(app)
+    response = client.get("/landing")
+    assert response.status_code == 200
+    content = response.text
+    assert 'data-i18n="solo.btn"' in content
+    assert 'data-i18n="duo.btn"' in content
+    assert 'data-i18n="family.btn"' in content
+    assert "https://t.me/" in content
+    # Subscriptions are handled in Telegram, no web subscribe buttons
+    assert "btn-subscribe" not in content
+
+
 

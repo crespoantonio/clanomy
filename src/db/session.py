@@ -4,7 +4,8 @@ from sqlmodel import create_engine, Session, SQLModel
 from alembic.config import Config
 from alembic import command
 from src.core.config import settings
-from src.db.models import Family, User, Transaction, FamilyInvite  # Ensure models are registered
+from src.db.models import Family, User, Transaction, FamilyInvite, ScheduledBill, ProcessedWebhook  # Ensure models are registered
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,10 @@ if not settings.DATABASE_URL.startswith("sqlite"):
         "pool_timeout": 30.0,
     })
 else:
+    from sqlalchemy.pool import StaticPool
     engine_kwargs.update({
-        "connect_args": {"check_same_thread": False}
+        "connect_args": {"check_same_thread": False},
+        "poolclass": StaticPool,
     })
 
 engine = create_engine(settings.DATABASE_URL, **engine_kwargs)

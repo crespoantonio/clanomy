@@ -38,15 +38,36 @@ async def test_handle_family_info():
             ],
             "plan_type": "family_pro",
             "monthly_tx_count": 12,
+            "daily_tx_count": 5,
+            "daily_limit": 300,
             "transactions_count": 45,
             "active_invites_count": 1,
         }
 
-        res = await handle_family_info(user_uuid)
-        assert "Smith Family" in res
-        assert "Alice Smith" in res
-        assert "Bob Smith" in res
-        assert "Family Pro" in res
+        # English - Paid plan communicates daily limit
+        res_en = await handle_family_info(user_uuid, is_spanish=False)
+        assert "Smith Family" in res_en
+        assert "Alice Smith" in res_en
+        assert "Bob Smith" in res_en
+        assert "Family Pro" in res_en
+        assert "AI Logs:" in res_en
+        assert "5 / 300 today (daily limit)" in res_en
+
+        # Spanish - Paid plan communicates daily limit
+        res_es = await handle_family_info(user_uuid, is_spanish=True)
+        assert "Smith Family" in res_es
+        assert "Registros de IA:" in res_es
+        assert "5 / 300 hoy (límite diario)" in res_es
+
+        # Free tier communicates monthly limit
+        mock_instance.get_family_info.return_value["plan_type"] = "free"
+        res_free_es = await handle_family_info(user_uuid, is_spanish=True)
+        assert "Gratuito" in res_free_es
+        assert "12 / 20 este mes" in res_free_es
+
+        res_free_en = await handle_family_info(user_uuid, is_spanish=False)
+        assert "Free" in res_free_en
+        assert "12 / 20 this month" in res_free_en
 
 
 @pytest.mark.anyio

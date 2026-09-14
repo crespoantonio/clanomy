@@ -1389,4 +1389,68 @@ So that we can benchmark LLM providers and detect extraction regressions.
 **When** executed against a configured LLM provider
 **Then** it benchmarks accuracy across expenses, incomes, multi-currency inputs, and compound batches, reporting overall pass rates and token latency.
 
+---
+
+## Epic 23: Paddle Merchant of Record Billing Integration & Household Governance
+
+Integrate Paddle Billing as Merchant of Record for global compliance, providing transaction-based hosted checkouts with custom data binding, cryptographic webhook verification with persistent deduplication, dynamic self-service customer portal sessions, sovereign non-admin member graduation, and a secure checkout web UI.
+
+### Story 23.1: Paddle Billing Database Schema & Idempotency Ledger
+As a Database Engineer,
+I want the database schema to store Paddle identifiers, scheduled cancellation changes, and a processed webhook ledger,
+So that subscriptions are accurately mapped and retry webhooks never cause duplicate state mutations.
+
+**Acceptance Criteria:**
+**Given** Alembic migration `0013_paddle_subscriptions.py`
+**When** applied via `alembic upgrade head`
+**Then** `family` table is extended with `paddle_customer_id`, `paddle_subscription_id`, `paddle_price_id`, `scheduled_change_action`, and `scheduled_change_effective_at`.
+**And** the `processed_webhook` table is created with primary key `event_id` and Row Level Security enabled on PostgreSQL.
+
+### Story 23.2: Paddle Billing Service & Transaction Checkout Generation
+As an Admin User,
+I want to execute `/upgrade` commands in Telegram and receive direct Paddle checkout links for Solo Pro, Duo Pro, or Family Pro,
+So that I can easily subscribe with localized payment methods (Apple Pay, cards, PayPal).
+
+**Acceptance Criteria:**
+**Given** `PaddleService.create_checkout_url()` and `BillingService.handle_upgrade_command()`
+**When** a user types `/upgrade`, `/upgrade duo`, or `/upgrade annual`
+**Then** the service creates a transaction via `POST https://api.paddle.com/transactions` with `custom_data = {"family_id": ..., "user_id": ..., "plan_code": ...}` and returns a checkout URL.
+**And** fallback to friendly in-progress messaging occurs gracefully if Paddle is unconfigured or unreachable.
+
+### Story 23.3: Cryptographic Paddle Webhook Verification & Subscription Lifecycle
+As a System Architect,
+I want inbound Paddle webhook notifications cryptographically verified and processed with idempotency,
+So that subscriptions are activated, updated, or canceled without replay attacks or duplicate processing.
+
+**Acceptance Criteria:**
+**Given** `POST /api/v1/paddle/webhook` receiving a Paddle event
+**When** the request arrives with header `Paddle-Signature`
+**Then** the endpoint cryptographically validates HMAC-SHA256 signature and rejects timestamp drift >5 seconds with HTTP 401.
+**And** if `event_id` exists in `processed_webhook`, it returns 200 OK with `duplicate: True`.
+**And** on `subscription.created` or `subscription.updated`, the family's `plan_type`, `subscription_status`, `max_members`, and `current_period_end` are updated, and the paying admin receives a confirmation notice.
+**And** on `subscription.canceled` or scheduled cancellation, a localized notice is broadcast to all family members.
+
+### Story 23.4: Customer Portal & Non-Admin Member Graduation Workflow
+As a Family Member,
+I want to upgrade to my own subscription independently from my current family,
+So that I can launch my own household workspace as an Admin while preserving my personal transaction history.
+
+**Acceptance Criteria:**
+**Given** a non-admin member executing `/upgrade` or completing checkout
+**When** the webhook or graduation service processes the upgrade
+**Then** `FamilyService.graduate_member_to_new_workspace()` creates a new workspace, promotes the user to Admin, and re-points all their personal transactions to the new workspace ID while leaving the host family intact.
+**And** administrators typing `/billing` receive a temporary authenticated Customer Portal link via `POST /customers/{id}/portal-sessions`.
+
+### Story 23.5: Public Checkout Web Route & Telegram Deep Linking
+As a Web Visitor or Telegram User,
+I want to visit `/pay?_ptxn=<transaction_id>` to open a secure Paddle checkout overlay,
+So that I can complete payment securely on the web with immediate redirection back to Telegram.
+
+**Acceptance Criteria:**
+**Given** FastAPI route `GET /pay`
+**When** accessed with `ENABLE_SUBSCRIPTIONS=true`
+**Then** it renders `landing/pay.html` with Paddle.js v2, initializing the overlay with dark theme and token configuration.
+**And** returns HTTP 404 when `ENABLE_SUBSCRIPTIONS=false` (self-hosted mode).
+**And** Telegram `/start upgrade_<tier>` deep links route directly to the billing upgrade handler.
+
 

@@ -43,7 +43,9 @@ jobs:
             "^src/core/subscription_config\.py$"
             "^src/services/subscription_service\.py$"
             "^src/services/billing/"
+            "^src/api/routes/paddle\.py$"
             "^src/api/routes/lemonsqueezy\.py$"
+            "^alembic/versions/.*paddle.*"
             "^alembic/versions/.*lemonsqueezy.*"
 
             # Trial Expiration & Internal Jobs
@@ -56,6 +58,9 @@ jobs:
             "^src/api/routes/simulate\.py$"
 
             # Sensitive Test Suites & Evaluation Harness
+            "^tests/api/test_paddle_webhooks\.py$"
+            "^tests/services/test_paddle_service\.py$"
+            "^tests/services/test_billing_service\.py$"
             "^tests/services/test_lemonsqueezy_billing\.py$"
             "^tests/services/test_subscription_service\.py$"
             "^tests/services/test_three_tier_pricing\.py$"

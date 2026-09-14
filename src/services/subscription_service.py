@@ -22,7 +22,7 @@ ALLOWED_PAID_PLANS: Dict[str, str] = {
 }
 
 VALID_PLAN_TYPES: Set[str] = {"free", "trial", "solo_pro", "duo_pro", "family_pro", "lifetime_pro"}
-VALID_SUBSCRIPTION_STATUSES: Set[str] = {"active", "cancelled", "expired"}
+VALID_SUBSCRIPTION_STATUSES: Set[str] = {"active", "cancelled", "canceled", "expired", "past_due", "paused"}
 
 def _compare_datetimes(target_dt: Optional[datetime], current_dt: datetime) -> bool:
     """Helper to safely compare tz-aware or naive datetimes."""
@@ -47,8 +47,9 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
     - If ENABLE_SUBSCRIPTIONS is False (Self-Hosted mode): always returns True.
     - For active lifetime_pro, solo_pro, duo_pro, family_pro: unlimited access.
     - For active trial workspaces: verifies that trial_ends_at has not expired.
-    - For cancelled subscriptions: retains Pro access until current_period_end.
-    - For expired or free subscriptions: no unlimited access.
+    - For cancelled/canceled subscriptions: retains Pro access until current_period_end.
+    - For past_due subscriptions: retains Pro access during dunning grace window (72h).
+    - For paused, expired or free subscriptions: no unlimited access.
     """
     if not settings.ENABLE_SUBSCRIPTIONS:
         return True
@@ -56,13 +57,23 @@ def has_unlimited_access(family: Family, now: Optional[datetime] = None) -> bool
     current_time = now or datetime.now(timezone.utc)
 
     # Cancelled subscriptions retain Pro access until their paid current_period_end
-    if family.subscription_status == "cancelled":
+    if family.subscription_status in ("cancelled", "canceled"):
         if family.plan_type in ("solo_pro", "duo_pro", "family_pro", "lifetime_pro") and family.current_period_end is not None:
             return _compare_datetimes(family.current_period_end, current_time)
         return False
 
+    # Past-due dunning state retains grace access
+    if family.subscription_status == "past_due":
+        if family.plan_type in ("solo_pro", "duo_pro", "family_pro", "lifetime_pro"):
+            if family.current_period_end is not None:
+                grace_period_end = family.current_period_end + timedelta(hours=72)
+                return _compare_datetimes(grace_period_end, current_time)
+            return True
+        return False
+
     if family.subscription_status != "active":
         return False
+
 
     if family.plan_type == "lifetime_pro":
         return True

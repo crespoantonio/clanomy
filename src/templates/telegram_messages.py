@@ -85,6 +85,17 @@ DAILY_LIMIT_REACHED_MESSAGE = (
     "All limits reset to zero daily at <b>10:00 UTC</b>."
 )
 
+
+def format_daily_limit_reached(limit: int, is_spanish: bool = False) -> str:
+    """Localized fair-use daily message quota exhaustion notice."""
+    if is_spanish:
+        return (
+            "⚠️ <b>Límite Diario Alcanzado</b>\n\n"
+            f"Tu espacio ha alcanzado el límite de uso justo de <b>{limit} mensajes</b> para hoy.\n\n"
+            "Todos los límites se reinician a cero diariamente a las <b>10:00 UTC</b>."
+        )
+    return DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit)
+
 LIFETIME_PRO_CONFIRMATION = (
     "⭐️ <b>Clanomy Lifetime Pro Active</b>\n\n"
     "You have unlocked permanent Lifetime Pro access to Clanomy. Enjoy unlimited voice and text logging forever!"
@@ -216,9 +227,13 @@ def format_free_tier_exceeded(monthly_tx_count: int) -> str:
     )
 
 
-def format_welcome_message(user: User, family: Optional[Family], from_user: dict) -> str:
+def format_welcome_message(user: User, family: Optional[Family], from_user: dict, is_spanish: bool = False) -> str:
     plan_badge = ""
-    command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for the fastest responses!"
+    command_bullet = (
+        "• ⚡ <b>Comandos Instantáneos:</b> Escribe /month, /me, /today, /bills, o /balance para respuestas inmediatas!"
+        if is_spanish else
+        "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for the fastest responses!"
+    )
 
     if family:
         if family.plan_type == "trial":
@@ -227,36 +242,89 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
                 now_utc = datetime.now(timezone.utc)
                 trial_end = family.trial_ends_at if family.trial_ends_at.tzinfo else family.trial_ends_at.replace(tzinfo=timezone.utc)
                 days_left = max(0, (trial_end - now_utc).days)
-            plan_badge = f"⭐️ <b>60-Day Duo Pro Trial:</b> {days_left} days remaining of shared logs (60/day pool for 2 partners) &amp; Notion sync!\n\n"
-            command_bullet = "• ⚡ <b>Instant Commands:</b> Type /month, /me, /today, /bills, or /balance for the fastest responses!"
+            if is_spanish:
+                plan_badge = f"⭐️ <b>Prueba Duo Pro (60 días):</b> {days_left} días restantes de registros compartidos (pool de 60/día para 2 integrantes) y Notion!\n\n"
+            else:
+                plan_badge = f"⭐️ <b>60-Day Duo Pro Trial:</b> {days_left} days remaining of shared logs (60/day pool for 2 partners) &amp; Notion sync!\n\n"
         elif family.plan_type == "free":
             used = getattr(family, "monthly_tx_count", 0)
-            plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/20 AI logs used this month).\n\n"
-            command_bullet = "• ⚡ <b>Unlimited Free Commands:</b> Type /month, /me, /today, /bills, or /balance anytime — they are 100% free and don't count against your 20 monthly AI logs!"
+            if is_spanish:
+                plan_badge = f"📦 <b>Plan:</b> Gratuito ({used}/20 registros con IA usados este mes).\n\n"
+                command_bullet = "• ⚡ <b>Comandos Gratuitos Ilimitados:</b> Escribe /month, /me, /today, /bills, o /balance en cualquier momento — ¡son 100% gratuitos y no consumen tus 20 registros mensuales de IA!"
+            else:
+                plan_badge = f"📦 <b>Plan:</b> Free Plan ({used}/20 AI logs used this month).\n\n"
+                command_bullet = "• ⚡ <b>Unlimited Free Commands:</b> Type /month, /me, /today, /bills, or /balance anytime — they are 100% free and don't count against your 20 monthly AI logs!"
         elif family.plan_type == "solo_pro":
-            plan_badge = "⭐️ <b>Plan:</b> Solo Pro (Active — Unlimited text &amp; voice logs, personal workspace).\n\n"
+            plan_badge = (
+                "⭐️ <b>Plan:</b> Solo Pro (Activo — 60 registros diarios con IA, espacio personal).\n\n"
+                if is_spanish else
+                "⭐️ <b>Plan:</b> Solo Pro (Active — 60 daily AI logs, personal workspace).\n\n"
+            )
         elif family.plan_type == "duo_pro":
-            plan_badge = "👫 <b>Plan:</b> Duo Pro (Active — Unlimited text &amp; voice logs, shared ledger for 2 partners).\n\n"
+            plan_badge = (
+                "👫 <b>Plan:</b> Duo Pro (Activo — 120 registros diarios con IA, registro compartido para 2 integrantes).\n\n"
+                if is_spanish else
+                "👫 <b>Plan:</b> Duo Pro (Active — 120 daily AI logs, shared ledger for 2 partners).\n\n"
+            )
         elif family.plan_type == "family_pro":
-            plan_badge = "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — Unlimited text &amp; voice logs, shared family ledger &amp; Notion sync).\n\n"
+            plan_badge = (
+                "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Activo — 300 registros diarios con IA, registro familiar compartido y sincronización con Notion).\n\n"
+                if is_spanish else
+                "👨‍👩‍👧‍👦 <b>Plan:</b> Family Pro (Active — 300 daily AI logs, shared family ledger &amp; Notion sync).\n\n"
+            )
         elif family.plan_type == "lifetime_pro":
-            plan_badge = "👑 <b>Plan:</b> Lifetime Pro (Permanent active status).\n\n"
+            plan_badge = (
+                "👑 <b>Plan:</b> Lifetime Pro (Estado activo permanente — 40 registros diarios con IA).\n\n"
+                if is_spanish else
+                "👑 <b>Plan:</b> Lifetime Pro (Permanent active status — 40 daily AI logs).\n\n"
+            )
 
     raw_user_name = user.full_name or from_user.get("first_name") or "User"
     user_display_name = html.escape(raw_user_name, quote=False)
     project_name = html.escape(getattr(settings, "PROJECT_NAME", "Clanomy"), quote=False)
     tz_name = html.escape(str(getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")), quote=False)
 
-    teamwork_bullet = "👥 <i>Teamwork: Use /invite to add your partner or household members.</i>"
+    teamwork_bullet = (
+        "👥 <i>Trabajo en equipo: Usa /invite para agregar a tu pareja o integrantes de tu hogar.</i>"
+        if is_spanish else
+        "👥 <i>Teamwork: Use /invite to add your partner or household members.</i>"
+    )
     if family:
         if family.plan_type in ("trial", "duo_pro"):
-            teamwork_bullet = "👥 <i>Teamwork: Use /invite to add your partner (or upgrade to Family Pro for up to 5 members).</i>"
+            teamwork_bullet = (
+                "👥 <i>Trabajo en equipo: Usa /invite para agregar a tu pareja (o mejora a Family Pro para hasta 5 miembros).</i>"
+                if is_spanish else
+                "👥 <i>Teamwork: Use /invite to add your partner (or upgrade to Family Pro for up to 5 members).</i>"
+            )
         elif family.plan_type == "solo_pro":
-            teamwork_bullet = "👥 <i>Teamwork: Solo Pro is for 1 user. Upgrade to Duo Pro or Family Pro with /upgrade to invite members.</i>"
+            teamwork_bullet = (
+                "👥 <i>Trabajo en equipo: Solo Pro es para 1 usuario. Mejora a Duo Pro o Family Pro con /upgrade para invitar miembros.</i>"
+                if is_spanish else
+                "👥 <i>Teamwork: Solo Pro is for 1 user. Upgrade to Duo Pro or Family Pro with /upgrade to invite members.</i>"
+            )
 
-    return (
+    greeting = (
+        f"👋 <b>¡Bienvenido a {project_name}, {user_display_name}!</b>\n\n"
+        if is_spanish else
         f"👋 <b>Welcome to {project_name}, {user_display_name}!</b>\n\n"
-        f"{plan_badge}"
+    )
+
+    body = (
+        "<b>Cómo funciona Clanomy:</b>\n"
+        "• 🎙️ <b>Voz y Texto Natural:</b> Registra gastos o ingresos en español o inglés cuando quieras (<i>\"Café 4\"</i>, <i>\"Gasté 35 en cena\"</i>, <i>\"Cobré 3500 de sueldo\"</i>).\n"
+        f"{command_bullet}\n"
+        "• ↩️ <b>¿Te equivocaste?</b> Escribe /undo en cualquier momento para deshacer tu último registro.\n\n"
+        "💡 <b>Configuración Rápida:</b>\n"
+        "• 💵 <b>Moneda:</b> Elige la moneda de tu hogar con /currency\n"
+        f"• 🌐 <b>Zona Horaria:</b> Configurada en <b>{tz_name}</b>. Calíbrala con /timezone o compartiendo tu ubicación (📎 ➔ Ubicación).\n\n"
+        "<b>Prueba enviándome algo ahora mismo:</b>\n"
+        "• 🎙️ <i>Envía un audio:</i> \"Café 4\"\n"
+        "• 💬 <i>Escribe un gasto:</i> \"Gasté 45 en compras\" o \"45 cena\"\n"
+        "• 💰 <i>Escribe un ingreso:</i> \"Cobré 3000 sueldo\"\n"
+        "• 📊 <i>Haz una pregunta:</i> \"¿Cuánto gastamos este mes?\"\n\n"
+        f"{teamwork_bullet}\n"
+        "Escribe /help para ver comandos, /privacy para privacidad, o /export para descargar tus datos."
+    ) if is_spanish else (
         "<b>How Clanomy Works:</b>\n"
         "• 🎙️ <b>Natural Voice &amp; Text:</b> Log expenses or income in English or Spanish anytime (<i>\"Coffee 4\"</i>, <i>\"Gasté 35 en cena\"</i>, <i>\"Earned 3,500 salary\"</i>).\n"
         f"{command_bullet}\n"
@@ -271,6 +339,12 @@ def format_welcome_message(user: User, family: Optional[Family], from_user: dict
         "• 📊 <i>Ask a question:</i> \"How much did we spend this month?\"\n\n"
         f"{teamwork_bullet}\n"
         "Type /help anytime for commands, /privacy for data rights, or /export to download your data."
+    )
+
+    return (
+        f"{greeting}"
+        f"{plan_badge}"
+        f"{body}"
         f"{AI_DISCLAIMER_FOOTER}"
         f"{TELEGRAM_NON_AFFILIATION_DISCLAIMER}"
     )
@@ -318,17 +392,148 @@ def format_leave_family_member_prompt(family_name: str, admin_name: str) -> str:
     )
 
 
-def format_non_admin_upgrade_intro(family_name: str, admin_name: str) -> str:
+def format_date_localized(dt: datetime, is_spanish: bool = False) -> str:
+    """Formats a datetime into a friendly localized date string without relying on system C locale."""
+    months_en = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    months_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    day = dt.day
+    year = dt.year
+    month_idx = max(0, min(11, dt.month - 1))
+    if is_spanish:
+        return f"{day} de {months_es[month_idx]} de {year}"
+    return f"{months_en[month_idx]} {day}, {year}"
+
+
+def is_family_spanish(family: Optional[Any], session: Optional[Any] = None) -> bool:
+    """
+    Infers whether a family primarily communicates in Spanish based on:
+    1. Family timezone (e.g., America/Argentina, America/Santiago, America/Bogota, etc.)
+    2. Family default currency (e.g., ARS, CLP, COP, MXN, PEN, UYU)
+    Defaults to False (English).
+    """
+    if not family:
+        return False
+    tz = (getattr(family, "timezone", None) or "").lower()
+    spanish_tz_prefixes = (
+        "america/argentina", "america/santiago", "america/bogota", "america/caracas",
+        "america/lima", "america/la_paz", "america/asuncion", "america/montevideo",
+        "america/mexico_city", "america/guatemala", "america/costa_rica", "america/panama",
+        "europe/madrid"
+    )
+    if any(tz.startswith(p) for p in spanish_tz_prefixes):
+        return True
+    curr = (getattr(family, "default_currency", None) or "").upper()
+    if curr in ("ARS", "CLP", "COP", "MXN", "PEN", "UYU", "BOB", "PYG"):
+        return True
+    return False
+
+
+def format_non_admin_upgrade_intro(family_name: str, admin_name: str, is_spanish: bool = False) -> str:
     escaped_family = html.escape(family_name, quote=False)
     escaped_admin = html.escape(admin_name, quote=False)
+    if is_spanish:
+        return (
+            f"⭐️ <b>Crea tu propia familia independiente</b>\n\n"
+            f"Actualmente eres miembro de <b>{escaped_family}</b> (administrada por {escaped_admin}).\n\n"
+            "⚠️ <b>Aviso importante:</b> Solo puedes tener acceso a <b>una sola familia a la vez</b>. Al mejorar tu plan, "
+            f"saldrás de <b>{escaped_family}</b> y comenzarás tu propia familia como Administrador/a. "
+            "<b>Todo tu historial personal de transacciones se migrará contigo</b> automáticamente:\n\n"
+            "1️⃣ <b>Solo Pro ($4.99 / mes)</b> — Registro personal ilimitado y Notion privado (1 Usuario).\n\n"
+            "2️⃣ <b>Duo Pro ($7.99 / mes) ⭐</b> — Espacio compartido para ti y tu pareja (2 Miembros).\n\n"
+            "3️⃣ <b>Family Pro ($11.99 / mes)</b> — Tu propia familia de hasta 5 miembros con registro compartido.\n\n"
+            "<i>Toca un botón abajo para elegir tu plan y comenzar tu propia familia:</i>"
+        )
     return (
-        f"⭐️ <b>Upgrade to Your Own Sovereign Workspace</b>\n\n"
+        f"⭐️ <b>Start Your Own Independent Family Workspace</b>\n\n"
         f"You are currently a member of <b>{escaped_family}</b> (managed by {escaped_admin}).\n\n"
-        "Upgrading will create your own independent workspace and <b>migrate all your personal transaction history with you</b>, without disrupting the current family group:\n\n"
+        "⚠️ <b>Important Notice:</b> You can only have access to <b>one family workspace at a time</b>. Upgrading will "
+        f"transition you out of <b>{escaped_family}</b> and start your own separate family workspace as Admin. "
+        "<b>All your personal transaction history will migrate with you</b> seamlessly:\n\n"
         "1️⃣ <b>Solo Pro ($4.99 / mo)</b> — Unlimited personal AI logging &amp; private Notion sync (1 User).\n\n"
-        "2️⃣ <b>Duo Pro ($7.99 / mo)</b> — Shared workspace for you and your partner (2 Members).\n\n"
+        "2️⃣ <b>Duo Pro ($7.99 / mo) ⭐</b> — Shared workspace for you and your partner (2 Members).\n\n"
         "3️⃣ <b>Family Pro ($11.99 / mo)</b> — Start your own family workspace for up to 5 members.\n\n"
         "<i>Tap a button below to choose your plan and launch your new workspace:</i>"
+    )
+
+
+def format_subscription_activated_message(
+    tier_name: str,
+    interval: str = "month",
+    period_end: Optional[datetime] = None,
+    is_spanish: bool = False
+) -> str:
+    """Sent ONLY to the paying user/admin upon successful checkout or tier upgrade."""
+    escaped_tier = html.escape(tier_name, quote=False)
+    cadence_str = "anual" if "year" in interval.lower() or "annual" in interval.lower() else "mensual"
+    cadence_en = "yearly" if "year" in interval.lower() or "annual" in interval.lower() else "monthly"
+
+    end_str = ""
+    if period_end:
+        date_formatted = format_date_localized(period_end, is_spanish=is_spanish)
+        if is_spanish:
+            end_str = f"• <b>Próxima fecha de renovación:</b> {date_formatted}\n"
+        else:
+            end_str = f"• <b>Next renewal date:</b> {date_formatted}\n"
+
+    if is_spanish:
+        return (
+            f"🎉 <b>¡Suscripción Confirmada! Bienvenido a {escaped_tier}</b>\n\n"
+            f"Tu pago se ha procesado con éxito y tu espacio familiar ya cuenta con <b>{escaped_tier}</b> activo.\n\n"
+            f"📋 <b>Detalles de tu suscripción:</b>\n"
+            f"• <b>Plan:</b> {escaped_tier}\n"
+            f"• <b>Facturación:</b> Cobro automático {cadence_str}\n"
+            f"{end_str}"
+            f"• <b>Cancelación:</b> Puedes cancelar en cualquier momento desde /billing.\n\n"
+            f"¡Ya tienes acceso a todas las funcionalidades premium! 🚀"
+        )
+    return (
+        f"🎉 <b>Subscription Confirmed! Welcome to {escaped_tier}</b>\n\n"
+        f"Your payment was successful and your family workspace is now active on <b>{escaped_tier}</b>.\n\n"
+        f"📋 <b>Subscription Details:</b>\n"
+        f"• <b>Plan:</b> {escaped_tier}\n"
+        f"• <b>Billing:</b> Auto-renews {cadence_en}\n"
+        f"{end_str}"
+        f"• <b>Cancel Anytime:</b> You can cancel anytime directly via /billing.\n\n"
+        f"You are all set with full premium access! 🚀"
+    )
+
+
+def format_subscription_canceled_message(
+    tier_name: str,
+    effective_end: Optional[datetime] = None,
+    is_spanish: bool = False
+) -> str:
+    """Broadcast to ALL family members when a subscription cancellation is confirmed."""
+    escaped_tier = html.escape(tier_name, quote=False)
+
+    if effective_end:
+        end_date_str = format_date_localized(effective_end, is_spanish=is_spanish)
+        last_day_en = f"You will continue to have full access to <b>{escaped_tier}</b> until <b>{end_date_str}</b> (the end of your current billing period)."
+        last_day_es = f"Seguirán teniendo acceso completo a <b>{escaped_tier}</b> hasta el <b>{end_date_str}</b> (fin del período de facturación actual)."
+    else:
+        last_day_en = f"Your access to <b>{escaped_tier}</b> has ended."
+        last_day_es = f"El acceso a <b>{escaped_tier}</b> ha finalizado."
+
+    if is_spanish:
+        return (
+            f"ℹ️ <b>Cancelación de Suscripción Confirmada</b>\n\n"
+            f"Se ha procesado la cancelación de la suscripción a <b>{escaped_tier}</b> para su espacio familiar.\n\n"
+            f"📅 <b>Período de acceso:</b>\n"
+            f"{last_day_es}\n\n"
+            f"📉 <b>Próximo plan (Gratuito):</b>\n"
+            f"Luego de esa fecha, su espacio pasará al plan <b>Free</b> con un límite de <b>{FREE_TIER_MONTHLY_LIMIT} transacciones por mes</b> (hasta 5 miembros). "
+            f"Todo su historial de gastos e información permanece 100% seguro y guardado.\n\n"
+            f"💡 <i>Pueden volver a suscribirse a Premium en cualquier momento enviando /upgrade.</i>"
+        )
+    return (
+        f"ℹ️ <b>Subscription Cancellation Confirmed</b>\n\n"
+        f"The subscription for <b>{escaped_tier}</b> has been cancelled for your family workspace.\n\n"
+        f"📅 <b>Access Period:</b>\n"
+        f"{last_day_en}\n\n"
+        f"📉 <b>Upcoming Plan (Free):</b>\n"
+        f"After that date, your workspace will move to the <b>Free</b> plan with a limit of <b>{FREE_TIER_MONTHLY_LIMIT} transactions per month</b> (up to 5 members). "
+        f"All your transaction history and data remain completely safe and intact.\n\n"
+        f"💡 <i>You can resubscribe to Premium anytime by typing /upgrade.</i>"
     )
 
 
@@ -1095,7 +1300,7 @@ def format_family_info_text(
         return (
             f"👪 <b>Espacio Familiar: {safe_name}</b>\n"
             f"📋 <b>Plan:</b> {plan_desc}\n"
-            f"📊 <b>Registros de IA este mes:</b> {tx_info}\n\n"
+            f"📊 <b>Registros de IA:</b> {tx_info}\n\n"
             f"<b>Integrantes:</b>\n{members_formatted}\n\n"
             f"<b>Total de Transacciones:</b> {tx_count}\n"
             f"<b>Invitaciones Activas:</b> {invite_count}"
@@ -1103,7 +1308,7 @@ def format_family_info_text(
     return (
         f"👪 <b>Family Workspace: {safe_name}</b>\n"
         f"📋 <b>Plan:</b> {plan_desc}\n"
-        f"📊 <b>Monthly AI Logs:</b> {tx_info}\n\n"
+        f"📊 <b>AI Logs:</b> {tx_info}\n\n"
         f"<b>Members:</b>\n{members_formatted}\n\n"
         f"<b>Total Transactions:</b> {tx_count}\n"
         f"<b>Active Invites:</b> {invite_count}"

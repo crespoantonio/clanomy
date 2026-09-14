@@ -126,8 +126,9 @@ async def test_transcribe_from_url_success(mock_whisper_model):
     mock_response.headers = {}
     mock_response.raise_for_status = MagicMock()
     
-    # We patch NamedTemporaryFile and httpx AsyncClient
+    # We patch NamedTemporaryFile, httpx AsyncClient, and socket.getaddrinfo
     with patch("tempfile.NamedTemporaryFile") as mock_temp_file_class, \
+         patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 80))]), \
          patch("httpx.AsyncClient.get") as mock_get:
         
         mock_get.return_value = mock_response
@@ -162,7 +163,8 @@ async def test_transcribe_download_too_large():
     mock_response.headers = {"Content-Length": str(25 * 1024 * 1024)}  # 25MB
     mock_response.raise_for_status = MagicMock()
     
-    with patch("httpx.AsyncClient.get") as mock_get:
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 80))]), \
+         patch("httpx.AsyncClient.get") as mock_get:
         mock_get.return_value = mock_response
         with pytest.raises(InferenceError, match="Audio file is too large"):
             await service.transcribe(audio_url=audio_url)
@@ -173,7 +175,8 @@ async def test_transcribe_download_failure():
     audio_url = "http://example.com/audio.ogg"
     
     # Mock httpx download raising error
-    with patch("httpx.AsyncClient.get", side_effect=httpx.HTTPStatusError("Mock error", request=MagicMock(), response=MagicMock())):
+    with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 80))]), \
+         patch("httpx.AsyncClient.get", side_effect=httpx.HTTPStatusError("Mock error", request=MagicMock(), response=MagicMock())):
         with pytest.raises(InferenceError, match="Failed to download audio from"):
             await service.transcribe(audio_url=audio_url)
 

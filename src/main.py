@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Response, Request, status
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from sqlmodel import Session, text
 from src.db.session import get_session, init_db, run_migrations
 from src.core.config import settings
@@ -14,6 +14,8 @@ from src.core.security import verify_origin_secret
 from src.api.routes.telegram import router as telegram_router
 from src.api.routes.internal_jobs import router as internal_jobs_router
 from src.api.routes.simulate import router as simulate_router
+from src.api.routes.paddle import router as paddle_router
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +29,7 @@ logger = logging.getLogger("clanomy")
 async def lifespan(app: FastAPI):
     # Startup validation: Fail fast if SaaS mode is configured without Cloud AI credentials in non-test environments
     if settings.ENABLE_SUBSCRIPTIONS and not (settings.AI_API_KEY and settings.AI_API_KEY.strip()):
-        if not os.environ.get("PYTEST_CURRENT_TEST") and not settings.DATABASE_URL.startswith("sqlite"):
+        if not os.environ.get("PYTEST_CURRENT_TEST") and not settings.DATABASE_URL.startswith("sqlite") and not settings.ALLOW_LOCAL_AI_WITH_SUBSCRIPTIONS:
             logger.critical("Startup aborted: Commercial SaaS mode (ENABLE_SUBSCRIPTIONS=true) requires AI_API_KEY for cloud inference.")
             raise RuntimeError("Startup aborted: Missing AI_API_KEY for Groq Cloud deployment.")
 
@@ -156,8 +158,10 @@ _LANDING_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 
 # Register routers
 app.include_router(telegram_router, prefix="/api/v1")
+app.include_router(paddle_router, prefix="/api/v1")
 app.include_router(simulate_router, prefix="/api/v1")
 app.include_router(internal_jobs_router)
+
 
 @app.get("/", include_in_schema=False)
 async def root():
@@ -168,11 +172,96 @@ async def root():
     }
 
 @app.get("/landing", include_in_schema=False)
-async def landing_page():
+async def landing_page(request: Request):
     index_path = os.path.join(_LANDING_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return Response(status_code=404)
+    if not os.path.exists(index_path):
+        return Response(status_code=404)
+    with open(index_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    bot_username = settings.TELEGRAM_BOT_USERNAME or "clanomy_bot"
+    try:
+        from src.services.telegram_service import TelegramService
+        tg = TelegramService()
+        fetched = await tg.get_bot_username()
+        if fetched and fetched != "UnknownBot":
+            bot_username = fetched
+    except Exception:
+        pass
+
+    import html as html_lib
+    safe_bot_username = html_lib.escape(bot_username, quote=True)
+    token = settings.PADDLE_CLIENT_SIDE_TOKEN or ""
+    env = settings.PADDLE_ENVIRONMENT or "sandbox"
+
+    raw_country = (
+        request.headers.get("cf-ipcountry")
+        or request.headers.get("x-vercel-ip-country")
+        or ""
+    ).strip().upper()
+    user_country = raw_country if len(raw_country) == 2 and raw_country.isalpha() and raw_country != "XX" else ""
+
+    html = html.replace("{{ PADDLE_CLIENT_SIDE_TOKEN }}", token)
+    html = html.replace("{{ PADDLE_ENVIRONMENT }}", env)
+    html = html.replace("{{ USER_COUNTRY }}", user_country)
+    html = html.replace("{{ BOT_USERNAME }}", safe_bot_username)
+
+    return HTMLResponse(content=html, status_code=200)
+
+@app.get("/welcome", include_in_schema=False)
+async def welcome_page():
+    welcome_path = os.path.join(_LANDING_DIR, "welcome.html")
+    if not os.path.exists(welcome_path):
+        return Response(status_code=404)
+    with open(welcome_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    bot_username = settings.TELEGRAM_BOT_USERNAME or "clanomy_bot"
+    try:
+        from src.services.telegram_service import TelegramService
+        tg = TelegramService()
+        fetched = await tg.get_bot_username()
+        if fetched and fetched != "UnknownBot":
+            bot_username = fetched
+    except Exception:
+        pass
+
+    import html as html_lib
+    safe_bot_username = html_lib.escape(bot_username, quote=True)
+    html = html.replace("{{ BOT_USERNAME }}", safe_bot_username)
+
+    return HTMLResponse(content=html, status_code=200)
+
+@app.get("/pay", include_in_schema=False)
+async def pay_page():
+    if not settings.ENABLE_SUBSCRIPTIONS:
+        return Response(status_code=404)
+    pay_path = os.path.join(_LANDING_DIR, "pay.html")
+    if not os.path.exists(pay_path):
+        return Response(status_code=404)
+    with open(pay_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    bot_username = settings.TELEGRAM_BOT_USERNAME or "clanomy_bot"
+    try:
+        from src.services.telegram_service import TelegramService
+        tg = TelegramService()
+        fetched = await tg.get_bot_username()
+        if fetched and fetched != "UnknownBot":
+            bot_username = fetched
+    except Exception:
+        pass
+
+    import html as html_lib
+    safe_bot_username = html_lib.escape(bot_username, quote=True)
+    token = settings.PADDLE_CLIENT_SIDE_TOKEN or ""
+    env = settings.PADDLE_ENVIRONMENT or "sandbox"
+
+    html = html.replace("{{ PADDLE_CLIENT_SIDE_TOKEN }}", token)
+    html = html.replace("{{ PADDLE_ENVIRONMENT }}", env)
+    html = html.replace("{{ BOT_USERNAME }}", safe_bot_username)
+
+    return HTMLResponse(content=html, status_code=200)
 
 @app.get("/styles.css", include_in_schema=False)
 async def landing_styles():

@@ -48,6 +48,8 @@ from src.templates.telegram_messages import (
     format_bill_edit_cancelled,
     format_bill_edit_invalid_amount,
     format_monthly_free_limit_reached,
+    format_daily_limit_reached,
+    format_welcome_message,
     format_location_calibrated,
     format_location_calibration_failed,
     format_subscription_expired_notice,
@@ -320,6 +322,7 @@ class TestCurrencyAndFamilyTemplates:
             is_spanish=False
         )
         assert "Family Workspace: Household" in en_info
+        assert "AI Logs:" in en_info
         assert "Total Transactions:" in en_info
         assert "42" in en_info
 
@@ -333,6 +336,7 @@ class TestCurrencyAndFamilyTemplates:
             is_spanish=True
         )
         assert "Espacio Familiar: Hogar" in es_info
+        assert "Registros de IA:" in es_info
         assert "Total de Transacciones:" in es_info
         assert "42" in es_info
 
@@ -458,3 +462,39 @@ class TestWebhookFlowTemplates:
         es_exp = format_subscription_expired_notice(limit=20, is_spanish=True)
         assert "Suscripción Expirada o Fallida:" in es_exp
         assert "plan Gratuito (20 registros/mes)" in es_exp
+
+    def test_format_daily_limit_reached(self):
+        en_msg = format_daily_limit_reached(limit=60, is_spanish=False)
+        assert "Daily Limit Reached" in en_msg
+        assert "60 messages" in en_msg
+        assert "10:00 UTC" in en_msg
+
+        es_msg = format_daily_limit_reached(limit=60, is_spanish=True)
+        assert "Límite Diario Alcanzado" in es_msg
+        assert "60 mensajes" in es_msg
+        assert "10:00 UTC" in es_msg
+
+    def test_format_welcome_message_daily_limits(self):
+        from src.db.models import User, Family
+        user = User(telegram_id=123, full_name="Tony Tester")
+
+        fam_solo = Family(plan_type="solo_pro")
+        en_solo = format_welcome_message(user, fam_solo, {"first_name": "Tony"}, is_spanish=False)
+        assert "Solo Pro (Active — 60 daily AI logs" in en_solo
+
+        es_solo = format_welcome_message(user, fam_solo, {"first_name": "Tony"}, is_spanish=True)
+        assert "Solo Pro (Activo — 60 registros diarios con IA" in es_solo
+
+        fam_duo = Family(plan_type="duo_pro")
+        en_duo = format_welcome_message(user, fam_duo, {"first_name": "Tony"}, is_spanish=False)
+        assert "Duo Pro (Active — 120 daily AI logs" in en_duo
+
+        es_duo = format_welcome_message(user, fam_duo, {"first_name": "Tony"}, is_spanish=True)
+        assert "Duo Pro (Activo — 120 registros diarios con IA" in es_duo
+
+        fam_fam = Family(plan_type="family_pro")
+        en_fam = format_welcome_message(user, fam_fam, {"first_name": "Tony"}, is_spanish=False)
+        assert "Family Pro (Active — 300 daily AI logs" in en_fam
+
+        es_fam = format_welcome_message(user, fam_fam, {"first_name": "Tony"}, is_spanish=True)
+        assert "Family Pro (Activo — 300 registros diarios con IA" in es_fam

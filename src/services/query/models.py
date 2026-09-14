@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional, List, Dict, Literal
+from typing import Optional, List, Dict, Literal, Any
 from uuid import UUID
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from src.services.extraction.normalizers import normalize_category_value
 
 class QueryProcessingError(Exception):
@@ -100,6 +100,39 @@ class ParsedQueryIntent(BaseModel):
     target_amount: Optional[float] = None
     target_currency: Optional[str] = None
     target_concept: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_intent_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # If LLM returned 'classification', 'action', 'type', or 'query_intent' instead of 'intent'
+            if not data.get("intent"):
+                cls_val = str(data.get("classification") or data.get("action") or data.get("type") or data.get("query_intent") or "").lower().strip()
+                if any(w in cls_val for w in ("expense", "gasto", "egreso", "spend", "cost")):
+                    data["intent"] = "spending_summary"
+                elif any(w in cls_val for w in ("income", "ingreso", "earn", "salary", "wage")):
+                    data["intent"] = "income_summary"
+                elif any(w in cls_val for w in ("balance", "cash_flow", "flujo", "net")):
+                    data["intent"] = "net_cash_flow"
+                elif any(w in cls_val for w in ("bill", "vencimiento", "factura")):
+                    data["intent"] = "upcoming_bills"
+                elif any(w in cls_val for w in ("invite", "invitar")):
+                    data["intent"] = "generate_invite"
+                elif any(w in cls_val for w in ("export", "descargar")):
+                    data["intent"] = "export_data"
+                elif cls_val:
+                    data["intent"] = "spending_summary"
+                else:
+                    data["intent"] = "spending_summary"
+            else:
+                intent_val = str(data["intent"]).lower().strip()
+                if intent_val in ("expense", "spending", "gastos", "gasto"):
+                    data["intent"] = "spending_summary"
+                elif intent_val in ("income", "ingresos", "ingreso", "earnings"):
+                    data["intent"] = "income_summary"
+                elif intent_val in ("balance", "cash_flow", "cash flow", "flujo"):
+                    data["intent"] = "net_cash_flow"
+        return data
 
     @field_validator('category', 'new_category')
     @classmethod

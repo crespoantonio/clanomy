@@ -55,6 +55,7 @@ from src.templates.telegram_messages import (
     UNAUTHORIZED_ACCESS_MESSAGE,
     UNSUPPORTED_FORMAT_MESSAGE,
     DAILY_LIMIT_REACHED_MESSAGE,
+    format_daily_limit_reached,
     CONSENT_REQUEST_MESSAGE,
     CONSENT_KEYBOARD,
     PRIVACY_POLICY_MESSAGE,
@@ -228,7 +229,8 @@ async def telegram_webhook(
                 session.commit()
                 if cb_id:
                     await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Terms accepted! Welcome to Clanomy.")
-                welcome_msg = format_welcome_message(user, family, from_user)
+                is_sp = (from_user.get("language_code") or "").lower().startswith("es")
+                welcome_msg = format_welcome_message(user, family, from_user, is_spanish=is_sp)
                 if message_id:
                     await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=welcome_msg)
                 else:
@@ -574,6 +576,11 @@ async def telegram_webhook(
             parts = text.split(maxsplit=1)
             if len(parts) > 1:
                 token = parts[1].strip()
+                if token.startswith("upgrade"):
+                    sub_arg = token[8:] if token.startswith("upgrade_") else token[7:]
+                    upgrade_cmd = f"/upgrade {sub_arg}".strip()
+                    return await billing_service.handle_upgrade_command(background_tasks, upgrade_cmd, user, family, chat_id)
+
                 if token.startswith("join_"):
                     token = token[5:]
                 family_service = FamilyService()
@@ -597,7 +604,8 @@ async def telegram_webhook(
                 )
                 return {"status": "ok"}
 
-            welcome_msg = format_welcome_message(user, family, from_user)
+            is_sp = (from_user.get("language_code") or "").lower().startswith("es") or is_spanish_text(text or "")
+            welcome_msg = format_welcome_message(user, family, from_user, is_spanish=is_sp)
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_msg)
             return {"status": "ok"}
 
@@ -607,7 +615,8 @@ async def telegram_webhook(
             user.terms_accepted_at = datetime.now(timezone.utc)
             session.add(user)
             session.commit()
-            welcome_msg = format_welcome_message(user, family, from_user)
+            is_sp = (from_user.get("language_code") or "").lower().startswith("es") or is_spanish_text(text or "")
+            welcome_msg = format_welcome_message(user, family, from_user, is_spanish=is_sp)
             background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=welcome_msg)
             return {"status": "ok"}
 
@@ -734,7 +743,7 @@ async def telegram_webhook(
                                     if is_spanish else
                                     "\n\n💡 <i>You can still type the amount for free (e.g. <code>45.50</code>) to settle this bill!</i>"
                                 )
-                                quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val) + daily_note
+                                quota_msg = format_daily_limit_reached(limit=limit_val, is_spanish=is_spanish) + daily_note
                             else:
                                 is_admin = FamilyService().is_family_admin(family.id, user.id)
                                 daily_note = (
@@ -891,11 +900,11 @@ async def telegram_webhook(
         if family and (is_voice or is_tx_text):
             allowed, reason, limit_val = check_transaction_allowance(family)
             if not allowed:
+                is_spanish = (from_user.get("language_code") or "").lower().startswith("es") or is_spanish_text(text or "")
                 if reason == "daily_limit":
-                    quota_msg = DAILY_LIMIT_REACHED_MESSAGE.format(limit=limit_val)
+                    quota_msg = format_daily_limit_reached(limit=limit_val, is_spanish=is_spanish)
                 else:
                     is_admin = FamilyService().is_family_admin(family.id, user.id)
-                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es") or is_spanish_text(text or "")
                     quota_msg = format_monthly_free_limit_reached(is_admin=is_admin, limit=FREE_TIER_MONTHLY_LIMIT, is_spanish=is_spanish)
                 background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=quota_msg)
                 return {"status": "ok"}

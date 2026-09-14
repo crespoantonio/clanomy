@@ -888,3 +888,25 @@ sequenceDiagram
   - Responsive, bilingual (EN/ES) static landing page mounted at `/` in FastAPI (`src/main.py`).
   - Showcases product features, interactive live demo simulator, transparent self-hosting documentation links, and privacy architecture.
 
+---
+
+### 18. Paddle Merchant of Record Billing & Household Governance (Epic 23)
+
+- **Merchant of Record Architecture (`src/services/billing/paddle_service.py`):**
+  - Fully integrated with Paddle Billing acting as Merchant of Record, automating sales tax/VAT calculation and remittance across 200+ jurisdictions.
+  - Generates custom-data-bound checkout transactions via `POST /transactions` passing deterministic `custom_data = {"family_id": ..., "user_id": ..., "plan_code": ...}`.
+  - Implements dynamic customer portal generation (`POST /customers/{customer_id}/portal-sessions`) allowing users to self-serve card updates, invoice downloads, and cancellations via `/billing`.
+- **Cryptographic Webhook Ingress & Deduplication Ledger (`src/api/routes/paddle.py`):**
+  - Endpoint `POST /api/v1/paddle/webhook` verifies the `Paddle-Signature` header (`ts=<unix>;h1=<sha256>`) using constant-time HMAC-SHA256 comparison and 5s timestamp drift defense against replay attacks.
+  - Deduplicates events via the persistent `processed_webhook` database table (Alembic migration `0013_paddle_subscriptions.py`) with PostgreSQL Row Level Security enabled.
+  - Updates `Family` state atomically upon `subscription.created`, `subscription.updated`, and `subscription.canceled` events, recording `paddle_subscription_id`, `paddle_customer_id`, `paddle_price_id`, and `scheduled_change_*` fields.
+- **Stateless In-Bot Billing Presentation (`src/services/billing/billing_service.py`):**
+  - Stateless execution passing caller and family context directly into checkout generation helpers, eliminating concurrent state-mutation race conditions.
+  - Supports parameterized upgrade commands (`/upgrade solo`, `/upgrade duo`, `/upgrade family`, `/upgrade annual`) with contextual localized messaging for Spanish and English workspaces.
+- **Non-Admin Member Graduation (`src/services/family_service.py`):**
+  - When non-admin members upgrade via `/upgrade`, the system automatically provisions an independent sovereign workspace, migrates only their personal transaction history, and assigns workspace admin status without disrupting the host family group.
+- **Secure Hosted Web Checkout Route (`/pay` & `landing/pay.html`):**
+  - FastAPI endpoint `/pay` dynamically injects client-side tokens and initializes the Paddle.js v2 overlay checkout with dark theme styling.
+  - Gated strictly by `ENABLE_SUBSCRIPTIONS=true`, returning 404 in self-hosted mode to ensure complete open-core isolation.
+  - Exempted from direct Cloudflare Origin Shield verification in `src/core/config.py` to allow direct redirection from Telegram deep links.
+

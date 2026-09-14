@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Security
     ENCRYPTION_KEY: str
     TELEGRAM_BOT_TOKEN: str
-    TELEGRAM_BOT_USERNAME: Optional[str] = None
+    TELEGRAM_BOT_USERNAME: Optional[str] = "clanomy_bot"
     MESSAGING_WEBHOOK_SECRET: str
     CRON_SECRET: Optional[str] = None  # Secret header token required to invoke internal background jobs (e.g. via GCP Cloud Scheduler)
     ENABLE_INTERNAL_SCHEDULER: bool = False  # Set to True only if running without an external cron trigger (defaults to False)
@@ -25,10 +25,14 @@ class Settings(BaseSettings):
     # Path whitelist exempt from Cloudflare Origin Shield verification:
     # - /health: Container liveness/readiness probes from hosting platforms (e.g. Render, K8s)
     # - /api/v1/telegram/webhook: Telegram Bot API webhook delivery
+    # - /api/v1/paddle/webhook: Paddle Billing webhook delivery
     # - /api/internal/jobs/trial-lifecycle: Internal scheduled jobs (authenticated separately via CRON_SECRET)
     CLOUDFLARE_ORIGIN_EXEMPT_PATHS: set[str] = {
         "/health",
+        "/pay",
+        "/welcome",
         "/api/v1/telegram/webhook",
+        "/api/v1/paddle/webhook",
         "/api/internal/jobs/trial-lifecycle",
     }
     MAX_REQUEST_SIZE_BYTES: int = 1_048_576  # Maximum allowable HTTP request payload size in bytes (1 MB default)
@@ -43,6 +47,17 @@ class Settings(BaseSettings):
 
     # Monetization & Subscription Settings
     ENABLE_SUBSCRIPTIONS: bool = False
+    ALLOW_LOCAL_AI_WITH_SUBSCRIPTIONS: bool = False
+    PADDLE_API_KEY: Optional[str] = None
+    PADDLE_CLIENT_SIDE_TOKEN: Optional[str] = None
+    PADDLE_WEBHOOK_SECRET_KEY: Optional[str] = None
+    PADDLE_ENVIRONMENT: str = "sandbox"  # "sandbox" or "production"
+    PADDLE_PRICE_ID_SOLO_PRO: Optional[str] = None
+    PADDLE_PRICE_ID_SOLO_PRO_ANNUAL: Optional[str] = None
+    PADDLE_PRICE_ID_DUO_PRO: Optional[str] = None
+    PADDLE_PRICE_ID_DUO_PRO_ANNUAL: Optional[str] = None
+    PADDLE_PRICE_ID_FAMILY_PRO: Optional[str] = None
+    PADDLE_PRICE_ID_FAMILY_PRO_ANNUAL: Optional[str] = None
     
     # Whisper settings
     WHISPER_MODEL_SIZE: str = "base"
@@ -213,6 +228,6 @@ class Settings(BaseSettings):
         return norm_path in exempt_normalized
 
     # Configuration
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore", env_ignore_empty=True)
 
 settings = Settings()

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clanomy — Subscription Confirmed!</title>
+  <meta name="description" content="Subscription confirmed for Clanomy. Return to Telegram to enjoy your upgraded workspace.">
+  <link rel="icon" type="image/jpeg" href="/assets/favicon.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090D16;
+      --card-bg: rgba(15, 23, 42, 0.8);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #10B981;
+      --primary-hover: #059669;
+      --primary-glow: rgba(16, 185, 129, 0.25);
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --accent-blue: #3B82F6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 10%, rgba(16, 185, 129, 0.18), transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.12), transparent 40%);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      overflow-x: hidden;
+    }
+
+    .welcome-card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 44px 32px;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(16, 185, 129, 0.1);
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 30px;
+      text-decoration: none;
+    }
+
+    .brand-logo {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.7rem;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: -0.5px;
+    }
+
+    .icon-badge {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+      font-weight: 800;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--primary);
+      border: 2px solid var(--primary);
+      box-shadow: 0 0 24px var(--primary-glow);
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+      color: var(--text-main);
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.55;
+      margin-bottom: 24px;
+    }
+
+    .info-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 28px;
+      font-size: 0.85rem;
+      color: #CBD5E1;
+      line-height: 1.5;
+      text-align: left;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .info-box-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      line-height: 1.2;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 12px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, #059669 100%);
+      color: white;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+    }
+
+    .footer-secure {
+      margin-top: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: #64748B;
+    }
+
+    .footer-secure svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    .support-link {
+      color: var(--text-muted);
+      text-decoration: underline;
+      font-size: 0.8rem;
+      margin-top: 14px;
+      display: inline-block;
+    }
+    .support-link:hover {
+      color: var(--text-main);
+    }
+  </style>
+</head>
+<body>
+  <div class="welcome-card">
+    <a href="/" class="brand">
+      <img src="/assets/clanomy_logo.jpg" alt="Clanomy" class="brand-logo">
+      <span class="brand-title">Clanomy</span>
+    </a>
+
+    <div class="icon-badge">✓</div>
+    <h1>Subscription Active! 🎉</h1>
+    <p>Thank you for subscribing to Clanomy! Your workspace is fully unlocked and ready to use.</p>
+
+    <div class="info-box">
+      <div class="info-box-icon">📦</div>
+      <div>
+        <strong>Instant Delivery:</strong> Your payment has been confirmed by Paddle Merchant of Record. A digital receipt has been sent to your email.
+      </div>
+    </div>
+
+    <!-- Clean link to Telegram without extra params -->
+    <a id="btn-back-tg" href="https://t.me/clanomy_bot" class="btn btn-primary">
+      🚀 Back to Telegram
+    </a>
+
+    <div>
+      <a href="mailto:support@clanomy.com" class="support-link">Questions or need help? Contact support</a>
+    </div>
+
+    <div class="footer-secure">
+      <svg viewBox="0 0 24 24"><path d="M12 2C9.24 2 7 4.24 7 7v3H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2h-1V7c0-2.76-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3v3H9V7c0-1.66 1.34-3 3-3zm-1 11.72V17h2v-1.28c.6-.35 1-.99 1-1.72 0-1.1-.9-2-2-2s-2 .9-2 2c0 .73.4 1.37 1 1.72z"/></svg>
+      <span>Encrypted &amp; Secured by Paddle Merchant of Record</span>
+    </div>
+  </div>
+</body>
+</html>

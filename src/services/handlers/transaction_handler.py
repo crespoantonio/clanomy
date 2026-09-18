@@ -97,6 +97,9 @@ def get_monthly_cash_flow_snapshot(
                 decrypted_amount_str = enc_service.decrypt(tx.amount)
                 if not decrypted_amount_str:
                     continue
+                # Exclude non-operational currency exchange transactions from monthly cash flow
+                if (getattr(tx, "category", "") or "").strip().lower() == "exchange":
+                    continue
                 parts = decrypted_amount_str.strip().split()
                 amt = float(parts[0]) if parts else 0.0
                 curr = parts[1].upper() if len(parts) > 1 else (primary_currency or "USD").upper()

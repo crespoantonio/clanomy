@@ -250,6 +250,7 @@ class TimeAggregation(BaseModel):
     expense_category_breakdown: Dict[str, float] = {}
     daily_income_breakdown: Dict[str, float] = {}
     daily_expense_breakdown: Dict[str, float] = {}
+    exchange_count: int = 0
 
 class QueryResult(BaseModel):
     intent: ParsedQueryIntent

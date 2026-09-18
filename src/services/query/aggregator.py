@@ -23,13 +23,23 @@ def aggregate_transactions(
     income_currency_totals: Dict[str, float] = {}
     expense_currency_totals: Dict[str, float] = {}
     
+    has_non_exchange = any((getattr(t, "category", "") or "").strip().lower() != "exchange" for t in transactions)
+    exchange_count = 0
+
     for tx in transactions:
         tx_type = getattr(tx, "type", "expense") or "expense"
-        currency_totals[tx.currency] = currency_totals.get(tx.currency, 0.0) + tx.amount
-        if tx_type == "income":
-            income_currency_totals[tx.currency] = income_currency_totals.get(tx.currency, 0.0) + tx.amount
+        is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
+        
+        if is_exchange:
+            exchange_count += 1
+            if not has_non_exchange:
+                currency_totals[tx.currency] = currency_totals.get(tx.currency, 0.0) + tx.amount
         else:
-            expense_currency_totals[tx.currency] = expense_currency_totals.get(tx.currency, 0.0) + tx.amount
+            currency_totals[tx.currency] = currency_totals.get(tx.currency, 0.0) + tx.amount
+            if tx_type == "income":
+                income_currency_totals[tx.currency] = income_currency_totals.get(tx.currency, 0.0) + tx.amount
+            else:
+                expense_currency_totals[tx.currency] = expense_currency_totals.get(tx.currency, 0.0) + tx.amount
 
     effective_currency = primary_currency
     if primary_currency not in currency_totals and len(currency_totals) == 1:
@@ -48,27 +58,34 @@ def aggregate_transactions(
     if calculate_daily:
         for tx in transactions:
             if tx.currency == effective_currency:
+                is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
                 date_str = tx.timestamp.strftime("%Y-%m-%d")
-                daily_breakdown[date_str] = daily_breakdown.get(date_str, 0.0) + tx.amount
                 tx_type = getattr(tx, "type", "expense") or "expense"
-                if tx_type == "income":
-                    daily_income_breakdown[date_str] = daily_income_breakdown.get(date_str, 0.0) + tx.amount
-                else:
-                    daily_expense_breakdown[date_str] = daily_expense_breakdown.get(date_str, 0.0) + tx.amount
+                if not is_exchange or not has_non_exchange:
+                    daily_breakdown[date_str] = daily_breakdown.get(date_str, 0.0) + tx.amount
+                if not is_exchange:
+                    if tx_type == "income":
+                        daily_income_breakdown[date_str] = daily_income_breakdown.get(date_str, 0.0) + tx.amount
+                    else:
+                        daily_expense_breakdown[date_str] = daily_expense_breakdown.get(date_str, 0.0) + tx.amount
                 
     for tx in transactions:
         tx_type = getattr(tx, "type", "expense") or "expense"
-        if tx_type == "income":
-            income_count += 1
-        else:
-            expense_count += 1
+        is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
+        if not is_exchange:
+            if tx_type == "income":
+                income_count += 1
+            else:
+                expense_count += 1
 
         if tx.currency == effective_currency:
-            category_breakdown[tx.category] = category_breakdown.get(tx.category, 0.0) + tx.amount
-            if tx_type == "income":
-                income_category_breakdown[tx.category] = income_category_breakdown.get(tx.category, 0.0) + tx.amount
-            else:
-                expense_category_breakdown[tx.category] = expense_category_breakdown.get(tx.category, 0.0) + tx.amount
+            if not is_exchange or not has_non_exchange:
+                category_breakdown[tx.category] = category_breakdown.get(tx.category, 0.0) + tx.amount
+            if not is_exchange:
+                if tx_type == "income":
+                    income_category_breakdown[tx.category] = income_category_breakdown.get(tx.category, 0.0) + tx.amount
+                else:
+                    expense_category_breakdown[tx.category] = expense_category_breakdown.get(tx.category, 0.0) + tx.amount
 
     total_income = income_currency_totals.get(effective_currency, 0.0)
     total_expenses = expense_currency_totals.get(effective_currency, 0.0)
@@ -79,7 +96,10 @@ def aggregate_transactions(
     else:
         savings_rate = 0.0 if total_expenses == 0 else None
 
-    total_amount = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
+    if has_non_exchange:
+        total_amount = sum(tx.amount for tx in transactions if tx.currency == effective_currency and (getattr(tx, "category", "") or "").strip().lower() != "exchange")
+    else:
+        total_amount = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
 
     tx_count = len(transactions)
     avg = (total_amount / tx_count) if tx_count > 0 else 0.0
@@ -106,7 +126,8 @@ def aggregate_transactions(
         income_category_breakdown={k: round(v, 2) for k, v in income_category_breakdown.items()},
         expense_category_breakdown={k: round(v, 2) for k, v in expense_category_breakdown.items()},
         daily_income_breakdown={k: round(v, 2) for k, v in daily_income_breakdown.items()},
-        daily_expense_breakdown={k: round(v, 2) for k, v in daily_expense_breakdown.items()}
+        daily_expense_breakdown={k: round(v, 2) for k, v in daily_expense_breakdown.items()},
+        exchange_count=exchange_count
     )
 
 def aggregate_by_category(
@@ -118,20 +139,30 @@ def aggregate_by_category(
     overall_total: Optional[float] = None
 ) -> CategoryBreakdown:
     categories_dict: Dict[str, CategorySpending] = {}
+    has_non_exchange = any((getattr(t, "category", "") or "").strip().lower() != "exchange" for t in transactions)
     
     currency_totals_all: Dict[str, float] = {}
     for tx in transactions:
-        currency_totals_all[tx.currency] = currency_totals_all.get(tx.currency, 0.0) + tx.amount
+        is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
+        if not is_exchange or not has_non_exchange:
+            currency_totals_all[tx.currency] = currency_totals_all.get(tx.currency, 0.0) + tx.amount
 
     effective_currency = primary_currency
     if primary_currency not in currency_totals_all and len(currency_totals_all) == 1:
         effective_currency = next(iter(currency_totals_all))
 
     if overall_total is None:
-        overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
+        if has_non_exchange:
+            overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency and (getattr(tx, "category", "") or "").strip().lower() != "exchange")
+        else:
+            overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
         
     for tx in transactions:
         cat = tx.category
+        is_exchange = (cat or "").strip().lower() == "exchange"
+        if is_exchange and has_non_exchange:
+            continue
+
         if cat not in categories_dict:
             categories_dict[cat] = CategorySpending(
                 category=cat,
@@ -193,23 +224,30 @@ def aggregate_by_member(
     overall_total: Optional[float] = None
 ) -> MemberBreakdown:
     members_by_id: Dict[UUID, MemberSpending] = {}
+    has_non_exchange = any((getattr(t, "category", "") or "").strip().lower() != "exchange" for t in transactions)
     
     currency_totals_all: Dict[str, float] = {}
     for tx in transactions:
-        currency_totals_all[tx.currency] = currency_totals_all.get(tx.currency, 0.0) + tx.amount
+        is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
+        if not is_exchange or not has_non_exchange:
+            currency_totals_all[tx.currency] = currency_totals_all.get(tx.currency, 0.0) + tx.amount
 
     effective_currency = primary_currency
     if primary_currency not in currency_totals_all and len(currency_totals_all) == 1:
         effective_currency = next(iter(currency_totals_all))
 
     if overall_total is None:
-        overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
+        if has_non_exchange:
+            overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency and (getattr(tx, "category", "") or "").strip().lower() != "exchange")
+        else:
+            overall_total = sum(tx.amount for tx in transactions if tx.currency == effective_currency)
         
     category_totals_per_user_id: Dict[UUID, Dict[str, float]] = {}
     
     for tx in transactions:
         u_id = tx.user_id
         display_name = tx.user_name or "User"
+        is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
         if u_id not in members_by_id:
             members_by_id[u_id] = MemberSpending(
                 user_id=u_id,
@@ -225,25 +263,31 @@ def aggregate_by_member(
             )
             
         m = members_by_id[u_id]
-        m.currency_totals[tx.currency] = m.currency_totals.get(tx.currency, 0.0) + tx.amount
-        tx_type = getattr(tx, "type", "expense") or "expense"
-        if tx_type == "income":
-            m.income_currency_totals[tx.currency] = m.income_currency_totals.get(tx.currency, 0.0) + tx.amount
-        else:
-            m.expense_currency_totals[tx.currency] = m.expense_currency_totals.get(tx.currency, 0.0) + tx.amount
+        if not is_exchange or not has_non_exchange:
+            m.currency_totals[tx.currency] = m.currency_totals.get(tx.currency, 0.0) + tx.amount
 
-        if tx.currency == effective_currency:
+        tx_type = getattr(tx, "type", "expense") or "expense"
+        if not is_exchange:
             if tx_type == "income":
-                m.total_earned += tx.amount
+                m.income_currency_totals[tx.currency] = m.income_currency_totals.get(tx.currency, 0.0) + tx.amount
+                if tx.currency == effective_currency:
+                    m.total_earned += tx.amount
             else:
-                m.total_spent += tx.amount
+                m.expense_currency_totals[tx.currency] = m.expense_currency_totals.get(tx.currency, 0.0) + tx.amount
+                if tx.currency == effective_currency:
+                    m.total_spent += tx.amount
+
+            if tx.currency == effective_currency:
+                m.total_amount += tx.amount
+        elif not has_non_exchange and tx.currency == effective_currency:
             m.total_amount += tx.amount
+
         m.net_balance = m.total_earned - m.total_spent
         m.transaction_count += 1
         
         if u_id not in category_totals_per_user_id:
             category_totals_per_user_id[u_id] = {}
-        if tx.currency == effective_currency:
+        if tx.currency == effective_currency and (not is_exchange or not has_non_exchange):
             category_totals_per_user_id[u_id][tx.category] = category_totals_per_user_id[u_id].get(tx.category, 0.0) + tx.amount
 
     for u_id, m in members_by_id.items():

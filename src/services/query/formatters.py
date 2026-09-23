@@ -387,26 +387,15 @@ def format_month_summary(
         lines.append("👥 <b>Member Breakdown:</b>")
         for name, m in query_result.member_breakdown.members.items():
             escaped_name = html.escape(name, quote=False)
-            has_m_conv = bool(m.exchange_sold_totals or m.exchange_received_totals)
-            if has_multi_curr or has_m_conv:
+            if has_multi_curr:
                 m_inc = format_currency_dict(m.income_currency_totals, curr)
                 m_exp = format_currency_dict(m.expense_currency_totals, curr)
                 lines.append(f"👤 <b>{escaped_name}</b>:")
                 lines.append(f"  • Incomes: {m_inc}")
                 lines.append(f"  • Expenses: {m_exp}")
-                if has_m_conv:
-                    sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(m.exchange_sold_totals.items())]
-                    recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(m.exchange_received_totals.items())]
-                    conv_str = f"Sold {', '.join(sold_p)} ➔ Received {', '.join(recv_p)}"
-                    lines.append(f"  • Converted: {conv_str}")
-                if m.net_currency_positions:
-                    net_p = [f"{'+' if v > 0 else ''}{v:,.2f} {c}" for c, v in sorted(m.net_currency_positions.items())]
-                    lines.append(f"  • Net: {' | '.join(net_p)}")
             else:
                 lines.append(f"👤 <b>{escaped_name}</b>:")
                 lines.append(f"  • Incomes: {m.total_earned:,.2f} {curr} | Expenses: {m.total_spent:,.2f} {curr}")
-                sign_m = "+" if m.net_balance > 0 else ""
-                lines.append(f"  • Net: {sign_m}{m.net_balance:,.2f} {curr}")
                 
     lines.append("")
     lines.append(f"📊 <i>Total logs: {agg.transaction_count} transaction(s)</i>")

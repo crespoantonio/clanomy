@@ -212,6 +212,9 @@ class MemberSpending(BaseModel):
     total_spent: float = 0.0
     total_earned: float = 0.0
     net_balance: float = 0.0
+    exchange_sold_totals: Dict[str, float] = {}
+    exchange_received_totals: Dict[str, float] = {}
+    net_currency_positions: Dict[str, float] = {}
 
 class MemberBreakdown(BaseModel):
     timeframe: str
@@ -251,6 +254,9 @@ class TimeAggregation(BaseModel):
     daily_income_breakdown: Dict[str, float] = {}
     daily_expense_breakdown: Dict[str, float] = {}
     exchange_count: int = 0
+    exchange_sold_totals: Dict[str, float] = {}
+    exchange_received_totals: Dict[str, float] = {}
+    net_currency_positions: Dict[str, float] = {}
 
 class QueryResult(BaseModel):
     intent: ParsedQueryIntent

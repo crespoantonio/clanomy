@@ -1,7 +1,7 @@
 import html
 from typing import Optional, List, Dict, Any
 from src.core.config import settings
-from src.services.query.models import QueryResult, DecryptedScheduledBill
+from src.services.query.models import QueryResult, DecryptedScheduledBill, TimeAggregation
 from src.services.query.date_resolver import _sanitize_concept_for_prompt
 
 def format_currency_dict(curr_dict: Optional[Dict[str, float]], default_curr: str = "USD") -> str:
@@ -11,6 +11,60 @@ def format_currency_dict(curr_dict: Optional[Dict[str, float]], default_curr: st
         c, val = next(iter(curr_dict.items()))
         return f"{val:,.2f} {c}"
     return ", ".join(f"{val:,.2f} {c}" for c, val in sorted(curr_dict.items()))
+
+def format_exchange_summary_lines(agg: Optional[TimeAggregation]) -> List[str]:
+    lines: List[str] = []
+    if not agg or not (agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals):
+        return lines
+
+    lines.append("💱 <b>Currency Converted:</b>")
+    if len(agg.exchange_sold_totals) == 1 and len(agg.exchange_received_totals) == 1:
+        s_curr, s_amt = next(iter(agg.exchange_sold_totals.items()))
+        r_curr, r_amt = next(iter(agg.exchange_received_totals.items()))
+        rate_str = ""
+        if s_amt > 0:
+            rate = r_amt / s_amt
+            rate_str = f" <i>(1 {s_curr} ≈ {rate:,.2f} {r_curr})</i>"
+        lines.append(f"  • Sold: {s_amt:,.2f} {s_curr} ➔ Received: {r_amt:,.2f} {r_curr}{rate_str}")
+    else:
+        sold_parts = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_sold_totals.items())]
+        recv_parts = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_received_totals.items())]
+        if sold_parts:
+            lines.append(f"  • Sold: {', '.join(sold_parts)}")
+        if recv_parts:
+            lines.append(f"  • Received: {', '.join(recv_parts)}")
+    return lines
+
+def format_net_cash_position_lines(agg: Optional[TimeAggregation], default_curr: str = "USD", is_family: bool = True) -> List[str]:
+    lines: List[str] = []
+    if not agg:
+        return lines
+    label = "Net Family Position" if is_family else "Net Cash Position"
+    has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
+    
+    all_currencies = set()
+    all_currencies.update(agg.income_currency_totals.keys())
+    all_currencies.update(agg.expense_currency_totals.keys())
+    all_currencies.update(agg.exchange_sold_totals.keys())
+    all_currencies.update(agg.exchange_received_totals.keys())
+    if not all_currencies and agg.currency_totals:
+        all_currencies.update(agg.currency_totals.keys())
+
+    has_multi = len(all_currencies) > 1
+
+    if not has_multi and not has_exchanges:
+        sign = "+" if agg.net_balance > 0 else ""
+        sav_str = f" ({agg.savings_rate:.1f}% saved)" if agg.savings_rate is not None and agg.total_income > 0 else ""
+        lines.append(f"📈 <b>{label}:</b> {sign}{agg.net_balance:,.2f} {default_curr}{sav_str}")
+        return lines
+
+    lines.append(f"📈 <b>{label}:</b>")
+    positions = agg.net_currency_positions or {}
+    for c in sorted(all_currencies or [default_curr]):
+        net_val = positions.get(c, 0.0)
+        sign = "+" if net_val > 0 else ""
+        lines.append(f"  • {c}: {sign}{net_val:,.2f} {c}")
+    return lines
 
 def build_summary_prompt_context(
     query_result: QueryResult, 
@@ -51,6 +105,14 @@ def build_summary_prompt_context(
             ctx.append(f"Net cash flow balance: {agg.net_balance:,.2f} {agg.primary_currency}")
             if agg.savings_rate is not None:
                 ctx.append(f"Savings rate: {agg.savings_rate:.1f}%")
+
+        if agg.exchange_count > 0:
+            sold_p = ", ".join(f"{v:,.2f} {k}" for k, v in agg.exchange_sold_totals.items())
+            recv_p = ", ".join(f"{v:,.2f} {k}" for k, v in agg.exchange_received_totals.items())
+            ctx.append(f"Currency conversions (exchanges): Sold {sold_p} and received {recv_p} across {agg.exchange_count} transaction(s). (Excluded from operational income/expenses).")
+            if agg.net_currency_positions:
+                net_p = ", ".join(f"{k}: {v:,.2f}" for k, v in agg.net_currency_positions.items())
+                ctx.append(f"Net liquid position by currency: {net_p}")
 
         ctx.append(f"Total transactions: {agg.transaction_count}")
         ctx.append(f"Average per transaction: {agg.average_per_transaction:,.2f} {agg.primary_currency}")
@@ -160,7 +222,13 @@ def generate_fallback_summary(
     if not agg:
         return f"{greeting}Here are your results for {tf_period}."
 
-    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+    all_currencies = set()
+    all_currencies.update(agg.currency_totals.keys())
+    all_currencies.update(agg.income_currency_totals.keys())
+    all_currencies.update(agg.expense_currency_totals.keys())
+    all_currencies.update(agg.exchange_sold_totals.keys())
+    all_currencies.update(agg.exchange_received_totals.keys())
+    has_multi_curr = len(all_currencies) > 1
 
     # 2. Income query fallback
     if intent_type in ["income_summary", "query_income", "earnings_summary"]:
@@ -183,13 +251,22 @@ def generate_fallback_summary(
 
     # 3. Net cash flow / Net balance query fallback
     if intent_type in ["net_cash_flow", "net_balance", "cash_flow_summary"]:
-        if has_multi_curr:
+        has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
+        if has_multi_curr or has_exchanges:
             inc_list = [f"{v:,.2f} {k}" for k, v in agg.income_currency_totals.items()] or [f"0.00 {agg.primary_currency}"]
             exp_list = [f"{v:,.2f} {k}" for k, v in agg.expense_currency_totals.items()] or [f"0.00 {agg.primary_currency}"]
             inc_formatted = ", ".join(inc_list)
             exp_formatted = ", ".join(exp_list)
             subj_str = subject.lower() if subject == "You" else subject
-            return f"{greeting}{tf_cap}, {subj_str} earned {inc_formatted} and spent {exp_formatted} across {agg.transaction_count} transaction(s)."
+            msg = f"{greeting}{tf_cap}, {subj_str} earned {inc_formatted} and spent {exp_formatted} across {agg.transaction_count} transaction(s)."
+            if has_exchanges:
+                sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_sold_totals.items())]
+                recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_received_totals.items())]
+                msg += f" (Exchanged: Sold {', '.join(sold_p)} ➔ Received {', '.join(recv_p)})"
+            if agg.net_currency_positions:
+                net_p = [f"{'+' if v > 0 else ''}{v:,.2f} {c}" for c, v in sorted(agg.net_currency_positions.items())]
+                msg += f" Net: {' | '.join(net_p)}."
+            return msg
             
         inc_formatted = f"{agg.total_income:,.2f} {agg.primary_currency}"
         exp_formatted = f"{agg.total_expenses:,.2f} {agg.primary_currency}"
@@ -264,7 +341,14 @@ def format_month_summary(
         lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
-    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+    all_currencies = set()
+    all_currencies.update(agg.currency_totals.keys())
+    all_currencies.update(agg.income_currency_totals.keys())
+    all_currencies.update(agg.expense_currency_totals.keys())
+    all_currencies.update(agg.exchange_sold_totals.keys())
+    all_currencies.update(agg.exchange_received_totals.keys())
+    has_multi_curr = len(all_currencies) > 1
+    has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
     
     if has_multi_curr:
         lines.append("💰 <b>Household Income:</b>")
@@ -285,7 +369,17 @@ def format_month_summary(
         sav_str = f" ({agg.savings_rate:.1f}% saved)" if agg.savings_rate is not None and agg.total_income > 0 else ""
         lines.append(f"💰 <b>Household Income:</b> {agg.total_income:,.2f} {curr}")
         lines.append(f"💸 <b>Household Expenses:</b> {agg.total_expenses:,.2f} {curr}")
-        lines.append(f"📈 <b>Net Family Balance:</b> {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+        if not has_exchanges:
+            lines.append(f"📈 <b>Net Family Balance:</b> {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+
+    ex_lines = format_exchange_summary_lines(agg)
+    if ex_lines:
+        lines.append("")
+        lines.extend(ex_lines)
+
+    if has_multi_curr or has_exchanges:
+        lines.append("")
+        lines.extend(format_net_cash_position_lines(agg, curr, is_family=True))
 
     # Member Breakdown
     if query_result.member_breakdown and query_result.member_breakdown.members:
@@ -293,12 +387,21 @@ def format_month_summary(
         lines.append("👥 <b>Member Breakdown:</b>")
         for name, m in query_result.member_breakdown.members.items():
             escaped_name = html.escape(name, quote=False)
-            if has_multi_curr:
+            has_m_conv = bool(m.exchange_sold_totals or m.exchange_received_totals)
+            if has_multi_curr or has_m_conv:
                 m_inc = format_currency_dict(m.income_currency_totals, curr)
                 m_exp = format_currency_dict(m.expense_currency_totals, curr)
                 lines.append(f"👤 <b>{escaped_name}</b>:")
                 lines.append(f"  • Incomes: {m_inc}")
                 lines.append(f"  • Expenses: {m_exp}")
+                if has_m_conv:
+                    sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(m.exchange_sold_totals.items())]
+                    recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(m.exchange_received_totals.items())]
+                    conv_str = f"Sold {', '.join(sold_p)} ➔ Received {', '.join(recv_p)}"
+                    lines.append(f"  • Converted: {conv_str}")
+                if m.net_currency_positions:
+                    net_p = [f"{'+' if v > 0 else ''}{v:,.2f} {c}" for c, v in sorted(m.net_currency_positions.items())]
+                    lines.append(f"  • Net: {' | '.join(net_p)}")
             else:
                 lines.append(f"👤 <b>{escaped_name}</b>:")
                 lines.append(f"  • Incomes: {m.total_earned:,.2f} {curr} | Expenses: {m.total_spent:,.2f} {curr}")
@@ -334,7 +437,14 @@ def format_me_summary(
         lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
 
-    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+    all_currencies = set()
+    all_currencies.update(agg.currency_totals.keys())
+    all_currencies.update(agg.income_currency_totals.keys())
+    all_currencies.update(agg.expense_currency_totals.keys())
+    all_currencies.update(agg.exchange_sold_totals.keys())
+    all_currencies.update(agg.exchange_received_totals.keys())
+    has_multi_curr = len(all_currencies) > 1
+    has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
 
     if has_multi_curr:
         lines.append("💰 <b>Income:</b>")
@@ -355,7 +465,17 @@ def format_me_summary(
         sav_str = f" ({agg.savings_rate:.1f}% saved)" if agg.savings_rate is not None and agg.total_income > 0 else ""
         lines.append(f"💰 <b>Income:</b> {agg.total_income:,.2f} {curr}")
         lines.append(f"💸 <b>Expenses:</b> {agg.total_expenses:,.2f} {curr}")
-        lines.append(f"📈 <b>Net Balance:</b> {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+        if not has_exchanges:
+            lines.append(f"📈 <b>Net Balance:</b> {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+
+    ex_lines = format_exchange_summary_lines(agg)
+    if ex_lines:
+        lines.append("")
+        lines.extend(ex_lines)
+
+    if has_multi_curr or has_exchanges:
+        lines.append("")
+        lines.extend(format_net_cash_position_lines(agg, curr, is_family=False))
 
     # Top Categories
     if agg.expense_category_breakdown:
@@ -365,6 +485,14 @@ def format_me_summary(
         for cat, val in sorted_cats:
             pct = (val / agg.total_expenses * 100) if agg.total_expenses > 0 else 0.0
             lines.append(f"  • {cat}: {val:,.2f} {curr} ({pct:.1f}%)")
+    elif query_result.category_breakdown and query_result.category_breakdown.categories:
+        non_exchange_cats = {k: v for k, v in query_result.category_breakdown.categories.items() if k.strip().lower() != "exchange"}
+        if non_exchange_cats:
+            lines.append("")
+            lines.append("🏷️ <b>Top Categories:</b>")
+            for cat_name, cs in list(non_exchange_cats.items())[:4]:
+                amt_str = format_currency_dict(cs.currency_totals, curr)
+                lines.append(f"  • {cat_name}: {amt_str}")
 
     lines.append("")
     lines.append(f"📊 <i>Total logs: {agg.transaction_count} transaction(s)</i>")
@@ -477,7 +605,14 @@ def format_balance_summary(
         lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
         
-    has_multi_curr = len(agg.currency_totals) > 1 or len(agg.income_currency_totals) > 1 or len(agg.expense_currency_totals) > 1
+    all_currencies = set()
+    all_currencies.update(agg.currency_totals.keys())
+    all_currencies.update(agg.income_currency_totals.keys())
+    all_currencies.update(agg.expense_currency_totals.keys())
+    all_currencies.update(agg.exchange_sold_totals.keys())
+    all_currencies.update(agg.exchange_received_totals.keys())
+    has_multi_curr = len(all_currencies) > 1
+    has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
     
     if has_multi_curr:
         inc_str = format_currency_dict(agg.income_currency_totals, curr)
@@ -485,11 +620,21 @@ def format_balance_summary(
         lines.append(f"💰 Total Incomes: {inc_str}")
         lines.append(f"💸 Total Expenses: {exp_str}")
     else:
-        sign = "+" if agg.net_balance > 0 else ""
-        sav_str = f" ({agg.savings_rate:.1f}% savings rate)" if agg.savings_rate is not None and agg.total_income > 0 else ""
         lines.append(f"💰 Total Incomes: {agg.total_income:,.2f} {curr}")
         lines.append(f"💸 Total Expenses: {agg.total_expenses:,.2f} {curr}")
-        lines.append(f"📈 Net Cash Flow: {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+        if not has_exchanges:
+            sign = "+" if agg.net_balance > 0 else ""
+            sav_str = f" ({agg.savings_rate:.1f}% savings rate)" if agg.savings_rate is not None and agg.total_income > 0 else ""
+            lines.append(f"📈 Net Cash Flow: {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+
+    ex_lines = format_exchange_summary_lines(agg)
+    if ex_lines:
+        lines.append("")
+        lines.extend(ex_lines)
+
+    if has_multi_curr or has_exchanges:
+        lines.append("")
+        lines.extend(format_net_cash_position_lines(agg, curr, is_family=True))
         
     lines.append("")
     lines.append(f"📊 <i>Total: {agg.transaction_count} transaction(s)</i>")

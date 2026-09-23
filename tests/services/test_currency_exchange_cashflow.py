@@ -292,8 +292,12 @@ def test_format_month_summary_includes_currency_exchange():
     assert "+300,000.00 ARS" in summary
     assert "1,000.00 USD" in summary  # Household Income
     assert "45,999.00 ARS" in summary  # Household Expenses
-    # Also verify member breakdown converted line
-    assert "Sold 200.00 USD ➔ Received 345,999.00 ARS" in summary
+    # Verify member breakdown does NOT show individual Net or Converted
+    mb_section = summary[summary.find("Member Breakdown"):]
+    assert "Converted:" not in mb_section
+    assert "Net:" not in mb_section
+    assert "Incomes:" in mb_section
+    assert "Expenses:" in mb_section
 
 
 def test_format_me_summary_includes_currency_exchange():

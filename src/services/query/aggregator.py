@@ -22,16 +22,25 @@ def aggregate_transactions(
     currency_totals: Dict[str, float] = {}
     income_currency_totals: Dict[str, float] = {}
     expense_currency_totals: Dict[str, float] = {}
+    exchange_sold_totals: Dict[str, float] = {}
+    exchange_received_totals: Dict[str, float] = {}
+    all_currencies = set()
     
     has_non_exchange = any((getattr(t, "category", "") or "").strip().lower() != "exchange" for t in transactions)
     exchange_count = 0
 
     for tx in transactions:
+        all_currencies.add(tx.currency)
         tx_type = getattr(tx, "type", "expense") or "expense"
         is_exchange = (getattr(tx, "category", "") or "").strip().lower() == "exchange"
         
         if is_exchange:
             exchange_count += 1
+            if tx_type == "expense":
+                exchange_sold_totals[tx.currency] = exchange_sold_totals.get(tx.currency, 0.0) + tx.amount
+            else:
+                exchange_received_totals[tx.currency] = exchange_received_totals.get(tx.currency, 0.0) + tx.amount
+
             if not has_non_exchange:
                 currency_totals[tx.currency] = currency_totals.get(tx.currency, 0.0) + tx.amount
         else:
@@ -96,6 +105,14 @@ def aggregate_transactions(
     else:
         savings_rate = 0.0 if total_expenses == 0 else None
 
+    net_currency_positions: Dict[str, float] = {}
+    for curr_code in all_currencies:
+        inc = income_currency_totals.get(curr_code, 0.0)
+        exp = expense_currency_totals.get(curr_code, 0.0)
+        sold = exchange_sold_totals.get(curr_code, 0.0)
+        recv = exchange_received_totals.get(curr_code, 0.0)
+        net_currency_positions[curr_code] = round(inc - exp - sold + recv, 2)
+
     if has_non_exchange:
         total_amount = sum(tx.amount for tx in transactions if tx.currency == effective_currency and (getattr(tx, "category", "") or "").strip().lower() != "exchange")
     else:
@@ -127,7 +144,10 @@ def aggregate_transactions(
         expense_category_breakdown={k: round(v, 2) for k, v in expense_category_breakdown.items()},
         daily_income_breakdown={k: round(v, 2) for k, v in daily_income_breakdown.items()},
         daily_expense_breakdown={k: round(v, 2) for k, v in daily_expense_breakdown.items()},
-        exchange_count=exchange_count
+        exchange_count=exchange_count,
+        exchange_sold_totals={k: round(v, 2) for k, v in exchange_sold_totals.items()},
+        exchange_received_totals={k: round(v, 2) for k, v in exchange_received_totals.items()},
+        net_currency_positions=net_currency_positions
     )
 
 def aggregate_by_category(
@@ -267,7 +287,12 @@ def aggregate_by_member(
             m.currency_totals[tx.currency] = m.currency_totals.get(tx.currency, 0.0) + tx.amount
 
         tx_type = getattr(tx, "type", "expense") or "expense"
-        if not is_exchange:
+        if is_exchange:
+            if tx_type == "expense":
+                m.exchange_sold_totals[tx.currency] = m.exchange_sold_totals.get(tx.currency, 0.0) + tx.amount
+            else:
+                m.exchange_received_totals[tx.currency] = m.exchange_received_totals.get(tx.currency, 0.0) + tx.amount
+        else:
             if tx_type == "income":
                 m.income_currency_totals[tx.currency] = m.income_currency_totals.get(tx.currency, 0.0) + tx.amount
                 if tx.currency == effective_currency:
@@ -279,7 +304,7 @@ def aggregate_by_member(
 
             if tx.currency == effective_currency:
                 m.total_amount += tx.amount
-        elif not has_non_exchange and tx.currency == effective_currency:
+        if not has_non_exchange and tx.currency == effective_currency and is_exchange:
             m.total_amount += tx.amount
 
         m.net_balance = m.total_earned - m.total_spent
@@ -305,6 +330,16 @@ def aggregate_by_member(
         m.currency_totals = {k: round(v, 2) for k, v in m.currency_totals.items()}
         m.income_currency_totals = {k: round(v, 2) for k, v in m.income_currency_totals.items()}
         m.expense_currency_totals = {k: round(v, 2) for k, v in m.expense_currency_totals.items()}
+        m.exchange_sold_totals = {k: round(v, 2) for k, v in m.exchange_sold_totals.items()}
+        m.exchange_received_totals = {k: round(v, 2) for k, v in m.exchange_received_totals.items()}
+
+        member_currencies = set(m.income_currency_totals.keys()) | set(m.expense_currency_totals.keys()) | set(m.exchange_sold_totals.keys()) | set(m.exchange_received_totals.keys())
+        for c in member_currencies:
+            inc = m.income_currency_totals.get(c, 0.0)
+            exp = m.expense_currency_totals.get(c, 0.0)
+            sold = m.exchange_sold_totals.get(c, 0.0)
+            recv = m.exchange_received_totals.get(c, 0.0)
+            m.net_currency_positions[c] = round(inc - exp - sold + recv, 2)
         
         cats = category_totals_per_user_id.get(u_id, {})
         m.category_totals = {k: round(v, 2) for k, v in cats.items()}

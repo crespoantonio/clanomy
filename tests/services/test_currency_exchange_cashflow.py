@@ -7,11 +7,16 @@ from sqlalchemy.pool import StaticPool
 from src.db.models import User, Family, Transaction
 from src.core.encryption import EncryptionService
 from src.services.handlers.transaction_handler import get_monthly_cash_flow_snapshot
-from src.services.query.models import DecryptedTransaction
+from src.services.query.models import DecryptedTransaction, QueryResult, ParsedQueryIntent
 from src.services.query.aggregator import (
     aggregate_transactions,
     aggregate_by_category,
     aggregate_by_member,
+)
+from src.services.query.formatters import (
+    format_month_summary,
+    format_me_summary,
+    format_balance_summary,
 )
 
 
@@ -167,6 +172,9 @@ def test_aggregate_transactions_excludes_exchange_from_operational_totals():
     assert agg_ars.expense_currency_totals == {"ARS": 50000.0}
     assert "USD" not in agg_ars.expense_currency_totals
     assert agg_ars.exchange_count == 2
+    assert agg_ars.exchange_sold_totals == {"USD": 200.0}
+    assert agg_ars.exchange_received_totals == {"ARS": 345999.0}
+    assert agg_ars.net_currency_positions == {"USD": 800.0, "ARS": 295999.0}
     assert "Exchange" not in agg_ars.expense_category_breakdown
     assert "Exchange" not in agg_ars.income_category_breakdown
 
@@ -179,6 +187,9 @@ def test_aggregate_transactions_excludes_exchange_from_operational_totals():
     assert agg_usd.income_currency_totals == {"USD": 1000.0}
     assert agg_usd.expense_currency_totals == {"ARS": 50000.0}
     assert agg_usd.exchange_count == 2
+    assert agg_usd.exchange_sold_totals == {"USD": 200.0}
+    assert agg_usd.exchange_received_totals == {"ARS": 345999.0}
+    assert agg_usd.net_currency_positions == {"USD": 800.0, "ARS": 295999.0}
 
 
 def test_aggregate_by_category_excludes_exchange_from_spending():
@@ -231,3 +242,142 @@ def test_aggregate_by_member_excludes_exchange_from_operational():
     assert tony.total_earned == 0.0
     assert tony.net_balance == -100.0
     assert tony.top_category == "Food/Drink"
+    assert tony.exchange_sold_totals == {"USD": 500.0}
+    assert tony.net_currency_positions == {"USD": -600.0}
+
+
+def test_format_month_summary_includes_currency_exchange():
+    family_id = uuid4()
+    user_id = uuid4()
+    ts = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+
+    transactions = [
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=1000.0, currency="USD", concept="Salary", category="Salary",
+            type="income", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=200.0, currency="USD", concept="Currency Exchange", category="Exchange",
+            type="expense", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=345999.0, currency="ARS", concept="Currency Exchange", category="Exchange",
+            type="income", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=45999.0, currency="ARS", concept="Groceries", category="Food/Drink",
+            type="expense", timestamp=ts
+        ),
+    ]
+
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    mb = aggregate_by_member(transactions, "this_month", primary_currency="USD")
+    qr = QueryResult(
+        intent=ParsedQueryIntent(intent="spending_summary", timeframe="this_month", scope="family"),
+        transactions=transactions,
+        total_count=len(transactions),
+        aggregation=agg,
+        member_breakdown=mb
+    )
+
+    summary = format_month_summary(qr, family_name="Tony's Family", timeframe_label="September 2026")
+    assert "Currency Converted:" in summary
+    assert "Sold: 200.00 USD ➔ Received: 345,999.00 ARS" in summary
+    assert "Net Family Position:" in summary
+    assert "+800.00 USD" in summary
+    assert "+300,000.00 ARS" in summary
+    assert "1,000.00 USD" in summary  # Household Income
+    assert "45,999.00 ARS" in summary  # Household Expenses
+    # Also verify member breakdown converted line
+    assert "Sold 200.00 USD ➔ Received 345,999.00 ARS" in summary
+
+
+def test_format_me_summary_includes_currency_exchange():
+    family_id = uuid4()
+    user_id = uuid4()
+    ts = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+
+    transactions = [
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=1000.0, currency="USD", concept="Salary", category="Salary",
+            type="income", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=200.0, currency="USD", concept="Currency Exchange", category="Exchange",
+            type="expense", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=345999.0, currency="ARS", concept="Currency Exchange", category="Exchange",
+            type="income", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=45999.0, currency="ARS", concept="Groceries", category="Food/Drink",
+            type="expense", timestamp=ts
+        ),
+    ]
+
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    cb = aggregate_by_category(transactions, "this_month", primary_currency="USD")
+    qr = QueryResult(
+        intent=ParsedQueryIntent(intent="spending_summary", timeframe="this_month", scope="personal"),
+        transactions=transactions,
+        total_count=len(transactions),
+        aggregation=agg,
+        category_breakdown=cb
+    )
+
+    me_summary = format_me_summary(qr, user_name="Tony", timeframe_label="September 2026")
+    assert "Currency Converted:" in me_summary
+    assert "Sold: 200.00 USD ➔ Received: 345,999.00 ARS" in me_summary
+    assert "Net Cash Position:" in me_summary
+    assert "+800.00 USD" in me_summary
+    assert "+300,000.00 ARS" in me_summary
+    assert "Top Categories:" in me_summary
+    assert "Food/Drink" in me_summary
+
+
+def test_format_balance_summary_includes_currency_exchange():
+    family_id = uuid4()
+    user_id = uuid4()
+    ts = datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc)
+
+    transactions = [
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=1000.0, currency="USD", concept="Salary", category="Salary",
+            type="income", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=200.0, currency="USD", concept="Currency Exchange", category="Exchange",
+            type="expense", timestamp=ts
+        ),
+        DecryptedTransaction(
+            id=uuid4(), family_id=family_id, user_id=user_id, user_name="Tony",
+            amount=345999.0, currency="ARS", concept="Currency Exchange", category="Exchange",
+            type="income", timestamp=ts
+        ),
+    ]
+
+    agg = aggregate_transactions(transactions, "this_month", primary_currency="USD")
+    qr = QueryResult(
+        intent=ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month", scope="family"),
+        transactions=transactions,
+        total_count=len(transactions),
+        aggregation=agg
+    )
+
+    bal_summary = format_balance_summary(qr)
+    assert "Currency Converted:" in bal_summary
+    assert "Sold: 200.00 USD ➔ Received: 345,999.00 ARS" in bal_summary
+    assert "Net Family Position:" in bal_summary
+    assert "+800.00 USD" in bal_summary
+    assert "+345,999.00 ARS" in bal_summary

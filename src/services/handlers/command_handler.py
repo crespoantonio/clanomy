@@ -330,7 +330,13 @@ class CommandHandler:
         from src.services.export_service import ExportService
         export_service = ExportService()
         fmt = "json" if "json" in (args or "").lower() else "csv"
-        await export_service.export_and_send(family.id, chat_id, export_format=fmt)
+        try:
+            await export_service.export_and_send(family.id, chat_id, format=fmt)
+        except Exception as e:
+            logger.error(f"Error executing handle_export for family_id={family.id}, chat_id={chat_id}: {e}", exc_info=True)
+            from src.services.telegram_service import TelegramService
+            telegram_service = TelegramService()
+            await telegram_service.send_message(chat_id=chat_id, text="Sorry, an error occurred while generating your export.")
         return None
 
     async def handle_delete_my_data(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:

@@ -268,3 +268,48 @@ async def test_command_handler_handle_today_and_bills():
         start_next, end_next = call_args_next[1], call_args_next[2]
         assert start_next > now
         assert end_next > start_next
+
+
+@pytest.mark.anyio
+async def test_command_handler_handle_export_csv():
+    handler = CommandHandler()
+    family_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    family = Family(id=family_id, name="Smith Family", default_currency="USD")
+    user = User(id=user_id, family_id=family_id, username="tony", full_name="Tony")
+
+    with patch("src.services.export_service.ExportService.export_and_send", new_callable=AsyncMock) as mock_export:
+        res = await handler.handle_export(user, family, chat_id=12345, args="")
+        assert res is None
+        mock_export.assert_called_once_with(family_id, 12345, format="csv")
+
+
+@pytest.mark.anyio
+async def test_command_handler_handle_export_json():
+    handler = CommandHandler()
+    family_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    family = Family(id=family_id, name="Smith Family", default_currency="USD")
+    user = User(id=user_id, family_id=family_id, username="tony", full_name="Tony")
+
+    with patch("src.services.export_service.ExportService.export_and_send", new_callable=AsyncMock) as mock_export:
+        res = await handler.handle_export(user, family, chat_id=12345, args="json")
+        assert res is None
+        mock_export.assert_called_once_with(family_id, 12345, format="json")
+
+
+@pytest.mark.anyio
+async def test_command_handler_handle_export_error_fallback():
+    handler = CommandHandler()
+    family_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    family = Family(id=family_id, name="Smith Family", default_currency="USD")
+    user = User(id=user_id, family_id=family_id, username="tony", full_name="Tony")
+
+    with patch("src.services.export_service.ExportService.export_and_send", new_callable=AsyncMock, side_effect=RuntimeError("Disk full")), \
+         patch("src.services.telegram_service.TelegramService.send_message", new_callable=AsyncMock) as mock_send:
+        res = await handler.handle_export(user, family, chat_id=12345, args="csv")
+        assert res is None
+        mock_send.assert_called_once()
+        assert "error occurred" in mock_send.call_args[1]["text"].lower()
+

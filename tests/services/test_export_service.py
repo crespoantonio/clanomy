@@ -265,3 +265,19 @@ async def test_export_and_send_cleanup_on_exception(session, test_family, monkey
     
     assert len(temp_files) == 1
     assert not os.path.exists(temp_files[0])
+
+
+@pytest.mark.anyio
+async def test_export_and_send_with_export_format_kwarg(session, test_family):
+    """Verify that calling export_and_send with export_format kwarg works defensively."""
+    service = ExportService(engine_override=session.bind)
+    from unittest.mock import AsyncMock
+    service.telegram_service = AsyncMock()
+
+    await service.export_and_send(test_family.id, 123, export_format="json")
+
+    service.telegram_service.send_document.assert_called_once()
+    file_path = service.telegram_service.send_document.call_args.kwargs["file_path"]
+    assert not os.path.exists(file_path)
+    assert file_path.endswith(".json")
+

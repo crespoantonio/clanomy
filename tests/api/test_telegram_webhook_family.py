@@ -92,6 +92,50 @@ def test_webhook_export_data(app_client, mock_telegram, telegram_payload_factory
     assert len(document_messages) > 0
     assert document_messages[-1].get("file_path") is not None
 
+def test_webhook_export_slash_command(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook should handle /export deterministic slash command."""
+    user_id = 899
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/export", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+
+    assert response.status_code == 200
+    document_messages = [msg for msg in mock_telegram.messages if "document" in msg]
+    assert len(document_messages) > 0
+    assert document_messages[-1].get("file_path") is not None
+    assert document_messages[-1].get("file_path").endswith(".csv")
+
+def test_webhook_exportar_json_slash_command(app_client, mock_telegram, telegram_payload_factory):
+    """[P1] Webhook should handle /exportar json deterministic slash command."""
+    user_id = 900
+    app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/start", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+    mock_telegram.messages.clear()
+
+    response = app_client.post(
+        "/api/v1/telegram/webhook",
+        json=telegram_payload_factory(text="/exportar json", user_id=user_id),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "valid-secret"}
+    )
+
+    assert response.status_code == 200
+    document_messages = [msg for msg in mock_telegram.messages if "document" in msg]
+    assert len(document_messages) > 0
+    assert document_messages[-1].get("file_path") is not None
+    assert document_messages[-1].get("file_path").endswith(".json")
+
 def test_webhook_account_deletion(app_client, mock_telegram, telegram_payload_factory):
     """[P2] Webhook should process account deletion flow."""
     user_id = 456

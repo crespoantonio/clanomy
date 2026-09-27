@@ -110,12 +110,13 @@ class ExportService:
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
 
-    async def export_data(self, family_id: UUID, format: str = "csv") -> Tuple[str, int]:
+    async def export_data(self, family_id: UUID, format: str = "csv", export_format: Optional[str] = None) -> Tuple[str, int]:
         """Fetches, decrypts, and writes transactions to a temp file."""
         start_time = time.time()
         
         ALLOWED_FORMATS = {"csv", "json"}
-        safe_format = (format or "csv").lower().strip().lstrip(".")
+        chosen_format = export_format or format or "csv"
+        safe_format = chosen_format.lower().strip().lstrip(".")
         if safe_format not in ALLOWED_FORMATS:
             safe_format = "csv"
 
@@ -158,11 +159,12 @@ class ExportService:
                 os.unlink(temp_path)
             raise e
 
-    async def export_and_send(self, family_id: UUID, chat_id: int, format: str = "csv") -> None:
+    async def export_and_send(self, family_id: UUID, chat_id: int, format: str = "csv", export_format: Optional[str] = None) -> None:
         """Exports data and sends it to the user via Telegram, ensuring temp file is deleted."""
         temp_path = None
+        chosen_format = export_format or format or "csv"
         try:
-            temp_path, count = await self.export_data(family_id, format)
+            temp_path, count = await self.export_data(family_id, format=chosen_format)
             
             if count == 0:
                 caption = "📊 Your transaction history is currently empty."

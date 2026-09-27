@@ -145,7 +145,10 @@ def mock_telegram(monkeypatch):
         pass
     try:
         monkeypatch.setattr("src.services.export_service.TelegramService", lambda: spy)
-    except AttributeError:
+        from src.services.export_service import ExportService
+        if ExportService._instance is not None:
+            ExportService._instance.telegram_service = spy
+    except Exception:
         pass
     try:
         monkeypatch.setattr("src.services.messaging_service.TelegramService", lambda: spy)

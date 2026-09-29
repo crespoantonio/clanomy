@@ -15,22 +15,22 @@ Only the latest release on the primary branch is actively maintained with securi
 
 ---
 
-## 🔒 Reporting a Vulnerability
+## 🔒 Reporting a Vulnerability or Issue
 
-**DO NOT report security vulnerabilities through public GitHub issues, discussions, or pull requests.**
+Vulnerabilities, security concerns, and issues must be reported directly through **GitHub Issues** or via our direct security contact.
 
-We provide private, encrypted, and monitored channels for vulnerability disclosures.
+### 1. GitHub Issues
+To submit a vulnerability report or security issue:
+1. Navigate to the **[Issues tab](https://github.com/crespoantonio/clanomy/issues)** of the repository.
+2. Click **"New Issue"**.
+3. Fill out the report with clear reproduction steps, affected components, and potential impact.
 
-### 1. GitHub Private Vulnerability Reporting (Preferred)
-If you have a GitHub account:
-1. Navigate to the **[Security tab](https://github.com/crespoantonio/clanomy/security)** of the repository.
-2. Under **Vulnerability reporting**, click **"Report a vulnerability"**.
-3. Fill out the advisory form with details, reproduction steps, and impact assessment.
+*(Note: Please do not submit reports via the GitHub Security Tab; all reports should be filed via GitHub Issues or direct email).*
 
 ### 2. Direct Security Contact
-If GitHub Private Reporting is unavailable or you prefer direct communication, send an email to:
-- **Primary Contact:** `lic.crespoantonio@gmail.com`
-- **Subject Line:** `[VULNERABILITY] Clanomy Security Disclosure - <Component/Route>`
+If you prefer direct communication or require confidential handling, send an email to:
+- **Security Contact:** `support@clanomy.com`
+- **Subject Line:** `[SECURITY / ISSUE] Clanomy Vulnerability Disclosure - <Component/Route>`
 
 ---
 
@@ -52,7 +52,7 @@ We treat security disclosures with the highest priority and commit to the follow
 - **Initial Acknowledgment:** Within **48 hours** of receiving the report.
 - **Triage & Impact Assessment:** Within **5 business days**, confirming whether the issue is reproducible and establishing severity using CVSS v3.1.
 - **Remediation & Patch:** Target fix delivered within **14 calendar days** for Critical/High severity issues, and within **30 days** for Medium/Low issues.
-- **Coordinated Public Disclosure:** Once a fix is verified and deployed, we will coordinate public disclosure and publish a GitHub Security Advisory crediting the researcher.
+- **Coordinated Resolution:** Once a fix is verified and deployed, we will update the relevant issue/release notes crediting the reporter.
 
 ---
 
@@ -81,7 +81,7 @@ We treat security disclosures with the highest priority and commit to the follow
 We consider security research conducted under this policy to be authorized. We pledge that:
 - We will not pursue legal action against researchers who make a good-faith effort to comply with this disclosure policy.
 - We will work collaboratively with you to understand and resolve the issue.
-- We will acknowledge your responsible disclosure publicly in our release notes and GitHub Security Advisory (unless you prefer to remain anonymous).
+- We will acknowledge your responsible disclosure publicly in our release notes or issue tracker (unless you prefer to remain anonymous).
 
 *Guidelines for Safe Harbor compliance:*
 - Act in good faith to avoid privacy violations, data destruction, and service degradation.

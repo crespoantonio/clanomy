@@ -1,0 +1,226 @@
+{
+	"info": {
+		"_postman_id": "c1a90e3f-45b2-4d1a-96e0-2f170b029a88",
+		"name": "Clanomy - Webhooks & Tunnels Manager",
+		"description": "Postman collection to easily update, verify, and test ngrok/tunnel URLs with Telegram Bot API and Paddle Billing Sandbox.\n\nWhenever you restart ngrok:\n1. Open Collection Variables.\n2. Update `ngrok_url` with your new forwarding domain.\n3. Run '1. Telegram - Set Webhook' and '2. Paddle - Update Webhook Destination'.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Webhook Synchronizers",
+			"description": "Execute these two requests whenever your ngrok / tunnel URL changes.",
+			"item": [
+				{
+					"name": "1. Telegram - Set Webhook to ngrok",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"{{ngrok_url}}/api/v1/telegram/webhook\",\n  \"secret_token\": \"{{messaging_webhook_secret}}\",\n  \"allowed_updates\": [\"message\", \"edited_message\", \"callback_query\"]\n}"
+						},
+						"url": {
+							"raw": "https://api.telegram.org/bot{{telegram_bot_token}}/setWebhook",
+							"protocol": "https",
+							"host": [
+								"api",
+								"telegram",
+								"org"
+							],
+							"path": [
+								"bot{{telegram_bot_token}}",
+								"setWebhook"
+							]
+						},
+						"description": "Registers your new ngrok HTTPS endpoint with Telegram's Bot API and attaches the secret token."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Paddle Sandbox - Update Destination to ngrok",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{paddle_api_key}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"destination\": \"{{ngrok_url}}/api/v1/paddle/webhook\"\n}"
+						},
+						"url": {
+							"raw": "https://sandbox-api.paddle.com/notification-settings/{{paddle_notification_setting_id}}",
+							"protocol": "https",
+							"host": [
+								"sandbox-api",
+								"paddle",
+								"com"
+							],
+							"path": [
+								"notification-settings",
+								"{{paddle_notification_setting_id}}"
+							]
+						},
+						"description": "Updates the existing Paddle Sandbox notification setting destination without changing the endpoint secret key in .env."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Verification & Status",
+			"description": "Verify that Telegram, Paddle, and your local app are connected and responsive.",
+			"item": [
+				{
+					"name": "1. Telegram - Get Webhook Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "https://api.telegram.org/bot{{telegram_bot_token}}/getWebhookInfo",
+							"protocol": "https",
+							"host": [
+								"api",
+								"telegram",
+								"org"
+							],
+							"path": [
+								"bot{{telegram_bot_token}}",
+								"getWebhookInfo"
+							]
+						},
+						"description": "Returns current active webhook URL, pending update count, and any recent delivery errors from Telegram."
+					},
+					"response": []
+				},
+				{
+					"name": "2. Paddle Sandbox - Get Notification Setting",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{paddle_api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "https://sandbox-api.paddle.com/notification-settings/{{paddle_notification_setting_id}}",
+							"protocol": "https",
+							"host": [
+								"sandbox-api",
+								"paddle",
+								"com"
+							],
+							"path": [
+								"notification-settings",
+								"{{paddle_notification_setting_id}}"
+							]
+						},
+						"description": "Inspects the Paddle Sandbox notification setting to verify active destination URL and subscribed events."
+					},
+					"response": []
+				},
+				{
+					"name": "3. Tunnel - Health Check Probe (/health)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{ngrok_url}}/health",
+							"host": [
+								"{{ngrok_url}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Verifies that ngrok is successfully routing traffic to your running Clanomy backend container (returns 200 with database: connected)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Diagnostics & Utility",
+			"description": "Troubleshooting utilities for webhooks.",
+			"item": [
+				{
+					"name": "1. Telegram - Delete Webhook (Switch to Polling / Reset)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"drop_pending_updates\": true\n}"
+						},
+						"url": {
+							"raw": "https://api.telegram.org/bot{{telegram_bot_token}}/deleteWebhook",
+							"protocol": "https",
+							"host": [
+								"api",
+								"telegram",
+								"org"
+							],
+							"path": [
+								"bot{{telegram_bot_token}}",
+								"deleteWebhook"
+							]
+						},
+						"description": "Deletes the Telegram webhook and clears any stuck pending updates."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "ngrok_url",
+			"value": "",
+			"type": "string",
+			"description": "Required: Public ngrok forwarding URL (e.g. https://xxxx-xx-xx-xx.ngrok-free.app)"
+		},
+		{
+			"key": "telegram_bot_token",
+			"value": "",
+			"type": "string",
+			"description": "Required: Telegram Bot Token from @BotFather (TELEGRAM_BOT_TOKEN in .env)"
+		},
+		{
+			"key": "messaging_webhook_secret",
+			"value": "",
+			"type": "string",
+			"description": "Required: Secret token for Telegram webhook validation (MESSAGING_WEBHOOK_SECRET in .env)"
+		},
+		{
+			"key": "paddle_api_key",
+			"value": "",
+			"type": "string",
+			"description": "Required: Paddle API Key (PADDLE_API_KEY in .env, starts with pdl_sdbx_apikey_ or pdl_live_apikey_)"
+		},
+		{
+			"key": "paddle_notification_setting_id",
+			"value": "",
+			"type": "string",
+			"description": "Required: Paddle Notification Setting ID (starts with ntfset_..., found in Paddle Dashboard > Developer tools > Notifications)"
+		}
+	]
+}

@@ -1,0 +1,366 @@
+import html
+from typing import Optional, List, Tuple, Dict, Any
+from datetime import datetime, timezone
+from uuid import UUID
+import logging
+from sqlmodel import Session, select
+import asyncio
+
+from src.db.session import engine
+from src.db.models import User, Family, Transaction
+from src.core.config import settings
+from src.services.query.service import QueryService
+from src.services.query.models import ParsedQueryIntent, QueryResult
+from src.services.query.aggregator import (
+    aggregate_transactions,
+    aggregate_by_category,
+    aggregate_by_member
+)
+from src.services.query.formatters import (
+    format_month_summary,
+    format_me_summary,
+    format_today_summary,
+    format_bills_summary,
+    format_balance_summary
+)
+from src.templates.telegram_messages import (
+    PRIVACY_POLICY_MESSAGE,
+    TERMS_OF_SERVICE_MESSAGE,
+    AI_DISCLAIMER_FOOTER,
+    TELEGRAM_NON_AFFILIATION_DISCLAIMER,
+    is_spanish_text,
+    format_help_message,
+    format_timezone_overview,
+    format_timezone_unrecognized,
+    format_timezone_admin_required,
+    format_timezone_updated,
+    format_delete_my_data_confirm_prompt,
+    format_delete_my_data_success,
+    format_delete_my_data_failure,
+)
+
+logger = logging.getLogger(__name__)
+
+class CommandHandler:
+    """
+    Handles pre-built deterministic Telegram commands without invoking the AI engine.
+    Runs 100% in Python & SQL, incurs $0 AI cost, executes in <40ms, and never counts
+    towards the monthly AI free-tier quota.
+    """
+
+    def __init__(self):
+        self.query_service = QueryService()
+
+    def _resolve_active_timezone(self, user: User, family: Family) -> str:
+        return getattr(user, "timezone", None) or getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+
+    async def handle_month(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /month or /month last
+        Generates full family monthly overview with member-by-member breakdown.
+        """
+        args_lower = (args or "").strip().lower()
+        timeframe = "last_month" if any(w in args_lower for w in ["last", "pasado", "anterior"]) else "this_month"
+        active_tz = self._resolve_active_timezone(user, family)
+        
+        ref_time = datetime.now(timezone.utc)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz)
+        effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
+
+        transactions = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_transactions,
+            family.id, start_time, end_time, None, None, None
+        )
+
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=effective_currency,
+            calculate_daily=True
+        )
+
+        member_breakdown = aggregate_by_member(
+            transactions=transactions,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=effective_currency,
+            overall_total=aggregation.total_expenses
+        )
+
+        qr = QueryResult(
+            intent=ParsedQueryIntent(intent="spending_summary", timeframe=timeframe, scope="family"),
+            resolved_start_time=start_time,
+            resolved_end_time=end_time,
+            transactions=transactions,
+            total_count=len(transactions),
+            aggregation=aggregation,
+            member_breakdown=member_breakdown
+        )
+
+        month_label = start_time.strftime("%B %Y")
+        return format_month_summary(qr, family_name=family.name, timeframe_label=month_label, tz_name=active_tz)
+
+    async def handle_me(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /me or /me last
+        Generates caller's personal monthly summary (income, expenses, net savings, top categories).
+        """
+        args_lower = (args or "").strip().lower()
+        timeframe = "last_month" if any(w in args_lower for w in ["last", "pasado", "anterior"]) else "this_month"
+        active_tz = self._resolve_active_timezone(user, family)
+        
+        ref_time = datetime.now(timezone.utc)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz)
+        effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
+
+        all_family_txs = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_transactions,
+            family.id, start_time, end_time, None, None, None
+        )
+        my_transactions = [tx for tx in all_family_txs if tx.user_id == user.id]
+
+        aggregation = aggregate_transactions(
+            transactions=my_transactions,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=effective_currency,
+            calculate_daily=True
+        )
+
+        category_breakdown = aggregate_by_category(
+            transactions=my_transactions,
+            timeframe=timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=effective_currency,
+            overall_total=aggregation.total_expenses
+        )
+
+        qr = QueryResult(
+            intent=ParsedQueryIntent(intent="spending_summary", timeframe=timeframe, scope="personal"),
+            resolved_start_time=start_time,
+            resolved_end_time=end_time,
+            transactions=my_transactions,
+            total_count=len(my_transactions),
+            aggregation=aggregation,
+            category_breakdown=category_breakdown
+        )
+
+        user_display = user.full_name or user.username or "You"
+        month_label = start_time.strftime("%B %Y")
+        return format_me_summary(qr, user_name=user_display, timeframe_label=month_label, tz_name=active_tz)
+
+    async def handle_today(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /today or /today me
+        Generates summary of transactions recorded today.
+        """
+        active_tz = self._resolve_active_timezone(user, family)
+        ref_time = datetime.now(timezone.utc)
+        start_time, end_time = self.query_service._resolve_date_range("today", None, None, ref_time, tz_name=active_tz)
+        effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
+
+        args_lower = (args or "").strip().lower()
+        only_me = any(w in args_lower for w in ["me", "yo"])
+
+        transactions = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_transactions,
+            family.id, start_time, end_time, None, None, None
+        )
+
+        if only_me:
+            transactions = [tx for tx in transactions if tx.user_id == user.id]
+
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe="today",
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=effective_currency,
+            calculate_daily=False
+        )
+
+        qr = QueryResult(
+            intent=ParsedQueryIntent(intent="spending_summary", timeframe="today", scope="personal" if only_me else "family"),
+            resolved_start_time=start_time,
+            resolved_end_time=end_time,
+            transactions=transactions,
+            total_count=len(transactions),
+            aggregation=aggregation
+        )
+
+        return format_today_summary(qr, is_family=(not only_me), tz_name=active_tz)
+
+    async def handle_bills(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /bills or /bills next
+        Shows upcoming pending scheduled bills.
+        """
+        args_lower = (args or "").strip().lower()
+        timeframe = "next_month" if any(w in args_lower for w in ["next", "proximo", "siguiente"]) else "this_month"
+        active_tz = self._resolve_active_timezone(user, family)
+
+        ref_time = datetime.now(timezone.utc)
+        start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz, future_inclusive=True)
+
+        bills = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_scheduled_bills,
+            family.id, start_time, end_time, "pending"
+        )
+
+        tf_label = "Next Month" if timeframe == "next_month" else "This Month"
+        return format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz)
+
+    async def handle_bills_interactive(self, user: User, family: Family, args: str = "", page: int = 1) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """
+        /bills or /bills next (interactive)
+        Shows upcoming pending scheduled bills with inline buttons for 1-tap settlement and pagination.
+        """
+        from src.services.handlers.bill_handler import handle_bills_interactive
+        return await handle_bills_interactive(user, family, args=args, page=page)
+
+    async def handle_balance(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /balance
+        Shows net cash flow, earnings vs spendings, and savings rate.
+        """
+        active_tz = self._resolve_active_timezone(user, family)
+        ref_time = datetime.now(timezone.utc)
+        start_time, end_time = self.query_service._resolve_date_range("this_month", None, None, ref_time, tz_name=active_tz)
+        effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
+
+        transactions = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_transactions,
+            family.id, start_time, end_time, None, None, None
+        )
+
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe="this_month",
+            start_time=start_time,
+            end_time=end_time,
+            primary_currency=effective_currency,
+            calculate_daily=False
+        )
+
+        qr = QueryResult(
+            intent=ParsedQueryIntent(intent="net_cash_flow", timeframe="this_month", scope="family"),
+            resolved_start_time=start_time,
+            resolved_end_time=end_time,
+            transactions=transactions,
+            total_count=len(transactions),
+            aggregation=aggregation
+        )
+
+        return format_balance_summary(qr, tz_name=active_tz)
+
+    async def handle_timezone(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /timezone or /timezone Madrid
+        Displays or updates the active timezone for the user or household.
+        """
+        from src.services.family_service import FamilyService
+        from src.services.query.date_resolver import validate_and_normalize_timezone
+        
+        args_clean = (args or "").strip()
+        family_service = FamilyService()
+        is_spanish = is_spanish_text(args_clean)
+
+        if not args_clean:
+            active_tz = self._resolve_active_timezone(user, family)
+            user_tz = getattr(user, "timezone", None)
+            fam_tz = getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+            return format_timezone_overview(active_tz, fam_tz, user_tz, is_spanish=is_spanish)
+
+        # Check if setting for household
+        is_household = False
+        tz_input = args_clean
+        if "--household" in tz_input.lower() or "-h" in tz_input.lower():
+            tz_input = tz_input.replace("--household", "").replace("-h", "").strip()
+            is_household = True
+
+        normalized = validate_and_normalize_timezone(tz_input)
+        if not normalized:
+            return format_timezone_unrecognized(tz_input, is_spanish=is_spanish)
+
+        if is_household:
+            is_admin = family_service.is_family_admin(family.id, user.id)
+            if not is_admin:
+                return format_timezone_admin_required(is_spanish=is_spanish)
+            await asyncio.to_thread(family_service.set_family_timezone, family.id, normalized)
+            family.timezone = normalized
+            return format_timezone_updated(normalized, is_household=True, is_spanish=is_spanish)
+        else:
+            await asyncio.to_thread(family_service.set_user_timezone, user.id, normalized)
+            user.timezone = normalized
+            return format_timezone_updated(normalized, is_household=False, is_spanish=is_spanish)
+
+    async def handle_undo(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:
+        """
+        /undo or /deshacer
+        Instantly reverts the user's latest recorded transaction.
+        """
+        from src.services.handlers.transaction_handler import handle_transaction_undo
+        is_es = is_spanish or is_spanish_text(args)
+        return await asyncio.to_thread(handle_transaction_undo, user.id, None, is_spanish=is_es)
+
+    async def handle_privacy(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /privacy or /privacidad
+        Displays data rights, sub-processors, and Zero-Knowledge encryption guarantees.
+        """
+        return PRIVACY_POLICY_MESSAGE
+
+    async def handle_tos(self, user: User, family: Family, args: str = "") -> str:
+        """
+        /tos, /terms, or /terminos
+        Displays Terms of Service, non-advisory status, and 'As-Is' warranty disclaimers.
+        """
+        return TERMS_OF_SERVICE_MESSAGE
+
+    async def handle_export(self, user: User, family: Family, chat_id: int, args: str = "") -> Optional[str]:
+        """
+        /export or /exportar
+        Deterministically exports family transactions in CSV or JSON without invoking AI.
+        """
+        from src.services.export_service import ExportService
+        export_service = ExportService()
+        fmt = "json" if "json" in (args or "").lower() else "csv"
+        try:
+            await export_service.export_and_send(family.id, chat_id, format=fmt)
+        except Exception as e:
+            logger.error(f"Error executing handle_export for family_id={family.id}, chat_id={chat_id}: {e}", exc_info=True)
+            from src.services.telegram_service import TelegramService
+            telegram_service = TelegramService()
+            await telegram_service.send_message(chat_id=chat_id, text="Sorry, an error occurred while generating your export.")
+        return None
+
+    async def handle_delete_my_data(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:
+        """
+        /delete_my_data, /delete_account, or /opt_out
+        Permanently wipes the user's data from Clanomy (GDPR Right to Erasure / Right to be Forgotten).
+        """
+        clean_arg = (args or "").strip().upper()
+        is_es = is_spanish or is_spanish_text(args) or ("CONFIRMAR" in clean_arg) or ("SI" in clean_arg)
+        if clean_arg in ("CONFIRM", "CONFIRMAR", "YES", "SI"):
+            from src.services.account_service import AccountService
+            account_service = AccountService()
+            success = await account_service.delete_account(user.id)
+            if success:
+                return format_delete_my_data_success(is_spanish=is_es)
+            return format_delete_my_data_failure(is_spanish=is_es)
+
+        return format_delete_my_data_confirm_prompt(is_spanish=is_es)
+
+    async def handle_help(self, user: User, family: Family, args: str = "", is_spanish: bool = False) -> str:
+        """
+        /help or /ayuda
+        Displays interactive command guide and AI tips.
+        """
+        is_es = is_spanish or is_spanish_text(args)
+        return format_help_message(is_spanish=is_es)
+

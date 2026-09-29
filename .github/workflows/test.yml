@@ -1,0 +1,41 @@
+name: Test Suite & Code Coverage
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Pytest & Coverage Check (>= 85%)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Test Suite with Coverage
+        env:
+          PYTHONPATH: .
+          ENCRYPTION_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+          TELEGRAM_BOT_TOKEN: "ci_test_telegram_bot_token"
+          MESSAGING_WEBHOOK_SECRET: "ci_test_secret"
+          DATABASE_URL: "sqlite:///:memory:"
+        run: |
+          python -m coverage run --source=src -m pytest
+          python -m coverage report -m --fail-under=85

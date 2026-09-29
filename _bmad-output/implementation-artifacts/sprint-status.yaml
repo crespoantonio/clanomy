@@ -1,0 +1,197 @@
+# generated: 2026-05-09
+# last_updated: 2026-09-04 12:00:00
+# project: Clanomy
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {implementation_artifacts}
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when first story is created (via create-story)
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-05-09
+last_updated: 2026-09-11 10:30:00
+project: Clanomy
+tracking_system: file-system
+story_location: { implementation_artifacts }
+
+development_status:
+  epic-1: done
+  1-1-project-initialization-containerized-environment: done
+  1-2-application-level-aes-256-encryption-service: done
+  1-3-multi-tenant-database-schema-sqlmodel: done
+  1-4-generic-messaging-api-registration-flow: done
+  epic-1-retrospective: done
+
+  epic-2: done
+  2-1-faster-whisper-transcription-service: done
+  2-2-ollama-json-extraction-service: done
+  2-3-the-3-second-rule-orchestrator: done
+  2-4-transaction-persistence-with-encryption: done
+  2-5-retroactive-and-relative-date-expense-logging: done
+  epic-2-retrospective: done
+
+  epic-3: done
+  3-1-natural-language-query-processor-rag-lite: done
+  3-2-time-based-aggregations-weekly-monthly-totals: done
+  3-3-category-based-spending-filters: done
+  3-4-friendly-conversational-summary-generator: done
+  epic-3-retrospective: done
+
+  epic-4: done
+  4-1-financial-data-export-json-csv: done
+  4-2-account-deletion-right-to-be-forgotten: done
+  epic-4-retrospective: done
+
+  epic-5: done
+  5-1-family-group-creation-invite-link: done
+  5-2-shared-budget-visibility: done
+  5-3-per-member-spending-attribution: done
+  epic-5-retrospective: done
+
+  epic-6: done
+  6-1-notion-workspace-connection: done
+  6-2-real-time-log-mirroring: done
+  6-3-retry-mechanism-for-mirroring-failures: done
+  epic-6-retrospective: done
+
+  epic-7: done
+  7-1-database-schema-expansion-for-subscriptions: done
+  7-2-quota-gating-and-upgrade-prompt: done
+  7-3-telegram-stars-invoice-generation: done
+  7-4-payment-verification-webhook-handler: done
+  7-5-trial-lifecycle-notifications-and-scheduler: done
+  epic-7-retrospective: done
+
+  epic-8: done
+  8-1-database-schema-extension-for-transaction-types: done
+  8-2-dual-intent-natural-language-extraction: done
+  8-3-income-voice-and-text-logging-orchestrator: done
+  8-4-conversational-net-cash-flow-queries: done
+  8-5-notion-mirroring-and-export-updates: done
+  8-6-conversational-transaction-correction-and-undo: done
+  epic-8-retrospective: done
+
+  epic-9: done
+  9-1-database-schema-and-migration-for-family-default-currency: done
+  9-2-family-currency-configuration-and-chat-command: done
+  9-3-bilingual-nlp-and-dynamic-currency-extraction: done
+  9-4-multi-currency-query-segregation-and-formatting: done
+  epic-9-retrospective: done
+
+  epic-10: done
+  10-1-scheduled-bill-database-model-and-migration: done
+  10-2-due-date-and-batch-bill-nlp-extraction: done
+  10-3-conversational-zero-amount-bill-settlement: done
+  10-4-proactive-due-and-overdue-bill-alerts: done
+  epic-10-retrospective: done
+
+  epic-11: done
+  11-1-multi-tenant-workspace-isolation-and-rls: done
+  11-2-telegram-message-escaping-and-delivery-resilience: done
+  11-3-prompt-injection-defense-and-input-sanitization: done
+  11-4-concurrency-control-and-resource-bounding: done
+  11-5-origin-shielding-security-headers-and-rate-limiting: done
+  epic-11-retrospective: done
+
+  epic-12: done
+  12-1-domain-driven-decomposition-of-core-services: done
+  12-2-hybrid-cloud-and-local-ai-inference-pipeline: done
+  12-3-deterministic-fallback-extraction-and-classification: done
+  12-4-atomic-user-and-family-provisioning-service: done
+  epic-12-retrospective: done
+
+  epic-13: done
+  13-1-github-actions-ci-and-coverage-enforcement: done
+  13-2-pr-guardrail-workflow-for-protected-assets: done
+  13-3-automated-alembic-startup-migration-lifecycle: done
+  13-4-community-funding-and-containerized-self-hosting-framework: done
+  epic-13-retrospective: done
+
+  epic-14: done
+  14-1-prebuilt-fastpath-commands-and-hybrid-quota: done
+  14-2-household-member-segregation-and-personal-isolation: done
+  14-3-multi-currency-ledger-aggregation-per-member: done
+  14-4-20-log-free-tier-quota-and-context-aware-pro-tips: done
+  epic-14-retrospective: done
+
+  epic-15: done
+  15-1-database-schema-and-migration-for-family-timezone: done
+  15-2-family-timezone-configuration-and-chat-command: done
+  15-3-timezone-aware-date-resolution-and-aggregations: done
+  epic-15-retrospective: optional
+
+  epic-16: done
+  16-1-compound-batch-transaction-pydantic-models-and-prompts: done
+  16-2-batch-tracker-and-multi-item-undo-orchestration: done
+  epic-16-retrospective: optional
+
+  epic-17: done
+  17-1-database-schema-and-migration-for-lemonsqueezy: done
+  17-2-lemonsqueezy-billing-service-and-checkout-generation: done
+  17-3-lemonsqueezy-webhook-verification-and-subscription-lifecycle: done
+  17-4-customer-billing-portal-and-tier-limits: done
+  epic-17-retrospective: optional
+
+  epic-18: done
+  18-1-multi-provider-whisper-speech-to-text-engine: done
+  18-2-openai-compatible-provider-and-gemini-support: done
+  18-3-static-prompt-caching-and-exponential-backoff-resilience: done
+  epic-18-retrospective: optional
+
+  epic-19: done
+  19-1-dedicated-gemini-provider-implementation: done
+  19-2-direct-native-audio-transcription: done
+  19-3-automatic-key-detection-and-model-resolution: done
+  epic-19-retrospective: optional
+
+  epic-20: done
+  20-1-telegram-webhook-callback-query-processing: done
+  20-2-paginated-currency-inline-keyboard: done
+  epic-20-retrospective: optional
+
+  epic-21: done
+  21-1-centralized-subscription-tier-configuration-registry: done
+  21-2-60-day-duo-trial-experience: done
+  21-3-daily-transaction-quotas-and-internal-maintenance-cron: done
+  epic-21-retrospective: optional
+
+  epic-22: done
+  22-1-public-bilingual-landing-page-web-application: done
+  22-2-authorized-message-simulation-route: done
+  22-3-multilingual-llm-evaluation-harness-and-dataset: done
+  epic-22-retrospective: optional
+
+  epic-23: done
+  23-1-paddle-billing-database-schema-and-idempotency-ledger: done
+  23-2-paddle-billing-service-and-transaction-checkout-generation: done
+  23-3-cryptographic-paddle-webhook-verification-and-subscription-lifecycle: done
+  23-4-customer-portal-and-non-admin-member-graduation-workflow: done
+  23-5-public-checkout-web-route-and-telegram-deep-linking: done
+  epic-23-retrospective: optional
+

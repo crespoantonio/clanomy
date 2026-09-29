@@ -1,0 +1,27 @@
+# See https://pre-commit.com for more information
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: prevent-env-commit
+        name: Block .env files from being committed (except .env.example)
+        entry: python -c "import sys, re; files = sys.argv[1:]; bad = [f for f in files if re.search(r'(^|/)\.env(\..+)?$', f) and not f.endswith('.env.example')]; (print('::error::Attempted to commit sensitive environment file: ' + ', '.join(bad)) or sys.exit(1)) if bad else sys.exit(0)"
+        language: system
+        types: [file]
+        stages: [pre-commit]
+
+      - id: detect-high-risk-secrets
+        name: Block staged secrets, tokens, and database passwords
+        entry: python -c "import sys, re; files = sys.argv[1:]; patterns = [r'pdl_sdbx_apikey_[0-9a-zA-Z_]{30,}', r'pdl_live_apikey_[0-9a-zA-Z_]{30,}', r'pdl_ntfset_[0-9a-zA-Z_]{30,}', r'\b\d{8,10}:[A-Za-z0-9_-]{30,40}\b', r'postgresql\+psycopg://[^:]+:[^@]+@']; violations = []; [violations.append((f, p)) for f in files if not (f.endswith(('.example', '.sample', 'SECURITY.md', 'pre-commit-config.yaml', 'docker-compose.yaml', 'docker-compose.yml', '.md')) or 'docs/' in f) for p in patterns if open(f, 'r', encoding='utf-8', errors='ignore').read() and re.search(p, open(f, 'r', encoding='utf-8', errors='ignore').read())]; (print('::error::Potential secret leak in ' + str(violations)) or sys.exit(1)) if violations else sys.exit(0)"
+        language: system
+        types: [file]
+        stages: [pre-commit]

@@ -1,0 +1,119 @@
+name: PR Integrity & Guardrail Check
+
+on:
+  pull_request:
+    branches: [master, main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  guardrail:
+    name: Check Protected Payment & Security Paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Inspect Changed Files
+        id: check_diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Compare PR branch with the target base branch
+          echo "Comparing changes between $BASE_SHA and $HEAD_SHA..."
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Protected files/paths list for payments, monetization, security, web, branding, and supply chain:
+          # - Public web studio and commercial landing page (landing/)
+          # - Payment, billing services, and tier registries
+          # - Lemon Squeezy webhook routes and API endpoints
+          # - Trial lifecycle, reminder schedulers, and internal jobs
+          # - Core cryptographic security, auth verification, and settings
+          # - Payment and security test suites
+          # - Monetization strategy documentation, licensing, and CI workflows
+          # - Dependency manifests, package requirements, and container build files
+          PROTECTED_PATTERNS=(
+            # Web & Marketing
+            "^landing/"
+
+            # Core Monetization, Tiers & Billing Engine
+            "^src/core/subscription_config\.py$"
+            "^src/services/subscription_service\.py$"
+            "^src/services/billing/"
+            "^src/api/routes/paddle\.py$"
+            "^src/api/routes/lemonsqueezy\.py$"
+            "^alembic/versions/.*paddle.*"
+            "^alembic/versions/.*lemonsqueezy.*"
+
+            # Trial Expiration & Internal Jobs
+            "^src/services/notification_scheduler\.py$"
+            "^src/api/routes/internal_jobs\.py$"
+
+            # Core Security & Configuration
+            "^src/core/security\.py$"
+            "^src/core/config\.py$"
+            "^src/api/routes/simulate\.py$"
+
+            # Sensitive Test Suites & Evaluation Harness
+            "^tests/api/test_paddle_webhooks\.py$"
+            "^tests/services/test_paddle_service\.py$"
+            "^tests/services/test_billing_service\.py$"
+            "^tests/services/test_lemonsqueezy_billing\.py$"
+            "^tests/services/test_subscription_service\.py$"
+            "^tests/services/test_three_tier_pricing\.py$"
+            "^tests/services/test_notification_scheduler\.py$"
+            "^tests/api/test_internal_jobs\.py$"
+            "^tests/data/"
+            "^tests/evaluation/"
+            "^scripts/run_llm_eval\.py$"
+
+            # Governance, Licensing, CI & Operational Strategy
+            "^README\.md$"
+            "^LICENSE$"
+            "^SECURITY\.md$"
+            "^\.env\.example$"
+            "^\.github/"
+            "^\.pre-commit-config\.ya?ml$"
+            "^docs/monetization-and-subscription-strategy\.md$"
+            "^docs/gcp_cloud_scheduler_setup\.md$"
+
+            # Supply Chain & Infrastructure as Code
+            "^requirements.*\.txt$"
+            "^requirements.*\.in$"
+            "^Containerfile$"
+            "^\.dockerignore$"
+            "^docker-compose.*\.ya?ml$"
+          )
+
+          VIOLATIONS=()
+
+          echo "Evaluating PR submitted by: $PR_AUTHOR"
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            for pattern in "${PROTECTED_PATTERNS[@]}"; do
+              if echo "$file" | grep -Eq "$pattern"; then
+                VIOLATIONS+=("$file")
+                break
+              fi
+            done
+          done <<< "$CHANGED_FILES"
+
+          if [ ${#VIOLATIONS[@]} -gt 0 ]; then
+            echo "::error::PR touches protected payment, billing, supply-chain, or security files restricted from pull request modifications:"
+            for v in "${VIOLATIONS[@]}"; do
+              echo "  - $v"
+            done
+            echo ""
+            echo "Modifications to the public web landing page (landing/), billing logic, payment webhooks, subscription tiers, internal cron jobs, core security/config, dependency manifests, CI workflows, or core licensing are strictly restricted. Please see CONTRIBUTING.md."
+            exit 1
+          fi
+
+          echo "All changed files passed guardrail checks."

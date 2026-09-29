@@ -1,0 +1,146 @@
+{
+  "info": {
+    "name": "Clanomy API",
+    "description": "Postman collection to test the entire Clanomy messaging pipeline.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{BASE_URL}}/health",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "1. User Registration (/start)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Telegram-Bot-Api-Secret-Token",
+            "value": "{{WEBHOOK_SECRET}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": {\n    \"chat\": {\"id\": 1001, \"type\": \"private\"},\n    \"from\": {\n      \"id\": 1001,\n      \"username\": \"testuser\",\n      \"first_name\": \"Tony\",\n      \"last_name\": \"Stark\"\n    },\n    \"text\": \"/start\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/telegram/webhook",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "telegram",
+            "webhook"
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. Log Text Expense",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Telegram-Bot-Api-Secret-Token",
+            "value": "{{WEBHOOK_SECRET}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": {\n    \"chat\": {\"id\": 1001, \"type\": \"private\"},\n    \"from\": {\n      \"id\": 1001,\n      \"username\": \"testuser\",\n      \"first_name\": \"Tony\",\n      \"last_name\": \"Stark\"\n    },\n    \"text\": \"Bought a large coffee and a bagel for 8.50 at Starbucks.\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/telegram/webhook",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "telegram",
+            "webhook"
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. Log Audio Expense (Voice Note)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Telegram-Bot-Api-Secret-Token",
+            "value": "{{WEBHOOK_SECRET}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"message\": {\n    \"chat\": {\"id\": 1001, \"type\": \"private\"},\n    \"from\": {\n      \"id\": 1001,\n      \"username\": \"testuser\",\n      \"first_name\": \"Tony\",\n      \"last_name\": \"Stark\"\n    },\n    \"voice\": {\n      \"file_id\": \"AwADBAADbXXXXXXXXXXX\"\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/api/v1/telegram/webhook",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "telegram",
+            "webhook"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "WEBHOOK_SECRET",
+      "value": "your_messaging_secret_token_here"
+    }
+  ]
+}

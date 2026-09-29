@@ -1,0 +1,15 @@
+fastapi>=0.136.1
+sqlmodel>=0.0.38
+cryptography>=48.0.0
+ollama>=0.6.2
+faster-whisper>=1.2.1
+notion-client>=2.2.1
+pydantic-settings>=2.14.1
+httpx>=0.27.2
+psycopg[binary]>=3.2.0
+tenacity>=9.0.0
+alembic>=1.13.0
+python-dateutil>=2.9.0
+uvicorn[standard]>=0.30.0
+tzdata>=2024.1
+timezonefinder>=6.5.0

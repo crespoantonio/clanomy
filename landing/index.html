@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clanomy — Smart Expense Tracker & Household Budgeting Bot for Families, Couples & Roommates</title>
+  <meta name="description" content="Effortlessly track personal and shared expenses via voice or text in Telegram. A smart expense tracking & household budgeting bot for families, couples splitting bills, and roommates backed by zero-knowledge privacy.">
+  <meta name="keywords" content="telegram expense tracker, budgeting bot, family budget, couples expense tracker, roommate expense split, notion expense sync, voice expense logging">
+  <link rel="icon" type="image/jpeg" href="assets/favicon.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body>
+  <!-- Navigation -->
+  <header class="header">
+    <div class="container nav-container">
+      <a href="#" class="logo" id="nav-logo">
+        <img src="assets/clanomy_logo.jpg" alt="Clanomy Logo" class="logo-img">
+        <span class="logo-text">Clanomy</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features" class="nav-link" data-i18n="nav.features">Features</a>
+        <a href="#how-it-works" class="nav-link" data-i18n="nav.how_it_works">How It Works</a>
+        <a href="#web-studio" class="nav-link"><span data-i18n="nav.web_studio">Web Studio</span> <span class="badge" data-i18n="nav.web_studio_badge" style="font-size: 0.65rem; padding: 0.12rem 0.4rem; margin-left: 0.2rem; vertical-align: middle;">Soon</span></a>
+        <a href="#self-hosted" class="nav-link" data-i18n="nav.self_hosted">Self-Hosted</a>
+        <a href="#pricing" class="nav-link" data-i18n="nav.pricing">Pricing</a>
+        <a href="#faq" class="nav-link" data-i18n="nav.faq">FAQ</a>
+      </nav>
+      <div class="nav-cta">
+        <!-- Bilingual Language Selector Toggle -->
+        <div class="lang-switch" id="lang-switch" role="group" aria-label="Language Selector">
+          <button type="button" class="lang-btn active" data-lang="en" id="lang-btn-en" aria-label="English">EN</button>
+          <button type="button" class="lang-btn" data-lang="es" id="lang-btn-es" aria-label="Español">ES</button>
+        </div>
+        <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary" id="header-telegram-btn">
+          <svg class="telegram-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/></svg>
+          <span data-i18n="nav.cta">Open in Telegram</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="container hero-container">
+      <div class="hero-content">
+        <div class="badge hero-badge" data-i18n="hero.badge">
+          <span class="badge-dot"></span> Powered by Telegram & Secure AI • Built for Families, Couples & Roommates
+        </div>
+        <h1 class="hero-title" data-i18n="hero.title">
+          The Smart Expense Tracker & Budgeting Bot for <span>Families, Couples & Roommates</span>
+        </h1>
+        <p class="hero-subtitle" data-i18n="hero.subtitle">
+          Effortlessly track personal and shared expenses via natural voice notes or text in Telegram. Private by design, shared with who matters.
+        </p>
+        <div class="hero-actions">
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg" id="hero-start-btn">
+            <svg class="telegram-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/></svg>
+            <span data-i18n="hero.cta_start">Start Free on Telegram</span>
+          </a>
+          <a href="#pricing" class="btn btn-secondary btn-lg" id="hero-pricing-btn" data-i18n="hero.cta_pricing">View Pricing</a>
+        </div>
+        <p class="hero-trial-note" data-i18n="hero.trial_note">✨ Includes 60-day Duo Pro trial • Shared couple ledger &amp; Notion sync • No credit card required</p>
+      </div>
+
+      <!-- Interactive Mockup Preview -->
+      <div class="hero-visual">
+        <div class="mockup-card">
+          <div class="mockup-header">
+            <div class="mockup-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="mockup-bot-name" data-i18n="hero.mockup_bot_name">🤖 Clanomy Bot (@clanomy_bot)</div>
+            <div class="mockup-badge" data-i18n="hero.mockup_badge">AES-256 Encrypted</div>
+          </div>
+          <div class="mockup-chat">
+            <div class="chat-message user-msg">
+              <div class="msg-content" data-i18n="hero.mockup_user_1">
+                🎙️ <i>Voice Note (0:04):</i> "Spent 18.50 on groceries and 4 on coffee"
+              </div>
+            </div>
+            <div class="chat-message bot-msg">
+              <div class="msg-content" data-i18n="hero.mockup_bot_1">
+                ✅ <b>Recorded 2 transactions:</b><br>
+                • 💸 <b>-$18.50 USD</b> (Food/Drink — groceries)<br>
+                • 💸 <b>-$4.00 USD</b> (Food/Drink — coffee)<br>
+                <small class="msg-sub">🔀 Synced to Family Notion Database • Type /undo to revert</small>
+              </div>
+            </div>
+            <div class="chat-message user-msg">
+              <div class="msg-content">
+                /month
+              </div>
+            </div>
+            <div class="chat-message bot-msg">
+              <div class="msg-content" data-i18n="hero.mockup_bot_2">
+                📊 <b>Household Balance (September 2026):</b><br>
+                • 💰 Income: <b>$4,200.00 USD</b><br>
+                • 💸 Total Expenses: <b>$1,480.50 USD</b><br>
+                • 📈 Net Savings: <b>+$2,719.50 USD (64.7% saved)</b> 🎉
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trust Bar -->
+  <section class="trust-bar">
+    <div class="container trust-container">
+      <div class="trust-item">
+        <span class="trust-icon">🔐</span>
+        <div class="trust-text">
+          <strong data-i18n="trust.aes_title">Zero-Knowledge Privacy</strong>
+          <span data-i18n="trust.aes_desc">Application-level AES-256 field encryption</span>
+        </div>
+      </div>
+      <div class="trust-item">
+        <span class="trust-icon">⚡</span>
+        <div class="trust-text">
+          <strong data-i18n="trust.speed_title">Log in 3 Seconds</strong>
+          <span data-i18n="trust.speed_desc">Natural voice notes &amp; quick text</span>
+        </div>
+      </div>
+      <div class="trust-item">
+        <span class="trust-icon">🔄</span>
+        <div class="trust-text">
+          <strong data-i18n="trust.notion_title">Real-Time Notion Sync</strong>
+          <span data-i18n="trust.notion_desc">Direct two-way database mirroring</span>
+        </div>
+      </div>
+      <div class="trust-item">
+        <span class="trust-icon">👨‍👩‍👧</span>
+        <div class="trust-text">
+          <strong data-i18n="trust.multi_title">Shared Household Ledgers</strong>
+          <span data-i18n="trust.multi_desc">Per-member attribution &amp; transparency</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Grid (4 Consolidated, High-Value Cards) -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-header text-center">
+        <div class="badge" data-i18n="features.badge">Designed for Simplicity</div>
+        <h2 class="section-title" data-i18n="features.title">Everything Your Household Needs to Master Daily Spending</h2>
+        <p class="section-subtitle" data-i18n="features.subtitle">No complex forms, no manual spreadsheets, no tedious bank logins. Just talk or type.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🎙️</div>
+          <h3 class="feature-title" data-i18n="features.f1_title">Bilingual Voice & Text AI</h3>
+          <p class="feature-desc" data-i18n="features.f1_desc">Send voice notes or quick messages in natural English or Spanish. High-speed AI parses compound items, categories, currencies, and dates instantly.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">👨‍👩‍👧‍👦</div>
+          <h3 class="feature-title" data-i18n="features.f2_title">Shared Household Ledger</h3>
+          <p class="feature-desc" data-i18n="features.f2_desc">Invite your partner or roommates with a private link. Track joint expenses together with transparent per-member attribution and unified balances.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📝</div>
+          <h3 class="feature-title" data-i18n="features.f3_title">Native Notion Integration</h3>
+          <p class="feature-desc" data-i18n="features.f3_desc">Every transaction automatically synchronizes to your private Notion workspace in real time. Maintain full data ownership with zero platform lock-in.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📅</div>
+          <h3 class="feature-title" data-i18n="features.f4_title">Bills & Due Date Tracking</h3>
+          <p class="feature-desc" data-i18n="features.f4_desc">Say &ldquo;Rent $1200 due on the 5th&rdquo; or &ldquo;Internet $50 on the 20th&rdquo;. Clanomy tracks due dates so you can query upcoming obligations anytime with <code>/bills</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-section" id="how-it-works">
+    <div class="container">
+      <div class="section-header text-center">
+        <div class="badge" data-i18n="how.badge">Seamless Experience</div>
+        <h2 class="section-title" data-i18n="how.title">How Clanomy Works in 3 Steps</h2>
+        <p class="section-subtitle" data-i18n="how.subtitle">Up and running in under 60 seconds with no app store downloads.</p>
+      </div>
+
+      <div class="steps-container">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3 class="step-title" data-i18n="how.s1_title">Start @clanomy_bot</h3>
+          <p class="step-desc" data-i18n="how.s1_desc">Open Telegram and tap Start. Your workspace is automatically created and protected with zero-knowledge encryption.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3 class="step-title" data-i18n="how.s2_title">Log as You Live</h3>
+          <p class="step-desc" data-i18n="how.s2_desc">Record expenses or income by text or voice. Say &ldquo;30 petrol&rdquo; or &ldquo;Received 2500 salary&rdquo;. Multiple items in one message are split automatically.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3 class="step-title" data-i18n="how.s3_title">Gain Household Clarity</h3>
+          <p class="step-desc" data-i18n="how.s3_desc">View instant monthly breakdowns, cash flow rates, and scheduled obligations. Watch transactions mirror cleanly into your Notion dashboard.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Coming Soon: Clanomy Web Studio -->
+  <section class="coming-soon-section" id="web-studio">
+    <div class="container">
+      <div class="coming-soon-card">
+        <div class="coming-soon-info">
+          <div class="coming-soon-badge" data-i18n="studio.roadmap_badge">✨ Roadmap Preview • Coming Soon</div>
+          <h2 class="coming-soon-title"><span data-i18n="studio.title">Clanomy Web Studio</span> <span class="badge badge-gold" data-i18n="studio.soon_badge" style="font-size: 0.85rem; vertical-align: middle; margin-left: 0.4rem;">Coming Soon</span></h2>
+          <p class="coming-soon-desc" data-i18n="studio.desc">
+            The power of fast AI logging in Telegram meets the depth of a full desktop financial suite. View, manage, filter, and edit everything directly from your browser with instant bi-directional sync.
+          </p>
+          <ul class="coming-soon-features">
+            <li>
+              <span class="check-icon">✓</span>
+              <div class="feature-text" data-i18n="studio.f1"><strong>Visual Financial Analytics:</strong> Interactive category breakdown charts, net savings rates, and multi-currency ledgers.</div>
+            </li>
+            <li>
+              <span class="check-icon">✓</span>
+              <div class="feature-text" data-i18n="studio.f2"><strong>Full Web Ledger Manager:</strong> Search, filter by member, add records manually, and inline-edit any transaction captured via Telegram.</div>
+            </li>
+            <li>
+              <span class="check-icon">✓</span>
+              <div class="feature-text" data-i18n="studio.f3"><strong>Real-Time Dual Synchronization:</strong> Changes made in Web Studio immediately update your <code>@clanomy_bot</code> assistant and synced Notion databases.</div>
+            </li>
+            <li>
+              <span class="check-icon">✓</span>
+              <div class="feature-text" data-i18n="studio.f4"><strong>Granular Member Permissions:</strong> Control shared vs personal visibility and set custom budget thresholds per household member.</div>
+            </li>
+          </ul>
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-gold" data-i18n="studio.cta">
+            Open @clanomy_bot in Telegram
+          </a>
+        </div>
+
+        <div class="preview-media">
+          <img src="assets/dashboard_preview.jpg" alt="Clanomy Web Studio Dashboard Preview" class="preview-image">
+          <div class="preview-tag" data-i18n="studio.preview_tag">Web Studio Preview • Coming Soon</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Self-Hosted Freedom Section (Streamlined) -->
+  <section class="self-hosted-section" id="self-hosted">
+    <div class="container">
+      <div class="self-hosted-card">
+        <div class="self-hosted-content text-center">
+          <div class="badge badge-gold" data-i18n="self.badge">🔓 Source-Available • Business Source License 1.1</div>
+          <h2 class="section-title" data-i18n="self.title">Your Data Belongs to You. Cloud Convenience or Self-Hosted Control.</h2>
+          <p class="section-subtitle" data-i18n="self.subtitle">
+            Run your own private instance for $0 on your home server, or let Clanomy Cloud handle the infrastructure for a turnkey experience.
+          </p>
+        </div>
+
+        <div class="comparison-grid">
+          <!-- Community Self-Hosted -->
+          <div class="comparison-col">
+            <h3 data-i18n="self.community_title">Community Self-Hosted</h3>
+            <div class="comparison-price" data-i18n="self.community_price">100% Free Forever</div>
+            <ul class="comparison-list">
+              <li data-i18n="self.c1">✓ <b>Full source code</b> on GitHub under BSL 1.1</li>
+              <li data-i18n="self.c2">✓ Deploy with <b>Podman or Docker</b> compose</li>
+              <li data-i18n="self.c3">✓ <b>100% Offline:</b> local Ollama + Whisper STT</li>
+              <li data-i18n="self.c4">✓ Unlimited multi-user ledgers & Notion sync</li>
+              <li data-i18n="self.c5">✓ Unlimited use of all slash commands & exports</li>
+              <li data-i18n="self.c6">⚠️ You manage server maintenance & backups</li>
+            </ul>
+            <div class="comparison-actions" style="display: flex; flex-direction: column; gap: 0.6rem;">
+              <a href="https://github.com/crespoantonio/clanomy" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-block" data-i18n="self.community_btn">
+                View Source on GitHub
+              </a>
+              <a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer" class="btn btn-kofi btn-block" id="community-kofi-btn">
+                <svg class="kofi-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.7-2.486-3.96-3.957c-.96-1.12-1.464-2.47-1.185-3.696.425-1.868 2.378-2.618 3.956-2.029 1.19.444 1.189 1.587 1.189 1.587s.07-1.143 1.258-1.587c1.579-.589 3.532.161 3.957 2.029.278 1.226-.226 2.576-1.168 3.679zm7.651-1.226c-.368 1.942-1.928 2.222-3.411 2.244v-4.636c1.482.022 3.042.302 3.411 2.392z"/></svg>
+                <span data-i18n="self.kofi_btn">Support on Ko-fi</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Clanomy Cloud -->
+          <div class="comparison-col highlighted-col">
+            <div class="popular-tag" data-i18n="self.cloud_tag">Turnkey Convenience</div>
+            <h3 data-i18n="self.cloud_title">Clanomy Cloud</h3>
+            <div class="comparison-price" data-i18n="self.cloud_price">From $4.99 / month</div>
+            <ul class="comparison-list">
+              <li data-i18n="self.cl1">✓ <b>Instant start</b> directly in Telegram</li>
+              <li data-i18n="self.cl2">✓ <b>Zero server maintenance</b> or technical setup</li>
+              <li data-i18n="self.cl3">✓ High-speed cloud AI inference & audio transcription</li>
+              <li data-i18n="self.cl4">✓ Automated daily database backups & continuous updates</li>
+              <li data-i18n="self.cl5">✓ <b>Includes 60-day Duo trial</b> with no card required</li>
+              <li data-i18n="self.cl6">✓ Priority support & automated Notion sync</li>
+            </ul>
+            <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block" data-i18n="self.cloud_btn">
+              Start Free on Telegram
+            </a>
+          </div>
+        </div>
+
+        <div class="license-note" data-i18n="self.license_note">
+          ⚖️ <b>License Notice:</b> Clanomy is distributed under the <b>Business Source License 1.1 (BSL 1.1)</b>. Personal and household self-hosting is 100% free. Commercial SaaS hosting rights are reserved exclusively to Clanomy Authors.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section (Unified 4 Tiers) -->
+  <section class="pricing-section" id="pricing">
+    <div class="container">
+      <div class="section-header text-center">
+        <div class="badge" data-i18n="pricing.badge">Simple & Transparent Pricing</div>
+        <h2 class="section-title" data-i18n="pricing.title">Choose the Plan That Fits Your Household</h2>
+        <p class="section-subtitle" data-i18n="pricing.subtitle">Every new account begins with a 60-day Duo Pro trial. No credit card required upfront.</p>
+
+        <!-- Billing Period Toggle -->
+        <div class="toggle-container">
+          <span class="toggle-label active" id="toggle-monthly-label" data-i18n="toggle.monthly">Monthly</span>
+          <button class="toggle-btn" id="billing-toggle" aria-label="Toggle annual billing">
+            <span class="toggle-slider"></span>
+          </button>
+          <span class="toggle-label" id="toggle-annual-label"><span data-i18n="toggle.annual">Annual</span> <span class="discount-pill" data-i18n="toggle.discount">2 Months Free (Save 17%)</span></span>
+        </div>
+      </div>
+
+      <!-- Trial Banner -->
+      <div class="free-tier-banner">
+        <span class="free-tier-badge" data-i18n="pricing.trial_badge">60-Day Trial</span>
+        <div class="free-tier-text">
+          <strong data-i18n="pricing.trial_banner_title">Try Duo Pro 100% Free</strong>
+          <span data-i18n="pricing.trial_banner_desc">Start with 60 days of Duo Pro (2 partners, 60 daily AI logs pool, real-time Notion sync). Continue on Free Starter forever or upgrade as your household grows.</span>
+        </div>
+      </div>
+
+      <!-- Unified 4-Card Pricing Grid -->
+      <div class="pricing-grid">
+        <!-- Free Starter -->
+        <div class="pricing-card">
+          <div class="card-tier-name" data-i18n="free.name">Free Starter</div>
+          <div class="card-price">
+            <span class="currency">$</span><span class="amount">0</span>
+            <span class="period" data-i18n="free.period">forever</span>
+          </div>
+          <p class="card-desc" data-i18n="free.desc">Essential expense tracking for individuals and households with zero commitment.</p>
+          <ul class="card-features">
+            <li data-i18n="free.f1">✓ <b>Up to 5 Members</b> in shared ledger</li>
+            <li data-i18n="free.f2">✓ <b>20 AI logs/month</b> (shared pool)</li>
+            <li data-i18n="free.f3">✓ <b>Unlimited slash commands</b> (/month, /balance, /bills)</li>
+            <li data-i18n="free.f4">✓ Zero-knowledge AES-256 encryption</li>
+            <li data-i18n="free.f5">✓ CSV & JSON transaction exports</li>
+            <li data-i18n="free.f6">✓ Community support & self-serve portal</li>
+          </ul>
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-block" data-i18n="free.btn">Start Free in Telegram</a>
+        </div>
+
+        <!-- Solo Pro -->
+        <div class="pricing-card">
+          <div class="card-tier-name" data-i18n="solo.name">Solo Pro</div>
+          <div class="card-price">
+            <span class="currency">$</span><span class="amount" id="solo-price">4.99</span>
+            <span class="period" id="solo-period" data-i18n="period.month">/ month</span>
+          </div>
+          <p class="card-desc" data-i18n="solo.desc">For individuals wanting complete financial clarity, high-volume AI logging, and Notion sync.</p>
+          <ul class="card-features">
+            <li data-i18n="solo.f1">✓ <b>1 User</b> workspace</li>
+            <li data-i18n="solo.f2">✓ Up to <b>60 AI messages/day</b> (voice & text)</li>
+            <li data-i18n="solo.f3">✓ <b>Real-time Notion Sync</b></li>
+            <li data-i18n="solo.f4">✓ Smart cash flow queries & bills tracker</li>
+            <li data-i18n="solo.f5">✓ CSV & JSON data export</li>
+            <li data-i18n="solo.f6">✓ Self-service customer billing portal</li>
+          </ul>
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block" data-i18n="solo.btn">Upgrade in Telegram</a>
+        </div>
+
+        <!-- Duo Pro (Couples Highlighted) -->
+        <div class="pricing-card highlighted">
+          <div class="popular-tag" data-i18n="duo.badge">Best for Couples</div>
+          <div class="card-tier-name" data-i18n="duo.name">Duo Pro</div>
+          <div class="card-price">
+            <span class="currency">$</span><span class="amount" id="duo-price">7.99</span>
+            <span class="period" id="duo-period" data-i18n="period.month">/ month</span>
+          </div>
+          <p class="card-desc" data-i18n="duo.desc">For couples, partners, and roommates managing joint finances with total clarity.</p>
+          <ul class="card-features">
+            <li data-i18n="duo.f1">✓ <b>Everything in Solo Pro</b></li>
+            <li data-i18n="duo.f2">✓ <b>2 Members</b> (Shared couple ledger)</li>
+            <li data-i18n="duo.f3">✓ Up to <b>120 shared AI messages/day</b> (pool)</li>
+            <li data-i18n="duo.f4">✓ Partner invitation link (<code>/invite</code>)</li>
+            <li data-i18n="duo.f5">✓ Shared Notion database mirror</li>
+            <li data-i18n="duo.f6">✓ Per-member transaction attribution</li>
+          </ul>
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block" data-i18n="duo.btn">Upgrade in Telegram</a>
+        </div>
+
+        <!-- Family Pro -->
+        <div class="pricing-card">
+          <div class="card-tier-name" data-i18n="family.name">Family Pro</div>
+          <div class="card-price">
+            <span class="currency">$</span><span class="amount" id="family-price">11.99</span>
+            <span class="period" id="family-period" data-i18n="period.month">/ month</span>
+          </div>
+          <p class="card-desc" data-i18n="family.desc">For households wanting complete transparency across parents, kids, and dependents.</p>
+          <ul class="card-features">
+            <li data-i18n="family.f1">✓ <b>Everything in Duo Pro</b></li>
+            <li data-i18n="family.f2">✓ <b>Up to 5 Members</b> (Household ledger)</li>
+            <li data-i18n="family.f3">✓ Up to <b>300 shared AI messages/day</b> (pool)</li>
+            <li data-i18n="family.f4">✓ Household member invitations (<code>/invite</code>)</li>
+            <li data-i18n="family.f5">✓ Shared family Notion database mirror</li>
+            <li data-i18n="family.f6">✓ Priority customer support</li>
+          </ul>
+          <a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-block" data-i18n="family.btn">Upgrade in Telegram</a>
+        </div>
+      </div>
+
+      <!-- Roadmap Ribbon for Custom & Teams -->
+      <div class="roadmap-ribbon">
+        <div class="roadmap-badge" data-i18n="roadmap.badge">🚀 Roadmap</div>
+        <div class="roadmap-text" data-i18n="roadmap.text">
+          <strong>Need Clanomy for 6+ members?</strong> Our <b>Custom & Teams</b> tier for coliving spaces, large households, and field teams is currently in development.
+        </div>
+        <span class="roadmap-status" data-i18n="roadmap.status">Coming Soon</span>
+      </div>
+
+      <!-- Fulfillment Notice (Paddle Verification Requirement) -->
+      <div class="fulfillment-box">
+        <div class="fulfillment-icon">📦</div>
+        <div class="fulfillment-content">
+          <strong data-i18n="fulfill.title">Instant Automated Delivery</strong>
+          <p data-i18n="fulfill.desc">
+            Upon completing subscription checkout, your plan is instantly activated via real-time confirmation linked directly to your Telegram workspace. No license keys to enter—just open <code>@clanomy_bot</code> to enjoy unlimited access immediately.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Legal & Regulatory Disclaimer -->
+  <section class="disclaimer-section">
+    <div class="container">
+      <div class="disclaimer-card">
+        <div class="disclaimer-icon">⚖️</div>
+        <div class="disclaimer-text">
+          <h4 data-i18n="disclaimer.title">Regulatory & Software Classification Notice</h4>
+          <p data-i18n="disclaimer.desc">
+            Clanomy is an automated personal productivity and expense tracking software developed and operated by <b>Clanomy</b>. Clanomy is <b>NOT</b> a bank, financial institution, money transmitter, lender, investment advisor, or foreign currency exchange. Clanomy does not hold custodial funds, transmit currency, or process financial transactions. All data recorded represents private user bookkeeping entries. Clanomy does not provide financial, investment, tax, or legal advice.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section (Consolidated 7 Non-Redundant Questions) -->
+  <section class="faq-section" id="faq">
+    <div class="container">
+      <div class="section-header text-center">
+        <div class="badge" data-i18n="faq.badge">Got Questions?</div>
+        <h2 class="section-title" data-i18n="faq.title">Frequently Asked Questions</h2>
+      </div>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q1">Do I need a credit card to start, and what happens after the 60-day trial?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a1">
+            <p>No payment information is required upfront. Every new workspace begins with 60 days of unrestricted Duo Pro access. When the trial concludes, your account smoothly transitions to our <b>Free Starter plan forever</b>—your family stays together in the shared ledger, all historical logs remain intact, and you retain 20 free monthly AI logs alongside unlimited slash commands (<code>/month</code>, <code>/balance</code>, <code>/bills</code>).</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q2">How does Notion synchronization work?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a2">
+            <p>Simply type <code>/notion</code> in the bot. You will receive a secure authorization link to connect your Notion account. Clanomy creates and maintains an encrypted financial database directly in your personal workspace with instant bi-directional updates.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q3">How do I invite my partner or household members?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a3">
+            <p>On Duo Pro, Family Pro, or during your 60-day trial, type <code>/invite</code> in Telegram. The bot generates a private, secure link. When your partner or family member taps it, they join your shared household workspace automatically with per-member attribution.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q4">What is Zero-Knowledge Privacy and how does it protect my family?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a4">
+            <p><b>Zero-Knowledge Privacy</b> means your data is protected using application-level AES-256 field encryption before it ever reaches the database. Transaction amounts and merchant descriptions are encrypted in memory. Even if a raw database backup were intercepted, your records remain unbreakable ciphertext. No hosting administrators, third parties, or advertisers can ever read what you spent or earned.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q5">Is my financial data or voice notes used to train AI models?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a5">
+            <p><b>No, absolutely not.</b> Clanomy enforces a strict <b>Zero AI Training Policy</b>. All expense parsing and voice transcriptions are processed exclusively through commercial developer endpoints that legally prohibit using customer inputs, prompts, audio files, or financial records to train machine learning models. Voice notes exist in transient memory only for the seconds required to transcribe, then are immediately deleted.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q6">Can I self-host Clanomy on my own hardware for free?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a6">
+            <p><b>Yes!</b> Clanomy is source-available on GitHub under the Business Source License 1.1. You can clone the repository, run it using Podman or Docker on your own home lab or private VPS, and even connect local offline AI models (Ollama + Faster-Whisper) for 100% private, air-gapped financial tracking at $0 for personal household use.</p>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-question" aria-expanded="false">
+            <span data-i18n="faq.q7">How do I cancel or manage my subscription?</span>
+            <span class="faq-toggle">+</span>
+          </button>
+          <div class="faq-answer" data-i18n="faq.a7">
+            <p>You can manage your subscription at any time by typing <code>/billing</code> in the bot. This opens your secure customer portal where you can cancel with one click, update payment methods, or view invoices. Premium access remains active until the end of your paid billing period.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container footer-container">
+      <div class="footer-col brand-col">
+        <div class="logo">
+          <img src="assets/clanomy_logo.jpg" alt="Clanomy Logo" class="logo-img">
+          <span class="logo-text">Clanomy</span>
+        </div>
+        <p class="footer-tagline" data-i18n="footer.tagline">Privacy-first personal and family expense tracker &amp; budgeting bot for Telegram.</p>
+        <p class="footer-operator" data-i18n="footer.operator">Developed & Operated by <b>Clanomy</b></p>
+        <p class="footer-support"><span data-i18n="footer.support">Support Contact:</span> <a href="mailto:support@clanomy.com">support@clanomy.com</a></p>
+        
+        <!-- Action Buttons Row: GitHub + Ko-fi -->
+        <div class="footer-actions" style="margin-top: 0.85rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+          <a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer" class="btn btn-kofi btn-sm" id="footer-kofi-btn">
+            <svg class="kofi-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true"><path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.047 3.974-4.047 3.974s-2.7-2.486-3.96-3.957c-.96-1.12-1.464-2.47-1.185-3.696.425-1.868 2.378-2.618 3.956-2.029 1.19.444 1.189 1.587 1.189 1.587s.07-1.143 1.258-1.587c1.579-.589 3.532.161 3.957 2.029.278 1.226-.226 2.576-1.168 3.679zm7.651-1.226c-.368 1.942-1.928 2.222-3.411 2.244v-4.636c1.482.022 3.042.302 3.411 2.392z"/></svg>
+            <span data-i18n="footer.kofi">Support on Ko-fi</span>
+          </a>
+          <a href="https://github.com/crespoantonio/clanomy" target="_blank" rel="noopener noreferrer" class="btn btn-github btn-sm" id="footer-github-btn">
+            <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="vertical-align: -2px; margin-right: 4px;" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+            <span data-i18n="footer.github">GitHub</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h4 data-i18n="footer.product_heading">Product</h4>
+        <ul class="footer-links">
+          <li><a href="#features" data-i18n="nav.features">Features</a></li>
+          <li><a href="#how-it-works" data-i18n="nav.how_it_works">How It Works</a></li>
+          <li><a href="#web-studio"><span data-i18n="nav.web_studio">Web Studio</span> <span style="font-size: 0.78em; color: var(--gold-accent);">(<span data-i18n="studio.soon_badge">Coming Soon</span>)</span></a></li>
+          <li><a href="#self-hosted" data-i18n="nav.self_hosted">Self-Hosted</a></li>
+          <li><a href="https://github.com/crespoantonio/clanomy" target="_blank" rel="noopener noreferrer"><span data-i18n="footer.github_link">GitHub Repository ↗</span></a></li>
+          <li><a href="#pricing" data-i18n="nav.pricing">Pricing</a></li>
+          <li><a href="https://ko-fi.com/crespoantonio" target="_blank" rel="noopener noreferrer"><span data-i18n="footer.kofi_link">Support on Ko-fi ☕</span></a></li>
+          <li><a href="https://t.me/clanomy_bot" target="_blank" rel="noopener noreferrer" data-i18n="footer.launch_bot">Launch Telegram Bot</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4 data-i18n="footer.legal_heading">Legal & Compliance</h4>
+        <ul class="footer-links">
+          <li><a href="#" class="modal-trigger" data-modal="terms-modal" data-i18n="footer.terms">Terms of Service</a></li>
+          <li><a href="#" class="modal-trigger" data-modal="privacy-modal" data-i18n="footer.privacy">Privacy Policy</a></li>
+          <li><a href="#" class="modal-trigger" data-modal="refund-modal" data-i18n="footer.refund">Refund & Cancellation Policy</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="container bottom-container">
+        <p data-i18n="footer.copyright">© 2026 Clanomy. All rights reserved. Payments securely processed.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- MODALS -->
+
+  <!-- Terms of Service Modal -->
+  <div class="modal" id="terms-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-overlay modal-close"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 data-i18n="terms.title">Clanomy SaaS Terms of Service</h3>
+        <button class="modal-close-btn modal-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" data-i18n="terms.body">
+        <p><strong>Effective Date:</strong> September 2, 2026</p>
+        <p><strong>Operated by:</strong> Clanomy ("Clanomy", "we", "us", or "our").</p>
+
+        <h4>1. Acceptance of Terms & Eligibility</h4>
+        <p>By accessing or using the Clanomy Telegram bot service, Web Studio, or associated application programming interfaces (collectively, the "Service"), you agree to be bound by these Terms of Service. <strong>Eligibility:</strong> You must be at least 18 years of age (or the legal age of majority in your jurisdiction) to access or use the Service. Individuals under 18 years of age are strictly prohibited from using Clanomy.</p>
+
+        <h4>2. Description of Service & Non-Advisory Status</h4>
+        <p>Clanomy is a software-as-a-service (SaaS) utility providing automated personal and family bookkeeping, natural language expense and income tracking, and Notion database synchronization. <strong>Clanomy is strictly a productivity software tool. Clanomy does NOT provide investment, financial, legal, or tax advice. We are NOT a bank, credit institution, money transmitter, lender, or foreign exchange provider.</strong> Clanomy does not hold user funds, initiate banking wires, or process financial transactions.</p>
+
+        <h4>3. Subscriptions & Payments</h4>
+        <p>All subscription transactions, invoicing, tax collection, and customer billing are handled securely by authorized Merchant of Record payment processors. When you subscribe to Clanomy Solo Pro, Duo Pro, or Family Pro, subscription fees are billed on a recurring monthly or annual basis until canceled.</p>
+
+        <h4>4. Account Security & Privacy</h4>
+        <p>You are responsible for safeguarding access to your Telegram account. Financial entries recorded via Clanomy are protected using application-level AES-256 field encryption. You agree not to upload harmful code, abuse rate limits, or use the Service for illegal financial reporting.</p>
+
+        <h4>5. Termination & Cancellation</h4>
+        <p>You may cancel your subscription at any time through the self-service Customer Portal (accessed via the bot with <code>/billing</code>). Cancellations take effect at the conclusion of your current prepaid billing cycle.</p>
+
+        <h4>6. Limitation of Liability & AI Disclaimer</h4>
+        <p>Clanomy utilizes Artificial Intelligence (including Google Gemini and Whisper). AI-generated outputs, parsing, and arithmetic summaries may occasionally contain inaccuracies, hallucinations, or omissions. The Service is provided strictly on an <strong>"AS-IS"</strong> and <strong>"AS-AVAILABLE"</strong> basis without warranties of any kind, express or implied. To the maximum extent permitted by applicable law, Clanomy and its suppliers shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the Service or reliance on financial calculations.</p>
+
+        <h4>7. Telegram Non-Affiliation Notice</h4>
+        <p>Clanomy is an independent software application and is not affiliated with, sponsored by, or endorsed by Telegram FZ-LLC or Telegram Messenger Inc.</p>
+
+        <h4>8. Contact</h4>
+        <p>For questions regarding these Terms, contact us at: <a href="mailto:support@clanomy.com">support@clanomy.com</a>.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close" data-i18n="footer.close_btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Privacy Policy Modal -->
+  <div class="modal" id="privacy-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-overlay modal-close"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 data-i18n="privacy.title">Privacy Policy</h3>
+        <button class="modal-close-btn modal-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" data-i18n="privacy.body">
+        <p><strong>Effective Date:</strong> September 2, 2026</p>
+        <p>Clanomy is committed to safeguarding the privacy and confidentiality of your personal financial records.</p>
+
+        <h4>1. Information We Collect</h4>
+        <ul>
+          <li><strong>Telegram Identity:</strong> User ID, Chat ID, and display name provided by Telegram.</li>
+          <li><strong>Bookkeeping Data:</strong> Financial concepts, amounts, categories, and dates you choose to log.</li>
+          <li><strong>Billing Metadata:</strong> Subscription status, plan tier, and customer ID reference. <em>We never see or store your raw payment card numbers. All payment processing is handled securely by PCI-DSS compliant payment processors.</em></li>
+        </ul>
+
+        <h4>2. Zero-Knowledge Field Encryption</h4>
+        <p>Clanomy implements application-level AES-256 URL-safe Fernet encryption. All transaction amounts and merchant descriptions are encrypted prior to database persistence. Server-side database snapshots cannot read your financial records in plaintext.</p>
+
+        <h4>3. How We Use Data</h4>
+        <p>Your data is used strictly to provide the bookkeeping, query aggregation, and Notion synchronization requested by you. We do <strong>NOT</strong> sell, rent, monetize, or share your data with advertisers or data brokers.</p>
+
+        <h4>4. Third-Party Sub-Processors & Zero AI Training</h4>
+        <ul>
+          <li><strong>Payment Processors:</strong> For secure payment processing, invoicing, and subscription management.</li>
+          <li><strong>Notion Labs:</strong> When enabled by you, transactions are transmitted via TLS 1.3 to your personal Notion database.</li>
+          <li><strong>Google LLC (Gemini Developer API) & Whisper:</strong> Natural language extraction and voice transcriptions are processed via secured, zero-data-retention commercial developer endpoints solely for the transient duration of the request. Customer data, voice notes, and financial prompts are strictly never retained or used to train machine learning models.</li>
+        </ul>
+
+        <h4>5. Data Portability & Erasure Rights (GDPR & CCPA)</h4>
+        <p>You have full sovereignty over your personal data:
+        <ul>
+          <li><strong>Data Portability (GDPR Art. 20):</strong> Download your complete transaction history at any time in CSV or JSON format using the <code>/export</code> command.</li>
+          <li><strong>Right to Erasure (GDPR Art. 17):</strong> Permanently wipe your account, Telegram ID links, and all financial records using the <code>/delete_my_data</code> (or <code>/delete_account</code>) command, or by contacting <a href="mailto:support@clanomy.com">support@clanomy.com</a>.</li>
+        </ul>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close" data-i18n="footer.close_btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Refund Policy Modal -->
+  <div class="modal" id="refund-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal-overlay modal-close"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 data-i18n="refund.title">Refund & Cancellation Policy</h3>
+        <button class="modal-close-btn modal-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" data-i18n="refund.body">
+        <p><strong>Effective Date:</strong> September 2, 2026</p>
+
+        <h4>1. 60-Day Risk-Free Trial</h4>
+        <p>Clanomy provides an unrestricted <strong>60-day free trial</strong> on all new workspaces—with <strong>no credit card required upfront</strong>. This ensures you have ample time to test voice logging, Notion database syncing, and multi-member features before making any financial commitment.</p>
+
+        <h4>2. Cancellations</h4>
+        <p>You may cancel your subscription at any time with a single click. Simply type <code>/billing</code> in Telegram to access your billing portal directly. When you cancel, your premium features remain fully active until the end of your prepaid billing period, and you will not be charged again.</p>
+
+        <h4>3. Refund Terms</h4>
+        <p>Because every user receives 60 days of free evaluation prior to any charge, recurring subscription payments are generally <strong>non-refundable</strong> once billed.</p>
+
+        <h4>4. Exceptions & Billing Errors</h4>
+        <p>If you believe you were charged in error, experienced an unintended renewal, or encountered a technical fault preventing access to your paid tier, please contact us at <a href="mailto:support@clanomy.com">support@clanomy.com</a> within <strong>14 days</strong> of the transaction. We review all legitimate billing claims in good faith and will issue a prompt full refund where justified.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close" data-i18n="footer.close_btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

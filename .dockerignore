@@ -1,0 +1,38 @@
+.env
+.git
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.vscode/
+.idea/
+*.swp
+*.bak
+venv/
+.venv/
+
+# Databases & local stores
+*.db
+*.sqlite
+*.sqlite3
+dev_placeholder.db
+
+# Project planning & AI artifacts
+_bmad/
+_bmad-output/
+.agent/
+.agents/
+
+# Documentation & dev scripts
+tests/
+docs/
+scripts/
+post.md
+*.jpg
+*.md
+!requirements*.txt
+.github/

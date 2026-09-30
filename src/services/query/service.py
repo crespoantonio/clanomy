@@ -5,7 +5,7 @@ import html
 import re
 import httpx
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Tuple, Dict, Union, Sequence
 from uuid import UUID
 from pydantic import ValidationError
 
@@ -32,13 +32,16 @@ from src.services.query.models import (
     MemberBreakdown,
     PeriodComparison,
     QueryProcessingError,
-    resolve_category_alias
+    resolve_category_alias,
+    MonthFixedCommitment,
+    BillsTrendSummary
 )
 from src.services.query.date_resolver import (
     resolve_date_range,
     _resolve_comparison_timeframe,
     _parse_amount_string,
-    _sanitize_concept_for_prompt
+    _sanitize_concept_for_prompt,
+    _get_zone_info
 )
 from src.services.query.aggregator import (
     aggregate_transactions,
@@ -142,16 +145,27 @@ class QueryService:
         family_id: UUID,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-        status: str = "pending"
+        status: Union[str, Sequence[str]] = "pending"
     ) -> List[DecryptedScheduledBill]:
         with Session(engine) as session:
             users = session.exec(select(User).where(User.family_id == family_id)).all()
             user_map = {u.id: (u.full_name or u.username or "User", f"@{u.username}" if u.username else None) for u in users}
 
-            query = select(ScheduledBill).where(
-                ScheduledBill.family_id == family_id,
-                ScheduledBill.status == status
-            )
+            if isinstance(status, (list, tuple, set)):
+                query = select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status.in_(status)
+                )
+            elif status in ("any", "all"):
+                query = select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status.in_(("pending", "paid"))
+                )
+            else:
+                query = select(ScheduledBill).where(
+                    ScheduledBill.family_id == family_id,
+                    ScheduledBill.status == status
+                )
             if start_time:
                 query = query.where(ScheduledBill.due_date >= start_time)
             if end_time:
@@ -827,3 +841,113 @@ CRITICAL SECURITY RULES:
                 f"{items_str}\n\n"
                 f"📌 <b>Total pending:</b> {total_str}"
             )
+
+    def get_bills_trend_data(
+        self,
+        family_id: UUID,
+        reference_time: Optional[datetime] = None,
+        tz_name: Optional[str] = None,
+        language: str = "auto",
+        primary_currency: Optional[str] = None
+    ) -> BillsTrendSummary:
+        ref_time = reference_time or datetime.now(timezone.utc)
+        tz = _get_zone_info(tz_name, ref_time)
+        ref_local = ref_time.astimezone(tz) if ref_time.tzinfo else ref_time.replace(tzinfo=timezone.utc).astimezone(tz)
+
+        m_curr_year, m_curr_month = ref_local.year, ref_local.month
+        m_prev1_year = m_curr_year if m_curr_month > 1 else m_curr_year - 1
+        m_prev1_month = m_curr_month - 1 if m_curr_month > 1 else 12
+        m_prev2_year = m_prev1_year if m_prev1_month > 1 else m_prev1_year - 1
+        m_prev2_month = m_prev1_month - 1 if m_prev1_month > 1 else 12
+
+        target_months = [
+            (m_prev2_year, m_prev2_month),
+            (m_prev1_year, m_prev1_month),
+            (m_curr_year, m_curr_month)
+        ]
+
+        start_local = datetime(m_prev2_year, m_prev2_month, 1, 0, 0, 0, 0, tzinfo=tz)
+        start_utc = start_local.astimezone(timezone.utc)
+
+        next_y = m_curr_year if m_curr_month < 12 else m_curr_year + 1
+        next_m = m_curr_month + 1 if m_curr_month < 12 else 1
+        end_local = datetime(next_y, next_m, 1, 0, 0, 0, 0, tzinfo=tz) - timedelta(microseconds=1)
+        end_utc = end_local.astimezone(timezone.utc)
+
+        bills = self._fetch_and_decrypt_scheduled_bills(
+            family_id,
+            start_time=start_utc,
+            end_time=end_utc,
+            status=("pending", "paid")
+        )
+
+        is_spanish = language.lower() in ("es", "spanish")
+        es_months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+        en_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+        bills_by_month: Dict[Tuple[int, int], List[DecryptedScheduledBill]] = {m: [] for m in target_months}
+        for b in bills:
+            b_dt = b.due_date
+            b_local = b_dt.astimezone(tz) if b_dt.tzinfo else b_dt.replace(tzinfo=timezone.utc).astimezone(tz)
+            key = (b_local.year, b_local.month)
+            if key in bills_by_month:
+                bills_by_month[key].append(b)
+
+        if primary_currency:
+            eff_curr = primary_currency.upper()
+        elif bills:
+            from collections import Counter
+            curr_counts = Counter((b.currency or settings.DEFAULT_CURRENCY or "USD").upper() for b in bills)
+            eff_curr = curr_counts.most_common(1)[0][0]
+        else:
+            eff_curr = (settings.DEFAULT_CURRENCY or "USD").upper()
+
+        month_commitments: List[MonthFixedCommitment] = []
+        for y, m in target_months:
+            b_list = bills_by_month.get((y, m), [])
+            m_name = (es_months if is_spanish else en_months)[m - 1]
+            b_list_primary = [b for b in b_list if (b.currency or eff_curr).upper() == eff_curr]
+            if b_list_primary:
+                t_amt = sum(b.amount for b in b_list_primary)
+                p_amt = sum(b.amount for b in b_list_primary if b.status == "paid")
+                pend_amt = sum(b.amount for b in b_list_primary if b.status == "pending")
+                month_commitments.append(MonthFixedCommitment(
+                    year=y,
+                    month=m,
+                    month_name=m_name,
+                    total_amount=round(t_amt, 2),
+                    paid_amount=round(p_amt, 2),
+                    pending_amount=round(pend_amt, 2),
+                    currency=eff_curr,
+                    has_data=True
+                ))
+            else:
+                month_commitments.append(MonthFixedCommitment(
+                    year=y,
+                    month=m,
+                    month_name=m_name,
+                    total_amount=0.0,
+                    paid_amount=0.0,
+                    pending_amount=0.0,
+                    currency=eff_curr,
+                    has_data=False
+                ))
+
+        for idx in range(1, len(month_commitments)):
+            curr_slot = month_commitments[idx]
+            prev_slot = month_commitments[idx - 1]
+            if curr_slot.has_data and prev_slot.has_data and prev_slot.total_amount > 0:
+                diff = curr_slot.total_amount - prev_slot.total_amount
+                curr_slot.delta_pct = round((diff / prev_slot.total_amount) * 100.0, 1)
+            else:
+                curr_slot.delta_pct = None
+
+        populated = [m.total_amount for m in month_commitments if m.has_data]
+        trailing_avg = round(sum(populated) / len(populated), 2) if populated else None
+
+        return BillsTrendSummary(
+            months=month_commitments,
+            primary_currency=eff_curr,
+            trailing_average=trailing_avg,
+            has_any_data=len(populated) > 0
+        )

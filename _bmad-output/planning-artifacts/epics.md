@@ -77,6 +77,11 @@ FR56: Daily fair-use quota tracking via `Family.daily_tx_count` (migration `0010
 FR57: Internal scheduled maintenance cron job (`/api/internal/jobs/trial-lifecycle`) protected by `CRON_SECRET` for daily quota reset and trial alerts.
 FR58: Authorized message simulation and evaluation route (`/simulate/message`) protected by `SIMULATION_SECRET`.
 FR59: Public bilingual landing page web app mounted at `/` in FastAPI.
+FR60: Paddle Merchant of Record hosted checkout transactions and cryptographic webhook idempotency.
+FR61: Sovereign non-admin member graduation and customer billing portal sessions.
+FR62: 3-month trailing fixed commitments tracking (`ScheduledBill` entries with `status IN ('pending', 'paid')`) across discrete calendar months $M-2$, $M-1$, and current month $M$.
+FR63: Static compact badge (`3-Mo Fixed: ...` / `Gastos Fijos (3M): ...`) in `/bills` with resilient `(No info)` fallback and zero-division protection.
+FR64: Interactive Telegram button `[ 📊 3-Mo Trend ]` flipping `/bills` into in-place 3-month fixed expense breakdown card.
 
 ### NonFunctional Requirements
 
@@ -1448,9 +1453,30 @@ So that I can complete payment securely on the web with immediate redirection ba
 
 **Acceptance Criteria:**
 **Given** FastAPI route `GET /pay`
-**When** accessed with `ENABLE_SUBSCRIPTIONS=true`
-**Then** it renders `landing/pay.html` with Paddle.js v2, initializing the overlay with dark theme and token configuration.
-**And** returns HTTP 404 when `ENABLE_SUBSCRIPTIONS=false` (self-hosted mode).
-**And** Telegram `/start upgrade_<tier>` deep links route directly to the billing upgrade handler.
+When accessed with `ENABLE_SUBSCRIPTIONS=true`
+Then it renders `landing/pay.html` with Paddle.js v2, initializing the overlay with dark theme and token configuration.
+And returns HTTP 404 when `ENABLE_SUBSCRIPTIONS=false` (self-hosted mode).
+And Telegram `/start upgrade_<tier>` deep links route directly to the billing upgrade handler.
+
+---
+
+## Epic 24: Fixed Expenses Trajectory & Historical Commitments Analytics
+
+Enable users to track and observe their fixed expense commitments month-over-month through a non-intrusive 3-month trailing baseline, with resilient `(No info)` state handling and an interactive in-place Telegram breakdown card.
+
+### Story 24.1: 3-Month Fixed Expenses Trend & In-Place Resume for Bills
+As a User,
+I want to view a 3-month summary of my fixed expenses within the `/bills` command and toggle into a dedicated historical card,
+So that I can clearly see whether my fixed overhead is growing or decreasing without cluttering daily bill payments.
+
+**Acceptance Criteria:**
+**Given** a user executing `/bills` or `/bills next` in Telegram
+**When** the upcoming bills summary is rendered
+**Then** a static compact badge `📈 3-Mo Fixed: [M-2] ➔ [M-1] ➔ [M] (±Δ%)` (or `📈 Gastos Fijos (3M): ...` in Spanish) is displayed below the total pending summary.
+**And** the label `3-Mo Fixed` remains static regardless of whether data is present for 1, 2, or 3 months.
+**And** any month without recorded scheduled bills displays `(No info)` (or `(Sin datos)` in Spanish), and delta percentage is cleanly suppressed without division-by-zero errors.
+**And** the `/bills` interactive keyboard includes an inline button `[ 📊 3-Mo Trend ]` (callback `bills_t:<timeframe>`).
+**And** clicking `[ 📊 3-Mo Trend ]` uses `edit_message_text` to display a dedicated breakdown card showing paid vs pending amounts per month and trailing average, with a return button `[ ↩️ Back to Bills ]` that restores the standard bills view.
+
 
 

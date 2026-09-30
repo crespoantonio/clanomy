@@ -621,3 +621,112 @@ def test_telegram_webhook_bare_cancel():
         assert user_tg_id not in _pending_bill_edits
 
 
+def test_telegram_webhook_bills_t_callback():
+    """Simulates tapping [ 📊 3-Mo Trend ] inline button and verifies in-place card edit."""
+    mock_request = MagicMock()
+    mock_request.json = AsyncMock(return_value={
+        "callback_query": {
+            "id": "cb_trend_123",
+            "from": {"id": 12345, "first_name": "Tony", "language_code": "en"},
+            "message": {
+                "message_id": 555,
+                "chat": {"id": 12345}
+            },
+            "data": "bills_t:this"
+        }
+    })
+
+    mock_user = MagicMock()
+    mock_user.id = uuid4()
+    mock_family = MagicMock()
+    mock_family.id = uuid4()
+
+    bg_tasks = BackgroundTasks()
+
+    with patch("src.api.routes.telegram.verify_messaging_secret", return_value=True), \
+         patch("src.api.routes.telegram.MessagingService") as mock_ms_class, \
+         patch("src.api.routes.telegram.build_bills_trend_card") as mock_trend_card, \
+         patch("src.api.routes.telegram.TelegramService") as mock_ts_class:
+
+        mock_ms = mock_ms_class.return_value
+        mock_ms.get_or_create_user_and_family.return_value = (mock_user, mock_family)
+
+        mock_trend_card.return_value = (
+            "📊 Fixed Expenses — 3-Month Trend",
+            {"inline_keyboard": [[{"text": "↩️ Back to Bills", "callback_data": "bills_p:1:this"}]]}
+        )
+
+        mock_ts = mock_ts_class.return_value
+        mock_ts.edit_message_text = AsyncMock()
+        mock_ts.answer_callback_query = AsyncMock()
+
+        result = asyncio.run(telegram_webhook(
+            request=mock_request,
+            background_tasks=bg_tasks,
+            x_telegram_bot_api_secret_token="dummy_token",
+            session=MagicMock()
+        ))
+
+        assert result == {"status": "ok"}
+        mock_trend_card.assert_called_once()
+        mock_ts.edit_message_text.assert_called_once_with(
+            chat_id=12345,
+            message_id=555,
+            text="📊 Fixed Expenses — 3-Month Trend",
+            reply_markup={"inline_keyboard": [[{"text": "↩️ Back to Bills", "callback_data": "bills_p:1:this"}]]}
+        )
+        mock_ts.answer_callback_query.assert_called_once_with(callback_query_id="cb_trend_123")
+
+
+def test_telegram_webhook_bills_trend_command():
+    """Simulates `/bills trend` and verifies the trend card is returned."""
+    mock_request = MagicMock()
+    mock_request.json = AsyncMock(return_value={
+        "message": {
+            "message_id": 102,
+            "text": "/bills trend",
+            "chat": {"id": 12345, "type": "private"},
+            "from": {"id": 12345, "first_name": "Tony"}
+        }
+    })
+
+    mock_user = MagicMock()
+    mock_user.id = uuid4()
+    mock_family = MagicMock()
+    mock_family.id = uuid4()
+
+    bg_tasks = BackgroundTasks()
+
+    with patch("src.api.routes.telegram.verify_messaging_secret", return_value=True), \
+         patch("src.api.routes.telegram.MessagingService") as mock_ms_class, \
+         patch("src.api.routes.telegram.CommandHandler") as mock_cmd_class, \
+         patch("src.api.routes.telegram.TelegramService") as mock_ts_class:
+
+        mock_ms = mock_ms_class.return_value
+        mock_ms.get_or_create_user_and_family.return_value = (mock_user, mock_family)
+
+        mock_cmd = mock_cmd_class.return_value
+        mock_cmd.handle_bills_interactive = AsyncMock(return_value=(
+            "📊 Fixed Expenses — 3-Month Trend",
+            {"inline_keyboard": [[{"text": "↩️ Back to Bills", "callback_data": "bills_p:1:this"}]]}
+        ))
+
+        mock_ts = mock_ts_class.return_value
+        mock_ts.send_message = AsyncMock()
+
+        result = asyncio.run(telegram_webhook(
+            request=mock_request,
+            background_tasks=bg_tasks,
+            x_telegram_bot_api_secret_token="dummy_token",
+            session=MagicMock()
+        ))
+
+        assert result == {"status": "ok"}
+        mock_cmd.handle_bills_interactive.assert_called_once_with(
+            mock_user, mock_family, "trend", is_spanish=False
+        )
+        assert len(bg_tasks.tasks) == 1
+        assert "Fixed Expenses" in bg_tasks.tasks[0].kwargs["text"]
+
+
+

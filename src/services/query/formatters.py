@@ -1,7 +1,7 @@
 import html
 from typing import Optional, List, Dict, Any
 from src.core.config import settings
-from src.services.query.models import QueryResult, DecryptedScheduledBill, TimeAggregation
+from src.services.query.models import QueryResult, DecryptedScheduledBill, TimeAggregation, BillsTrendSummary
 from src.services.query.date_resolver import _sanitize_concept_for_prompt
 
 def format_currency_dict(curr_dict: Optional[Dict[str, float]], default_curr: str = "USD") -> str:
@@ -542,7 +542,8 @@ def format_today_summary(
 def format_bills_summary(
     bills: List[DecryptedScheduledBill],
     timeframe_label: str = "This Month",
-    tz_name: Optional[str] = None
+    tz_name: Optional[str] = None,
+    trend_badge: Optional[str] = None
 ) -> str:
     escaped_tf = html.escape(timeframe_label, quote=False)
     lines = [
@@ -552,6 +553,9 @@ def format_bills_summary(
     
     if not bills:
         lines.append("<i>No pending bills due for this period! 🎉</i>")
+        if trend_badge:
+            lines.append("")
+            lines.append(trend_badge)
         lines.append("")
         lines.append(format_timezone_footer(tz_name))
         return "\n".join(lines)
@@ -569,7 +573,103 @@ def format_bills_summary(
     total_parts = [f"{amt:,.2f} {curr}" for curr, amt in totals_by_curr.items()]
     total_str = " + ".join(total_parts)
     lines.append(f"📌 <b>Total Pending:</b> {total_str}")
+    if trend_badge:
+        lines.append(trend_badge)
     lines.append(f"📋 <i>{len(bills)} pending commitment(s)</i>")
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
+    return "\n".join(lines)
+
+def format_bills_trend_badge(trend: BillsTrendSummary, is_spanish: bool = False) -> str:
+    """
+    Renders a compact, static 1-line trend indicator for fixed obligations across 3 months.
+    Label remains strictly static: '3-Mo Fixed:' or 'Gastos Fijos (3M):'.
+    Months with no data render as '(No info)' or '(Sin datos)'.
+    Delta is calculated only when prior month has data and total > 0.
+    """
+    label = "Gastos Fijos (3M)" if is_spanish else "3-Mo Fixed"
+    no_info = "(Sin datos)" if is_spanish else "(No info)"
+    es_months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    en_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    slot_strs: List[str] = []
+    for m in trend.months:
+        m_name = (es_months if is_spanish else en_months)[m.month - 1] if 1 <= m.month <= 12 else m.month_name
+        if m.has_data:
+            slot_strs.append(f"{m_name} {m.total_amount:,.2f} {m.currency}")
+        else:
+            slot_strs.append(f"{m_name} {no_info}")
+
+    slots_joined = " ➔ ".join(slot_strs)
+
+    delta_str = ""
+    if trend.months:
+        last_m = trend.months[-1]
+        if last_m.delta_pct is not None:
+            sign = "+" if last_m.delta_pct > 0 else ""
+            delta_str = f" ({sign}{last_m.delta_pct:.1f}%)"
+
+    return f"📈 <b>{label}:</b> {slots_joined}{delta_str}"
+
+def format_bills_trend_card(
+    trend: BillsTrendSummary,
+    is_spanish: bool = False,
+    tz_name: Optional[str] = None
+) -> str:
+    """
+    Renders an in-place dedicated historical breakdown card for fixed commitments over 3 months.
+    """
+    title = "Gastos Fijos — Tendencia de 3 Meses" if is_spanish else "Fixed Expenses — 3-Month Trend"
+    no_info = "Sin datos" if is_spanish else "No info"
+    es_months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    en_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    lines = [
+        f"📊 <b>{title}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+
+    if not trend.has_any_data:
+        empty_msg = (
+            "<i>No hay facturas o compromisos fijos registrados en los últimos 3 meses.</i>"
+            if is_spanish
+            else "<i>No fixed expenses or scheduled bills recorded for the last 3 months.</i>"
+        )
+        lines.append(empty_msg)
+        lines.append("")
+        lines.append(format_timezone_footer(tz_name))
+        return "\n".join(lines)
+
+    for m in trend.months:
+        m_name = (es_months if is_spanish else en_months)[m.month - 1] if 1 <= m.month <= 12 else m.month_name
+        if not m.has_data:
+            lines.append(f"• <b>{m_name}:</b> <i>{no_info}</i>")
+        else:
+            delta_tag = ""
+            if m.delta_pct is not None:
+                sign = "+" if m.delta_pct > 0 else ""
+                delta_tag = f" <i>({sign}{m.delta_pct:.1f}%)</i>"
+
+            if m.pending_amount == 0.0:
+                status_tag = "(100% pagado ✅)" if is_spanish else "(100% paid ✅)"
+                lines.append(f"• <b>{m_name}:</b> {m.total_amount:,.2f} {m.currency} {status_tag}{delta_tag}")
+            elif m.paid_amount == 0.0:
+                status_tag = f"({m.pending_amount:,.2f} pendiente)" if is_spanish else f"({m.pending_amount:,.2f} pending)"
+                lines.append(f"• <b>{m_name}:</b> {m.total_amount:,.2f} {m.currency} {status_tag}{delta_tag}")
+            else:
+                status_tag = (
+                    f"({m.paid_amount:,.2f} pagado / {m.pending_amount:,.2f} pendiente)"
+                    if is_spanish
+                    else f"({m.paid_amount:,.2f} paid / {m.pending_amount:,.2f} pending)"
+                )
+                lines.append(f"• <b>{m_name}:</b> {m.total_amount:,.2f} {m.currency} {status_tag}{delta_tag}")
+
+    lines.append("")
+    if trend.trailing_average is not None:
+        avg_lbl = "Promedio mensual:" if is_spanish else "Trailing Average:"
+        unit = "mes" if is_spanish else "mo"
+        lines.append(f"📌 <b>{avg_lbl}</b> {trend.trailing_average:,.2f} {trend.primary_currency} / {unit}")
+
     lines.append("")
     lines.append(format_timezone_footer(tz_name))
     return "\n".join(lines)

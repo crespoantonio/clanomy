@@ -242,6 +242,11 @@ Mateo creates a new workspace and invites Carla. They receive an automatic 60-da
 *   **FR66:** System serves a secure Paddle overlay checkout web page (`/pay`) with encrypted theme and client-side token binding, gated strictly by `ENABLE_SUBSCRIPTIONS=true`.
 *   **FR67:** Outbound Telegram notifications for billing events are role-aware: subscription activations are sent privately to the paying admin, while cancellations and expirations are broadcast to all workspace members with localized formatting in English and Spanish.
 
+### 5.21 Fixed Expenses Trajectory & Historical Commitments Analytics
+*   **FR68:** System computes 3-month trailing fixed commitments (`ScheduledBill` entries with `status IN ('pending', 'paid')`) across discrete calendar months $M-2$, $M-1$, and current month $M$.
+*   **FR69:** System renders a static compact badge (`3-Mo Fixed: ...` / `Gastos Fijos (3M): ...`) in `/bills` summaries without dynamically changing the label, displaying `(No info)` (or `(Sin datos)`) for unpopulated months and suppressing percentage deltas when prior months lack data.
+*   **FR70:** System provides an interactive Telegram inline button `[ 📊 3-Mo Trend ]` (and `/bills trend`) that flips the `/bills` card into a dedicated 3-month fixed expense breakdown with zero division guardrails and return navigation (`[ ↩️ Back to Bills ]`).
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance

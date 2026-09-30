@@ -39,6 +39,7 @@ from src.services.handlers.currency_handler import (
 from src.services.handlers.bill_handler import (
     build_bills_keyboard,
     build_bill_settlement_card,
+    build_bills_trend_card,
     settle_bill_by_id,
     handle_bills_interactive
 )
@@ -260,7 +261,7 @@ async def telegram_webhook(
                     await telegram_service.answer_callback_query(callback_query_id=cb_id)
                 return {"status": "ok"}
 
-            if cb_data.startswith(("curr_p:", "curr_set:", "bills_p:", "bill_v:", "bill_pay:", "bill_edit:")):
+            if cb_data.startswith(("curr_p:", "curr_set:", "bills_p:", "bills_t:", "bill_v:", "bill_pay:", "bill_edit:")):
                 service = MessagingService(session)
                 user_data = {
                     "id": user_id,
@@ -326,15 +327,47 @@ async def telegram_webhook(
                     page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
                     tf_code = parts[2] if len(parts) > 2 else "this"
                     cmd_args = "next" if tf_code == "next" else ""
+                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
                     cmd_handler = CommandHandler()
-                    menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, args=cmd_args, page=page)
+                    menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, args=cmd_args, page=page, is_spanish=is_spanish)
                     if message_id:
-                        await telegram_service.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            text=menu_text,
-                            reply_markup=keyboard
-                        )
+                        try:
+                            await telegram_service.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text=menu_text,
+                                reply_markup=keyboard
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to edit message for bills_p callback: {e}")
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                    return {"status": "ok"}
+
+                elif cb_data.startswith("bills_t:"):
+                    parts = cb_data.split(":")
+                    tf_code = parts[1] if len(parts) > 1 else "this"
+                    timeframe = "next_month" if tf_code == "next" else "this_month"
+                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                    active_tz = getattr(user, "timezone", None) or getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+                    card_text, card_keyboard = await asyncio.to_thread(
+                        build_bills_trend_card,
+                        family_id=family.id,
+                        timeframe=timeframe,
+                        tz_name=active_tz,
+                        is_spanish=is_spanish,
+                        primary_currency=getattr(family, "default_currency", None)
+                    )
+                    if message_id:
+                        try:
+                            await telegram_service.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text=card_text,
+                                reply_markup=card_keyboard
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to edit message for bills_t callback: {e}")
                     if cb_id:
                         await telegram_service.answer_callback_query(callback_query_id=cb_id)
                     return {"status": "ok"}
@@ -852,7 +885,8 @@ async def telegram_webhook(
                 return {"status": "ok"}
 
             if clean_cmd in ("/bills", "/vencimientos"):
-                menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, cmd_args)
+                is_es = (clean_cmd == "/vencimientos") or (from_user.get("language_code") or "").lower().startswith("es")
+                menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, cmd_args, is_spanish=is_es)
                 background_tasks.add_task(
                     telegram_service.send_message,
                     chat_id=chat_id,

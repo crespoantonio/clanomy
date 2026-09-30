@@ -268,3 +268,21 @@ class QueryResult(BaseModel):
     category_breakdown: Optional[CategoryBreakdown] = None
     member_breakdown: Optional[MemberBreakdown] = None
     summary: Optional[str] = None
+
+class MonthFixedCommitment(BaseModel):
+    year: int
+    month: int
+    month_name: str
+    total_amount: float = 0.0
+    paid_amount: float = 0.0
+    pending_amount: float = 0.0
+    currency: str = "USD"
+    has_data: bool = False
+    delta_pct: Optional[float] = None
+
+class BillsTrendSummary(BaseModel):
+    months: List[MonthFixedCommitment] = []
+    primary_currency: str = "USD"
+    trailing_average: Optional[float] = None
+    has_any_data: bool = False
+

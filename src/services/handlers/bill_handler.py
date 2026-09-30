@@ -319,14 +319,23 @@ def build_bills_keyboard(
     bills: List[Any],
     page: int = 1,
     timeframe: str = "this_month",
-    page_size: int = 4
+    page_size: int = 4,
+    is_spanish: bool = False
 ) -> Optional[Dict[str, Any]]:
     """
     Builds a paginated Telegram inline keyboard for upcoming scheduled bills.
     Limits to page_size bills per page with Prev / Next pagination controls.
+    Appends an in-place toggle button to view the 3-month fixed expenses trend.
     """
+    tf_code = "next" if "next" in (timeframe or "").lower() else "this"
+    trend_btn_label = "📊 Tendencia 3M" if is_spanish else "📊 3-Mo Trend"
+
     if not bills:
-        return None
+        return {
+            "inline_keyboard": [
+                [{"text": trend_btn_label, "callback_data": f"bills_t:{tf_code}"}]
+            ]
+        }
 
     total_bills = len(bills)
     total_pages = max(1, (total_bills + page_size - 1) // page_size)
@@ -336,7 +345,6 @@ def build_bills_keyboard(
     start_idx = page_idx * page_size
     page_bills = bills[start_idx : start_idx + page_size]
 
-    tf_code = "next" if "next" in (timeframe or "").lower() else "this"
     inline_keyboard: List[List[Dict[str, str]]] = []
 
     for b in page_bills:
@@ -359,7 +367,43 @@ def build_bills_keyboard(
         ]
         inline_keyboard.append(nav_row)
 
+    # Append 3-Month Trend button
+    inline_keyboard.append([{"text": trend_btn_label, "callback_data": f"bills_t:{tf_code}"}])
+
     return {"inline_keyboard": inline_keyboard}
+
+
+def build_bills_trend_card(
+    family_id: UUID,
+    encryption_service: Optional[EncryptionService] = None,
+    timeframe: str = "this_month",
+    tz_name: Optional[str] = None,
+    is_spanish: bool = False,
+    primary_currency: Optional[str] = None
+) -> Tuple[str, Dict[str, Any]]:
+    """
+    Renders the in-place 3-month fixed expenses trend card with back navigation.
+    """
+    from src.services.query.service import QueryService
+    from src.services.query.formatters import format_bills_trend_card
+
+    qs = QueryService(encryption_service=encryption_service)
+    trend = qs.get_bills_trend_data(
+        family_id=family_id,
+        tz_name=tz_name,
+        language="es" if is_spanish else "en",
+        primary_currency=primary_currency
+    )
+    card_text = format_bills_trend_card(trend, is_spanish=is_spanish, tz_name=tz_name)
+
+    tf_code = "next" if "next" in (timeframe or "").lower() else "this"
+    back_label = "↩️ Volver a Facturas" if is_spanish else "↩️ Back to Bills"
+    keyboard = {
+        "inline_keyboard": [
+            [{"text": back_label, "callback_data": f"bills_p:1:{tf_code}"}]
+        ]
+    }
+    return card_text, keyboard
 
 
 def build_bill_settlement_card(
@@ -538,7 +582,8 @@ async def handle_bills_interactive(
     user: User,
     family: Family,
     args: str = "",
-    page: int = 1
+    page: int = 1,
+    is_spanish: Optional[bool] = None
 ) -> Tuple[str, Optional[Dict[str, Any]]]:
     """
     Interactive bills command: returns formatted summary text and paginated inline keyboard.
@@ -548,10 +593,29 @@ async def handle_bills_interactive(
     from src.core.config import settings
 
     args_lower = (args or "").strip().lower()
-    timeframe = "next_month" if any(w in args_lower for w in ["next", "proximo", "siguiente"]) else "this_month"
     active_tz = getattr(user, "timezone", None) or getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
 
+    if is_spanish is None:
+        from src.templates.telegram_messages import is_spanish_text
+        is_spanish = is_spanish_text(args) or any(w in args_lower for w in ["proximo", "siguiente", "tendencia", "historia"])
+
+    timeframe = "next_month" if any(w in args_lower for w in ["next", "proximo", "siguiente"]) else "this_month"
+
     qs = QueryService()
+    family_curr = getattr(family, "default_currency", None)
+
+    if any(w in args_lower for w in ["trend", "tendencia", "historia", "history", "3m", "3-mo"]):
+        card_text, card_keyboard = await asyncio.to_thread(
+            build_bills_trend_card,
+            family.id,
+            encryption_service=qs.encryption_service,
+            timeframe=timeframe,
+            tz_name=active_tz,
+            is_spanish=is_spanish,
+            primary_currency=family_curr
+        )
+        return card_text, card_keyboard
+
     ref_time = datetime.datetime.now(datetime.timezone.utc)
     start_time, end_time = qs._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz, future_inclusive=True)
 
@@ -560,7 +624,18 @@ async def handle_bills_interactive(
         family.id, start_time, end_time, "pending"
     )
 
-    tf_label = "Next Month" if timeframe == "next_month" else "This Month"
-    text = format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz)
-    keyboard = build_bills_keyboard(bills, page=page, timeframe=timeframe, page_size=4)
+    from src.services.query.formatters import format_bills_trend_badge
+    trend = await asyncio.to_thread(
+        qs.get_bills_trend_data,
+        family.id,
+        ref_time,
+        active_tz,
+        "es" if is_spanish else "en",
+        family_curr
+    )
+    trend_badge = format_bills_trend_badge(trend, is_spanish=is_spanish)
+
+    tf_label = ("Próximo Mes" if timeframe == "next_month" else "Este Mes") if is_spanish else ("Next Month" if timeframe == "next_month" else "This Month")
+    text = format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz, trend_badge=trend_badge)
+    keyboard = build_bills_keyboard(bills, page=page, timeframe=timeframe, page_size=4, is_spanish=is_spanish)
     return text, keyboard

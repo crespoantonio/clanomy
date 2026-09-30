@@ -195,14 +195,31 @@ class CommandHandler:
 
         return format_today_summary(qr, is_family=(not only_me), tz_name=active_tz)
 
-    async def handle_bills(self, user: User, family: Family, args: str = "") -> str:
+    async def handle_bills(self, user: User, family: Family, args: str = "", is_spanish: Optional[bool] = None) -> str:
         """
         /bills or /bills next
         Shows upcoming pending scheduled bills.
         """
         args_lower = (args or "").strip().lower()
-        timeframe = "next_month" if any(w in args_lower for w in ["next", "proximo", "siguiente"]) else "this_month"
         active_tz = self._resolve_active_timezone(user, family)
+        if is_spanish is None:
+            from src.templates.telegram_messages import is_spanish_text
+            is_spanish = is_spanish_text(args) or any(w in args_lower for w in ["proximo", "siguiente", "tendencia", "historia"])
+
+        timeframe = "next_month" if any(w in args_lower for w in ["next", "proximo", "siguiente"]) else "this_month"
+        family_curr = getattr(family, "default_currency", None)
+
+        if any(w in args_lower for w in ["trend", "tendencia", "historia", "history", "3m", "3-mo"]):
+            from src.services.handlers.bill_handler import build_bills_trend_card
+            text, _ = build_bills_trend_card(
+                family.id,
+                encryption_service=self.query_service.encryption_service,
+                timeframe=timeframe,
+                tz_name=active_tz,
+                is_spanish=is_spanish,
+                primary_currency=family_curr
+            )
+            return text
 
         ref_time = datetime.now(timezone.utc)
         start_time, end_time = self.query_service._resolve_date_range(timeframe, None, None, ref_time, tz_name=active_tz, future_inclusive=True)
@@ -212,16 +229,27 @@ class CommandHandler:
             family.id, start_time, end_time, "pending"
         )
 
-        tf_label = "Next Month" if timeframe == "next_month" else "This Month"
-        return format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz)
+        from src.services.query.formatters import format_bills_trend_badge
+        trend = await asyncio.to_thread(
+            self.query_service.get_bills_trend_data,
+            family.id,
+            ref_time,
+            active_tz,
+            "es" if is_spanish else "en",
+            family_curr
+        )
+        badge = format_bills_trend_badge(trend, is_spanish=is_spanish)
 
-    async def handle_bills_interactive(self, user: User, family: Family, args: str = "", page: int = 1) -> Tuple[str, Optional[Dict[str, Any]]]:
+        tf_label = ("Próximo Mes" if timeframe == "next_month" else "Este Mes") if is_spanish else ("Next Month" if timeframe == "next_month" else "This Month")
+        return format_bills_summary(bills, timeframe_label=tf_label, tz_name=active_tz, trend_badge=badge)
+
+    async def handle_bills_interactive(self, user: User, family: Family, args: str = "", page: int = 1, is_spanish: Optional[bool] = None) -> Tuple[str, Optional[Dict[str, Any]]]:
         """
         /bills or /bills next (interactive)
         Shows upcoming pending scheduled bills with inline buttons for 1-tap settlement and pagination.
         """
         from src.services.handlers.bill_handler import handle_bills_interactive
-        return await handle_bills_interactive(user, family, args=args, page=page)
+        return await handle_bills_interactive(user, family, args=args, page=page, is_spanish=is_spanish)
 
     async def handle_balance(self, user: User, family: Family, args: str = "") -> str:
         """

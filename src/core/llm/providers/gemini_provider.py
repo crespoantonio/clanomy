@@ -156,6 +156,17 @@ class GeminiProvider(BaseLLMProvider):
         raw_schema = schema.model_json_schema()
         gemini_schema = clean_gemini_schema(raw_schema)
 
+        generation_config = {
+            "maxOutputTokens": max_tokens,
+            "responseMimeType": "application/json",
+            "responseSchema": gemini_schema
+        }
+        if "gemini-3" in self.model.lower():
+            thinking_lvl = (getattr(settings, "AI_GEMINI_THINKING_LEVEL", "low") or "low").lower()
+            generation_config["thinkingConfig"] = {
+                "thinkingLevel": thinking_lvl
+            }
+
         payload = {
             "systemInstruction": {
                 "parts": [{"text": system_prompt}]
@@ -167,12 +178,7 @@ class GeminiProvider(BaseLLMProvider):
                 }
             ],
             "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": max_tokens,
-                "responseMimeType": "application/json",
-                "responseSchema": gemini_schema
-            }
+            "generationConfig": generation_config
         }
 
         logger.info(f"Calling native Gemini model {self.model}...")
@@ -227,6 +233,15 @@ class GeminiProvider(BaseLLMProvider):
             "x-goog-api-key": self.api_key or ""
         }
 
+        generation_config = {
+            "maxOutputTokens": 600
+        }
+        if "gemini-3" in self.model.lower():
+            thinking_lvl = (getattr(settings, "AI_GEMINI_THINKING_LEVEL", "low") or "low").lower()
+            generation_config["thinkingConfig"] = {
+                "thinkingLevel": thinking_lvl
+            }
+
         payload = {
             "systemInstruction": {
                 "parts": [{"text": system_prompt}]
@@ -235,10 +250,7 @@ class GeminiProvider(BaseLLMProvider):
                 {"role": "user", "parts": [{"text": user_prompt}]}
             ],
             "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
-            "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": 600
-            }
+            "generationConfig": generation_config
         }
 
         logger.info(f"Calling native Gemini model {self.model} for text...")

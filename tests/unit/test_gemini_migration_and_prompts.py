@@ -389,3 +389,98 @@ def test_gemini_provider_model_fallback_and_guard():
         p_prefixed = GeminiProvider()
         assert p_prefixed.model == "models/gemini-2.5-flash"
 
+
+@pytest.mark.anyio
+async def test_gemini_provider_removes_deprecated_sampling_parameters():
+    provider = GeminiProvider(model="gemini-2.5-flash-lite", api_key="AIzaSyTestKey")
+    mock_client = AsyncMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "candidates": [{"content": {"parts": [{"text": '{"summary": "Test"}'}]}}],
+        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5}
+    }
+    mock_client.post.return_value = mock_resp
+
+    with patch("src.core.llm.providers.gemini_provider.get_http_client", return_value=mock_client):
+        await provider.complete_structured(
+            system_prompt="sys",
+            user_prompt="usr",
+            schema=DummySchema,
+            temperature=0.5
+        )
+        _, kwargs = mock_client.post.call_args
+        gen_config = kwargs["json"]["generationConfig"]
+        assert "temperature" not in gen_config
+        assert "top_p" not in gen_config
+        assert "top_k" not in gen_config
+        assert "thinking_budget" not in gen_config
+        assert "thinkingConfig" not in gen_config
+
+        await provider.complete_text(
+            system_prompt="sys",
+            user_prompt="usr",
+            temperature=0.7
+        )
+        _, kwargs_text = mock_client.post.call_args
+        gen_config_text = kwargs_text["json"]["generationConfig"]
+        assert "temperature" not in gen_config_text
+        assert "top_p" not in gen_config_text
+        assert "top_k" not in gen_config_text
+        assert "thinking_budget" not in gen_config_text
+        assert "thinkingConfig" not in gen_config_text
+
+
+@pytest.mark.anyio
+async def test_gemini_3_model_sets_lowest_thinking_level():
+    provider = GeminiProvider(model="gemini-3.8-flash", api_key="AIzaSyTestKey")
+    mock_client = AsyncMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "candidates": [{"content": {"parts": [{"text": '{"summary": "Test"}'}]}}],
+        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5}
+    }
+    mock_client.post.return_value = mock_resp
+
+    with patch("src.core.llm.providers.gemini_provider.get_http_client", return_value=mock_client):
+        await provider.complete_structured(
+            system_prompt="sys",
+            user_prompt="usr",
+            schema=DummySchema
+        )
+        _, kwargs = mock_client.post.call_args
+        gen_config = kwargs["json"]["generationConfig"]
+        assert "temperature" not in gen_config
+        assert gen_config["thinkingConfig"] == {"thinkingLevel": "low"}
+
+        await provider.complete_text(
+            system_prompt="sys",
+            user_prompt="usr"
+        )
+        _, kwargs_text = mock_client.post.call_args
+        gen_config_text = kwargs_text["json"]["generationConfig"]
+        assert "temperature" not in gen_config_text
+        assert gen_config_text["thinkingConfig"] == {"thinkingLevel": "low"}
+
+
+@pytest.mark.anyio
+async def test_whisper_service_gemini_3_deprecation_compliance():
+    service = WhisperService()
+    mock_client = AsyncMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "candidates": [{"content": {"parts": [{"text": "Audio text"}]}}]
+    }
+    mock_client.post.return_value = mock_resp
+
+    with patch("src.core.config.settings.AI_API_KEY", "AIzaSyTestKey"), \
+         patch("src.core.config.settings.AI_WHISPER_MODEL", "gemini-3.8-flash"):
+        text, lang = await service._transcribe_gemini(mock_client, b"fake_audio_bytes")
+        assert text == "Audio text"
+        _, kwargs = mock_client.post.call_args
+        gen_config = kwargs["json"]["generationConfig"]
+        assert "temperature" not in gen_config
+        assert gen_config["thinkingConfig"] == {"thinkingLevel": "low"}
+

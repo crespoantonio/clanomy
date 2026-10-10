@@ -308,6 +308,15 @@ class WhisperService:
             "Return ONLY the raw transcription text. "
             "Do NOT add explanations, timestamps, markdown formatting, introductory text, or quotation marks."
         )
+        generation_config = {
+            "maxOutputTokens": 1000
+        }
+        if "gemini-3" in model.lower():
+            thinking_lvl = (getattr(settings, "AI_GEMINI_THINKING_LEVEL", "low") or "low").lower()
+            generation_config["thinkingConfig"] = {
+                "thinkingLevel": thinking_lvl
+            }
+
         payload = {
             "contents": [
                 {
@@ -324,10 +333,7 @@ class WhisperService:
                     ]
                 }
             ],
-            "generationConfig": {
-                "temperature": 0.0,
-                "maxOutputTokens": 1000
-            }
+            "generationConfig": generation_config
         }
 
         max_attempts = 3

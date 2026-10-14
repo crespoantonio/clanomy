@@ -31,7 +31,9 @@ def _make_mock_bill(bill_id=None, concept="Electricity", amount=45.0, currency="
 
 
 def test_build_bills_keyboard_empty():
-    assert build_bills_keyboard([]) is None
+    kb = build_bills_keyboard([])
+    assert kb is not None
+    assert kb["inline_keyboard"] == [[{"text": "📊 3-Mo Trend", "callback_data": "bills_t:this"}]]
 
 
 def test_build_bills_keyboard_single_page():
@@ -39,10 +41,11 @@ def test_build_bills_keyboard_single_page():
     kb = build_bills_keyboard(bills, page=1, timeframe="this_month", page_size=4)
     assert kb is not None
     rows = kb["inline_keyboard"]
-    # 3 bills <= 4 page_size -> exactly 3 rows, no pagination nav row
-    assert len(rows) == 3
+    # 3 bills <= 4 page_size -> 3 bill rows + 1 trend row = 4 rows
+    assert len(rows) == 4
     assert rows[0][0]["callback_data"].startswith("bill_v:")
     assert "Bill 1" in rows[0][0]["text"]
+    assert rows[3][0]["callback_data"] == "bills_t:this"
 
 
 def test_build_bills_keyboard_multi_page():
@@ -51,21 +54,24 @@ def test_build_bills_keyboard_multi_page():
     kb = build_bills_keyboard(bills, page=1, timeframe="this_month", page_size=4)
     assert kb is not None
     rows = kb["inline_keyboard"]
-    assert len(rows) == 5  # 4 bill rows + 1 nav row
+    # 4 bill rows + 1 nav row + 1 trend button row = 6 rows
+    assert len(rows) == 6
     nav_row = rows[4]
     assert len(nav_row) == 3
     assert nav_row[0]["callback_data"] == "bills_p:3:this"
     assert "Page 1/3" in nav_row[1]["text"]
     assert nav_row[2]["callback_data"] == "bills_p:2:this"
+    assert rows[5][0]["callback_data"] == "bills_t:this"
 
     # Page 2
     kb_p2 = build_bills_keyboard(bills, page=2, timeframe="this_month", page_size=4)
     rows_p2 = kb_p2["inline_keyboard"]
-    assert len(rows_p2) == 5
+    assert len(rows_p2) == 6
     nav_row_p2 = rows_p2[4]
     assert nav_row_p2[0]["callback_data"] == "bills_p:1:this"
     assert "Page 2/3" in nav_row_p2[1]["text"]
     assert nav_row_p2[2]["callback_data"] == "bills_p:3:this"
+    assert rows_p2[5][0]["callback_data"] == "bills_t:this"
 
 
 def test_build_bills_keyboard_long_concept_truncated():

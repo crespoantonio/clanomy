@@ -21,7 +21,13 @@ from src.services.query.formatters import (
     format_me_summary,
     format_today_summary,
     format_bills_summary,
-    format_balance_summary
+    format_balance_summary,
+    format_savings_summary,
+    format_history_summary
+)
+from src.services.query.date_resolver import (
+    resolve_trailing_months,
+    _get_zone_info
 )
 from src.templates.telegram_messages import (
     PRIVACY_POLICY_MESSAGE,
@@ -285,6 +291,117 @@ class CommandHandler:
         )
 
         return format_balance_summary(qr, tz_name=active_tz)
+
+    async def handle_savings(self, user: User, family: Family, args: str = "", is_spanish: Optional[bool] = None) -> str:
+        """
+        /savings or /ahorros, optionally /savings me
+        Shows cumulative all-time savings and total net balance (incomes vs expenses vs exchange).
+        """
+        args_lower = (args or "").strip().lower()
+        only_me = any(w in args_lower for w in ["me", "yo"])
+        if is_spanish is None:
+            is_spanish = is_spanish_text(args) or any(w in args_lower for w in ["ahorro", "ahorros", "total", "yo"])
+
+        active_tz = self._resolve_active_timezone(user, family)
+        effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
+
+        transactions = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_transactions,
+            family.id, None, None, None, None, None
+        )
+
+        if only_me:
+            transactions = [tx for tx in transactions if tx.user_id == user.id]
+
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe="all_time",
+            start_time=None,
+            end_time=None,
+            primary_currency=effective_currency,
+            calculate_daily=False
+        )
+
+        qr = QueryResult(
+            intent=ParsedQueryIntent(intent="net_cash_flow", timeframe="all_time", scope="personal" if only_me else "family"),
+            resolved_start_time=None,
+            resolved_end_time=None,
+            transactions=transactions,
+            total_count=len(transactions),
+            aggregation=aggregation
+        )
+
+        user_display = (user.full_name or user.username or "You") if only_me else (family.name or "Family")
+        return format_savings_summary(qr, name=user_display, is_family=(not only_me), is_spanish=is_spanish, tz_name=active_tz)
+
+    async def handle_history(self, user: User, family: Family, args: str = "", is_spanish: Optional[bool] = None) -> str:
+        """
+        /history or /historial, optionally /history me
+        Shows 3-month trailing financial resume (income, exchanged, expenses, and net balance).
+        """
+        args_lower = (args or "").strip().lower()
+        only_me = any(w in args_lower for w in ["me", "yo"])
+        if is_spanish is None:
+            is_spanish = is_spanish_text(args) or any(w in args_lower for w in ["historial", "historia", "yo"])
+
+        active_tz = self._resolve_active_timezone(user, family)
+        effective_currency = family.default_currency or settings.DEFAULT_CURRENCY or "USD"
+
+        ref_time = datetime.now(timezone.utc)
+        trailing_months = resolve_trailing_months(n=3, reference_time=ref_time, tz_name=active_tz)
+        overall_start = trailing_months[0][2]
+        overall_end = trailing_months[-1][3]
+
+        all_txs = await asyncio.to_thread(
+            self.query_service._fetch_and_decrypt_transactions,
+            family.id, overall_start, overall_end, None, None, None
+        )
+
+        if only_me:
+            all_txs = [tx for tx in all_txs if tx.user_id == user.id]
+
+        monthly_data = []
+        for year, month, start_utc, end_utc in trailing_months:
+            m_txs = [
+                tx for tx in all_txs
+                if start_utc <= (tx.timestamp if tx.timestamp.tzinfo else tx.timestamp.replace(tzinfo=timezone.utc)) <= end_utc
+            ]
+            agg = aggregate_transactions(
+                transactions=m_txs,
+                timeframe=f"{year}_{month:02d}",
+                start_time=start_utc,
+                end_time=end_utc,
+                primary_currency=effective_currency,
+                calculate_daily=False
+            )
+            monthly_data.append({
+                "year": year,
+                "month": month,
+                "start_time": start_utc,
+                "end_time": end_utc,
+                "transactions": m_txs,
+                "aggregation": agg
+            })
+
+        overall_agg = aggregate_transactions(
+            transactions=all_txs,
+            timeframe="3_months",
+            start_time=overall_start,
+            end_time=overall_end,
+            primary_currency=effective_currency,
+            calculate_daily=False
+        )
+
+        user_display = (user.full_name or user.username or "You") if only_me else (family.name or "Family")
+        return format_history_summary(
+            monthly_data=monthly_data,
+            overall_agg=overall_agg,
+            name=user_display,
+            is_family=(not only_me),
+            is_spanish=is_spanish,
+            tz_name=active_tz,
+            primary_currency=effective_currency
+        )
 
     async def handle_timezone(self, user: User, family: Family, args: str = "") -> str:
         """

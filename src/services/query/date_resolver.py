@@ -294,3 +294,42 @@ def resolve_date_range(
     
     return None, None
 
+
+def resolve_trailing_months(
+    n: int = 3,
+    reference_time: Optional[datetime] = None,
+    tz_name: Optional[str] = None
+) -> list[tuple[int, int, datetime, datetime]]:
+    """
+    Returns a list of tuples: (year, month, start_utc, end_utc)
+    for the last n months in chronological order, ending with current month.
+    Each start_utc is the first moment of the month (00:00:00) converted to UTC.
+    Each end_utc is the final microsecond of that calendar month converted to UTC.
+    """
+    tz = _get_zone_info(tz_name, reference_time)
+    if reference_time:
+        ref_local = reference_time.astimezone(tz) if reference_time.tzinfo else reference_time.replace(tzinfo=timezone.utc).astimezone(tz)
+    else:
+        ref_local = datetime.now(tz)
+
+    target_months: list[tuple[int, int]] = []
+    curr_y, curr_m = ref_local.year, ref_local.month
+
+    for i in range(n - 1, -1, -1):
+        m_idx = (curr_y * 12 + curr_m - 1) - i
+        y = m_idx // 12
+        m = (m_idx % 12) + 1
+        target_months.append((y, m))
+
+    result: list[tuple[int, int, datetime, datetime]] = []
+    for y, m in target_months:
+        start_local = datetime(y, m, 1, 0, 0, 0, 0, tzinfo=tz)
+        if m == 12:
+            next_start = datetime(y + 1, 1, 1, 0, 0, 0, 0, tzinfo=tz)
+        else:
+            next_start = datetime(y, m + 1, 1, 0, 0, 0, 0, tzinfo=tz)
+        end_local = next_start - timedelta(microseconds=1)
+        result.append((y, m, start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)))
+
+    return result
+

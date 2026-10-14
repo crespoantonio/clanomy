@@ -732,3 +732,229 @@ def format_balance_summary(
     return "\n".join(lines)
 
 
+def format_savings_summary(
+    query_result: QueryResult,
+    name: Optional[str] = None,
+    is_family: bool = True,
+    is_spanish: bool = False,
+    tz_name: Optional[str] = None
+) -> str:
+    agg = query_result.aggregation
+    curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
+    scope_str = ("Hogar" if is_family else (name or "Personal")) if is_spanish else ("Household" if is_family else (name or "Personal"))
+    title = f"🏦 <b>Ahorros y Balance Total ({html.escape(scope_str, quote=False)})</b>" if is_spanish else f"🏦 <b>Total Savings & Balance ({html.escape(scope_str, quote=False)})</b>"
+    
+    lines = [
+        title,
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+
+    if not agg or query_result.total_count == 0:
+        empty_msg = "<i>No se registraron transacciones aún.</i>" if is_spanish else "<i>No transactions recorded yet.</i>"
+        lines.append(empty_msg)
+        lines.append("")
+        lines.append(format_timezone_footer(tz_name))
+        return "\n".join(lines)
+
+    all_currencies = set()
+    all_currencies.update(agg.currency_totals.keys())
+    all_currencies.update(agg.income_currency_totals.keys())
+    all_currencies.update(agg.expense_currency_totals.keys())
+    all_currencies.update(agg.exchange_sold_totals.keys())
+    all_currencies.update(agg.exchange_received_totals.keys())
+    has_multi_curr = len(all_currencies) > 1
+    has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
+
+    # Incomes & Expenses
+    if has_multi_curr:
+        inc_lbl = "💰 <b>Ingresos Totales:</b>" if is_spanish else "💰 <b>Lifetime Incomes:</b>"
+        lines.append(inc_lbl)
+        if agg.income_currency_totals:
+            for c, val in sorted(agg.income_currency_totals.items()):
+                lines.append(f"  • {val:,.2f} {c}")
+        else:
+            lines.append(f"  • 0.00 {curr}")
+
+        exp_lbl = "💸 <b>Gastos Totales:</b>" if is_spanish else "💸 <b>Lifetime Expenses:</b>"
+        lines.append(exp_lbl)
+        if agg.expense_currency_totals:
+            for c, val in sorted(agg.expense_currency_totals.items()):
+                lines.append(f"  • {val:,.2f} {c}")
+        else:
+            lines.append(f"  • 0.00 {curr}")
+    else:
+        inc_lbl = "💰 <b>Ingresos Totales:</b>" if is_spanish else "💰 <b>Lifetime Incomes:</b>"
+        exp_lbl = "💸 <b>Gastos Totales:</b>" if is_spanish else "💸 <b>Lifetime Expenses:</b>"
+        lines.append(f"{inc_lbl} {agg.total_income:,.2f} {curr}")
+        lines.append(f"{exp_lbl} {agg.total_expenses:,.2f} {curr}")
+        if not has_exchanges:
+            sign = "+" if agg.net_balance > 0 else ""
+            sav_pct = f" ({agg.savings_rate:.1f}% ahorrado)" if is_spanish else f" ({agg.savings_rate:.1f}% saved)"
+            sav_str = sav_pct if agg.savings_rate is not None and agg.total_income > 0 else ""
+            net_lbl = "📈 <b>Balance Neto Total:</b>" if is_spanish else "📈 <b>Total Net Balance:</b>"
+            lines.append(f"{net_lbl} {sign}{agg.net_balance:,.2f} {curr}{sav_str}")
+
+    # Exchange summary lines if any
+    ex_lines = format_exchange_summary_lines(agg)
+    if ex_lines:
+        lines.append("")
+        lines.extend(ex_lines)
+
+    # Multi-currency net positions
+    if has_multi_curr or has_exchanges:
+        lines.append("")
+        pos_lbl = "📈 <b>Posición Neta Total:</b>" if is_spanish else "📈 <b>Total Net Position:</b>"
+        lines.append(pos_lbl)
+        positions = agg.net_currency_positions or {}
+        for c in sorted(all_currencies or [curr]):
+            net_val = positions.get(c, 0.0)
+            sign = "+" if net_val > 0 else ""
+            lines.append(f"  • {c}: {sign}{net_val:,.2f} {c}")
+
+    lines.append("")
+    # Earliest transaction date
+    first_tx = min(query_result.transactions, key=lambda t: t.timestamp) if query_result.transactions else None
+    if first_tx and hasattr(first_tx.timestamp, "strftime"):
+        since_date = first_tx.timestamp.strftime("%b %d, %Y")
+        since_lbl = f"🗓️ <i>Registrando desde: {since_date}</i>" if is_spanish else f"🗓️ <i>Tracking since: {since_date}</i>"
+        lines.append(since_lbl)
+
+    tx_lbl = f"📊 <i>Total: {agg.transaction_count} transacción(es)</i>" if is_spanish else f"📊 <i>Total: {agg.transaction_count} transaction(s)</i>"
+    lines.append(tx_lbl)
+    lines.append("")
+    lines.append(format_timezone_footer(tz_name))
+    return "\n".join(lines)
+
+
+def format_history_summary(
+    monthly_data: List[Dict[str, Any]],
+    overall_agg: Optional[TimeAggregation] = None,
+    name: Optional[str] = None,
+    is_family: bool = True,
+    is_spanish: bool = False,
+    tz_name: Optional[str] = None,
+    primary_currency: str = "USD"
+) -> str:
+    es_months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    en_months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+    scope_str = ("Hogar" if is_family else (name or "Personal")) if is_spanish else ("Household" if is_family else (name or "Personal"))
+    title = f"📜 <b>Historial Financiero — 3 Meses ({html.escape(scope_str, quote=False)})</b>" if is_spanish else f"📜 <b>3-Month Financial History ({html.escape(scope_str, quote=False)})</b>"
+
+    lines = [
+        title,
+        "━━━━━━━━━━━━━━━━━━━━━"
+    ]
+
+    has_any_tx = any(m.get("transactions") for m in monthly_data)
+    if not has_any_tx:
+        empty_msg = "<i>No se registraron transacciones en los últimos 3 meses.</i>" if is_spanish else "<i>No transactions recorded in the last 3 months.</i>"
+        lines.append(empty_msg)
+        lines.append("")
+        lines.append(format_timezone_footer(tz_name))
+        return "\n".join(lines)
+
+    for idx, m_info in enumerate(monthly_data):
+        y = m_info["year"]
+        m = m_info["month"]
+        agg: Optional[TimeAggregation] = m_info.get("aggregation")
+        m_name = (es_months if is_spanish else en_months)[m - 1]
+        
+        is_current = (idx == len(monthly_data) - 1)
+        curr_tag = (" (En curso)" if is_spanish else " (Current)") if is_current else ""
+        
+        lines.append(f"🗓️ <b>{m_name} {y}</b>{curr_tag}")
+        
+        if not agg or agg.transaction_count == 0:
+            lines.append("  • <i>" + ("Sin movimientos" if is_spanish else "No activity") + "</i>")
+            lines.append("")
+            continue
+
+        all_currs = set()
+        all_currs.update(agg.income_currency_totals.keys())
+        all_currs.update(agg.expense_currency_totals.keys())
+        all_currs.update(agg.exchange_sold_totals.keys())
+        all_currs.update(agg.exchange_received_totals.keys())
+        if not all_currs and agg.currency_totals:
+            all_currs.update(agg.currency_totals.keys())
+        m_multi = len(all_currs) > 1
+        has_ex = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
+
+        inc_lbl = "Ingresos" if is_spanish else "Incomes"
+        exp_lbl = "Gastos" if is_spanish else "Expenses"
+        chg_lbl = "Cambiado" if is_spanish else "Changed"
+        net_lbl = "Neto" if is_spanish else "Net"
+
+        if m_multi:
+            inc_s = format_currency_dict(agg.income_currency_totals, primary_currency)
+            exp_s = format_currency_dict(agg.expense_currency_totals, primary_currency)
+            lines.append(f"  • 💰 {inc_lbl}: {inc_s}")
+            lines.append(f"  • 💸 {exp_lbl}: {exp_s}")
+            if has_ex:
+                sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_sold_totals.items())]
+                recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_received_totals.items())]
+                lines.append(f"  • 💱 {chg_lbl}: {', '.join(sold_p)} ➔ {', '.join(recv_p)}")
+            positions = agg.net_currency_positions or {}
+            net_parts = [f"{'+' if v > 0 else ''}{v:,.2f} {c}" for c, v in sorted(positions.items())]
+            lines.append(f"  • 📈 {net_lbl}: {' | '.join(net_parts)}")
+        else:
+            inc_s = f"{agg.total_income:,.2f} {agg.primary_currency}"
+            exp_s = f"{agg.total_expenses:,.2f} {agg.primary_currency}"
+            lines.append(f"  • 💰 {inc_lbl}: {inc_s} | 💸 {exp_lbl}: {exp_s}")
+            if has_ex:
+                sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_sold_totals.items())]
+                recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(agg.exchange_received_totals.items())]
+                lines.append(f"  • 💱 {chg_lbl}: {', '.join(sold_p)} ➔ {', '.join(recv_p)}")
+            sign = "+" if agg.net_balance > 0 else ""
+            sav_str = f" ({agg.savings_rate:.1f}%)" if agg.savings_rate is not None and agg.total_income > 0 else ""
+            lines.append(f"  • 📈 {net_lbl}: {sign}{agg.net_balance:,.2f} {agg.primary_currency}{sav_str}")
+
+        lines.append("")
+
+    # Trailing Totals Section
+    if overall_agg and overall_agg.transaction_count > 0:
+        lines.append("━━━━━━━━━━━━━━━━━━━━━")
+        summary_lbl = "📌 <b>Totales Últimos 3 Meses:</b>" if is_spanish else "📌 <b>3-Month Trailing Totals:</b>"
+        lines.append(summary_lbl)
+        
+        tot_all_currs = set()
+        tot_all_currs.update(overall_agg.income_currency_totals.keys())
+        tot_all_currs.update(overall_agg.expense_currency_totals.keys())
+        tot_all_currs.update(overall_agg.exchange_sold_totals.keys())
+        tot_all_currs.update(overall_agg.exchange_received_totals.keys())
+        if not tot_all_currs and overall_agg.currency_totals:
+            tot_all_currs.update(overall_agg.currency_totals.keys())
+            
+        tot_multi = len(tot_all_currs) > 1
+        has_tot_ex = bool(overall_agg.exchange_count > 0 or overall_agg.exchange_sold_totals or overall_agg.exchange_received_totals)
+
+        if tot_multi:
+            tot_inc_s = format_currency_dict(overall_agg.income_currency_totals, primary_currency)
+            tot_exp_s = format_currency_dict(overall_agg.expense_currency_totals, primary_currency)
+            lines.append(f"  • 💰 " + ("Ingresos Totales" if is_spanish else "Total Incomes") + f": {tot_inc_s}")
+            lines.append(f"  • 💸 " + ("Gastos Totales" if is_spanish else "Total Expenses") + f": {tot_exp_s}")
+            if has_tot_ex:
+                sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(overall_agg.exchange_sold_totals.items())]
+                recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(overall_agg.exchange_received_totals.items())]
+                lines.append(f"  • 💱 " + ("Total Cambiado" if is_spanish else "Total Exchanged") + f": {', '.join(sold_p)} ➔ {', '.join(recv_p)}")
+            positions = overall_agg.net_currency_positions or {}
+            net_parts = [f"{'+' if v > 0 else ''}{v:,.2f} {c}" for c, v in sorted(positions.items())]
+            lines.append(f"  • 📈 " + ("Flujo Neto" if is_spanish else "Net Cash Flow") + f": {' | '.join(net_parts)}")
+        else:
+            tot_inc_s = f"{overall_agg.total_income:,.2f} {overall_agg.primary_currency}"
+            tot_exp_s = f"{overall_agg.total_expenses:,.2f} {overall_agg.primary_currency}"
+            sign = "+" if overall_agg.net_balance > 0 else ""
+            lines.append(f"  • 💰 " + ("Ingresos" if is_spanish else "Incomes") + f": {tot_inc_s} | 💸 " + ("Gastos" if is_spanish else "Expenses") + f": {tot_exp_s}")
+            if has_tot_ex:
+                sold_p = [f"{amt:,.2f} {c}" for c, amt in sorted(overall_agg.exchange_sold_totals.items())]
+                recv_p = [f"{amt:,.2f} {c}" for c, amt in sorted(overall_agg.exchange_received_totals.items())]
+                lines.append(f"  • 💱 " + ("Cambiado" if is_spanish else "Exchanged") + f": {', '.join(sold_p)} ➔ {', '.join(recv_p)}")
+            sav_str = f" ({overall_agg.savings_rate:.1f}% ahorrado)" if is_spanish and overall_agg.savings_rate is not None and overall_agg.total_income > 0 else (f" ({overall_agg.savings_rate:.1f}% saved)" if overall_agg.savings_rate is not None and overall_agg.total_income > 0 else "")
+            lines.append(f"  • 📈 " + ("Flujo Neto Total" if is_spanish else "Total Net Cash Flow") + f": {sign}{overall_agg.net_balance:,.2f} {overall_agg.primary_currency}{sav_str}")
+
+        lines.append("")
+
+    lines.append(format_timezone_footer(tz_name))
+    return "\n".join(lines)
+
+

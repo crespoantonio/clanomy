@@ -241,6 +241,31 @@ class QueryService:
                 tf = "this_week"
             return ParsedQueryIntent(intent="net_cash_flow", timeframe=tf, scope="family")
 
+        # Fast-path deterministic matching for savings_summary / all_time_balance
+        savings_patterns = [
+            r'¿?(?:cu[aá]nto|cu[aá]ntos|cu[aá]nta)\s+(?:dinero|plata|usd|ars|eur|\$)?\s*(?:tengo|tenemos)?\s*(?:en\s+este\s+momento\s+)?(?:en\s+total|hist[oó]rico|acumulado)\b',
+            r'\b(?:total|cumulative|all[- ]time)\s+savings\b',
+            r'\bhow\s+much\s+(?:money\s+)?do\s+(?:i|we)\s+have\s+(?:right\s+now\s+)?in\s+total\b',
+            r'\bhow\s+many\s+(?:usd|dollars|euros|ars|pesos)\s+do\s+(?:i|we)\s+have\s+(?:right\s+now\s+)?in\s+total\b',
+            r'¿?(?:cu[aá]nto|cu[aá]ntos|cu[aá]nta)\s+(?:usd|d[oó]lares|ars|pesos|eur|euros)\s+(?:tengo|tenemos)\b',
+            r'\b(?:ahorros?\s+totales?|total\s+ahorrado|balance\s+total)\b'
+        ]
+        if any(re.search(pat, clean_lower) for pat in savings_patterns):
+            target_curr = None
+            if any(w in clean_lower for w in ("usd", "dolar", "dólar", "dollars")):
+                target_curr = "USD"
+            elif any(w in clean_lower for w in ("ars", "pesos", "peso")):
+                target_curr = "ARS"
+            elif any(w in clean_lower for w in ("eur", "euros", "euro")):
+                target_curr = "EUR"
+            is_personal = bool(re.search(r'\b(?:tengo|yo|me|mi)\b', clean_lower)) and not bool(re.search(r'\b(?:tenemos|hogar|familia)\b', clean_lower))
+            return ParsedQueryIntent(
+                intent="savings_summary",
+                timeframe="all_time",
+                target_currency=target_curr,
+                scope="personal" if is_personal else "family"
+            )
+
         ref_time = reference_time or datetime.now(timezone.utc)
         current_date_str = ref_time.strftime("%Y-%m-%d")
         system_prompt = QUERY_INTENT_SYSTEM_PROMPT
@@ -658,6 +683,61 @@ CRITICAL SECURITY RULES:
         )
         
         return await self.generate_summary(qr, user_name=user_name, use_llm=True, family_name=family_name, member_names=member_names)
+
+    async def get_savings_summary(
+        self,
+        family_id: UUID,
+        user_id: Optional[UUID] = None,
+        user_name: Optional[str] = None,
+        family_name: Optional[str] = None,
+        target_currency: Optional[str] = None,
+        primary_currency: Optional[str] = None,
+        is_spanish: bool = False,
+        tz_name: Optional[str] = None,
+        scope: str = "family"
+    ) -> str:
+        intent = ParsedQueryIntent(
+            intent="savings_summary",
+            timeframe="all_time",
+            target_currency=target_currency,
+            scope=scope
+        )
+        effective_currency = primary_currency or await self._resolve_family_currency(family_id)
+        transactions = await asyncio.to_thread(
+            self._fetch_and_decrypt_transactions,
+            family_id, None, None, None, None, None
+        )
+        if scope == "personal" and user_id:
+            transactions = [tx for tx in transactions if tx.user_id == user_id]
+
+        aggregation = aggregate_transactions(
+            transactions=transactions,
+            timeframe="all_time",
+            start_time=None,
+            end_time=None,
+            primary_currency=effective_currency,
+            calculate_daily=False
+        )
+
+        qr = QueryResult(
+            intent=intent,
+            resolved_start_time=None,
+            resolved_end_time=None,
+            transactions=transactions,
+            total_count=len(transactions),
+            aggregation=aggregation
+        )
+
+        from src.services.query.formatters import format_savings_summary
+        scope_name = (family_name or "Family") if scope == "family" else (user_name or "You")
+        return format_savings_summary(
+            qr,
+            name=scope_name,
+            is_family=(scope == "family"),
+            is_spanish=is_spanish,
+            tz_name=tz_name,
+            target_currency=target_currency
+        )
 
     async def get_time_aggregation(
         self, family_id: UUID, timeframe: str = "this_month", 

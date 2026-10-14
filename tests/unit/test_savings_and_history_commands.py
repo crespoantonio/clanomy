@@ -247,3 +247,79 @@ def test_format_help_message_contains_new_commands():
     help_es = format_help_message(is_spanish=True)
     assert "/savings" in help_es
     assert "/history" in help_es
+
+
+@pytest.mark.anyio
+async def test_parse_intent_savings_natural_language_queries():
+    from src.services.query.service import QueryService
+    qs = QueryService()
+
+    # The exact query from user experience
+    pi1 = await qs.parse_intent("cuantos USD tengo en este momento en total?")
+    assert pi1.intent == "savings_summary"
+    assert pi1.timeframe == "all_time"
+    assert pi1.target_currency == "USD"
+    assert pi1.scope == "personal"
+
+    # Household all-time query
+    pi2 = await qs.parse_intent("cuanto dinero tenemos en total?")
+    assert pi2.intent == "savings_summary"
+    assert pi2.timeframe == "all_time"
+    assert pi2.scope == "family"
+
+    # English query with currency
+    pi3 = await qs.parse_intent("how many dollars do I have right now in total?")
+    assert pi3.intent == "savings_summary"
+    assert pi3.timeframe == "all_time"
+    assert pi3.target_currency == "USD"
+
+
+def test_format_savings_summary_target_currency_highlight():
+    fam_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    txs = [
+        DecryptedTransaction(
+            id=uuid.uuid4(), family_id=fam_id, user_id=uuid.uuid4(),
+            amount=500.0, currency="USD", concept="Freelance", category="Salary", type="income", timestamp=now
+        ),
+        DecryptedTransaction(
+            id=uuid.uuid4(), family_id=fam_id, user_id=uuid.uuid4(),
+            amount=50000.0, currency="ARS", concept="Side gig", category="Salary", type="income", timestamp=now
+        )
+    ]
+    agg = aggregate_transactions(txs, timeframe="all_time", primary_currency="USD")
+    qr = QueryResult(
+        intent=ParsedQueryIntent(intent="savings_summary", timeframe="all_time", target_currency="USD"),
+        transactions=txs, total_count=2, aggregation=agg
+    )
+    res_es = format_savings_summary(qr, is_spanish=True, target_currency="USD")
+    assert "Saldo Total en USD:" in res_es
+    assert "+500.00 USD" in res_es
+
+
+@pytest.mark.anyio
+async def test_query_service_get_savings_summary():
+    from src.services.query.service import QueryService
+    qs = QueryService()
+    fam_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    mock_txs = [
+        DecryptedTransaction(
+            id=uuid.uuid4(), family_id=fam_id, user_id=user_id,
+            amount=1000.0, currency="USD", concept="Deposit", category="Salary", type="income", timestamp=now
+        )
+    ]
+
+    with patch.object(qs, "_fetch_and_decrypt_transactions", return_value=mock_txs):
+        res = await qs.get_savings_summary(
+            family_id=fam_id,
+            user_id=user_id,
+            user_name="Tony",
+            target_currency="USD",
+            is_spanish=True
+        )
+        assert "Ahorros y Balance Total" in res
+        assert "Saldo Total en USD:" in res
+        assert "+1,000.00 USD" in res
+

@@ -17,6 +17,8 @@ class IntentType(str, Enum):
     NET_CASH_FLOW = "net_cash_flow"
     NET_BALANCE = "net_balance"
     CASH_FLOW_SUMMARY = "cash_flow_summary"
+    SAVINGS_SUMMARY = "savings_summary"
+    ALL_TIME_BALANCE = "all_time_balance"
     UPCOMING_BILLS = "upcoming_bills"
     EXPORT_DATA = "export_data"
 

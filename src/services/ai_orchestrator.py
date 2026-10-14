@@ -402,7 +402,9 @@ class AIOrchestrator:
             IntentType.EARNINGS_SUMMARY, "earnings_summary",
             IntentType.NET_CASH_FLOW, "net_cash_flow",
             IntentType.NET_BALANCE, "net_balance",
-            IntentType.CASH_FLOW_SUMMARY, "cash_flow_summary"
+            IntentType.CASH_FLOW_SUMMARY, "cash_flow_summary",
+            IntentType.SAVINGS_SUMMARY, "savings_summary",
+            IntentType.ALL_TIME_BALANCE, "all_time_balance"
         ]:
             family_service = FamilyService()
             family_info = await asyncio.to_thread(family_service.get_family_info, user_uuid)
@@ -416,7 +418,20 @@ class AIOrchestrator:
             reference_time = datetime.datetime.now(datetime.timezone.utc)
             query_service = QueryService()
 
-            if intent_str in [IntentType.INCOME_SUMMARY, "income_summary", IntentType.QUERY_INCOME, "query_income", IntentType.EARNINGS_SUMMARY, "earnings_summary"]:
+            if intent_str in [IntentType.SAVINGS_SUMMARY, "savings_summary", IntentType.ALL_TIME_BALANCE, "all_time_balance"]:
+                active_tz = family_info.get("timezone") or settings.DEFAULT_TIMEZONE
+                summary_res = await query_service.get_savings_summary(
+                    family_id=family_id,
+                    user_id=user_uuid,
+                    user_name=user_name,
+                    family_name=family_name,
+                    target_currency=parsed_query.target_currency,
+                    primary_currency=family_currency,
+                    is_spanish=_is_spanish(raw_text),
+                    tz_name=active_tz,
+                    scope=parsed_query.scope or "family"
+                )
+            elif intent_str in [IntentType.INCOME_SUMMARY, "income_summary", IntentType.QUERY_INCOME, "query_income", IntentType.EARNINGS_SUMMARY, "earnings_summary"]:
                 summary_res = await query_service.get_income_summary(
                     family_id=family_id,
                     timeframe=parsed_query.timeframe,
@@ -460,7 +475,11 @@ class AIOrchestrator:
             # Append friendly shortcut pro-tip if asked in natural language
             plan_type = family_info.get("plan_type", "free")
             if not raw_text.strip().startswith("/"):
-                summary_res += format_spending_summary_tip(is_spanish=_is_spanish(raw_text), plan_type=plan_type)
+                if intent_str in [IntentType.SAVINGS_SUMMARY, "savings_summary", IntentType.ALL_TIME_BALANCE, "all_time_balance"]:
+                    from src.templates.telegram_messages import format_savings_summary_tip
+                    summary_res += format_savings_summary_tip(is_spanish=_is_spanish(raw_text), plan_type=plan_type)
+                else:
+                    summary_res += format_spending_summary_tip(is_spanish=_is_spanish(raw_text), plan_type=plan_type)
 
             return summary_res
 

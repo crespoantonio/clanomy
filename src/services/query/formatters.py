@@ -737,7 +737,8 @@ def format_savings_summary(
     name: Optional[str] = None,
     is_family: bool = True,
     is_spanish: bool = False,
-    tz_name: Optional[str] = None
+    tz_name: Optional[str] = None,
+    target_currency: Optional[str] = None
 ) -> str:
     agg = query_result.aggregation
     curr = agg.primary_currency if agg else (settings.DEFAULT_CURRENCY or "USD")
@@ -764,6 +765,17 @@ def format_savings_summary(
     all_currencies.update(agg.exchange_received_totals.keys())
     has_multi_curr = len(all_currencies) > 1
     has_exchanges = bool(agg.exchange_count > 0 or agg.exchange_sold_totals or agg.exchange_received_totals)
+
+    # Highlight specific requested currency if specified (e.g. "¿cuántos USD tengo?")
+    t_curr = target_currency or getattr(query_result.intent, "target_currency", None)
+    if t_curr:
+        t_curr_up = t_curr.upper().strip()
+        positions = agg.net_currency_positions or {}
+        val = positions.get(t_curr_up, 0.0) if has_multi_curr else (agg.net_balance if curr == t_curr_up else 0.0)
+        sign = "+" if val > 0 else ""
+        t_lbl = f"💵 <b>Saldo Total en {t_curr_up}:</b>" if is_spanish else f"💵 <b>Total Balance in {t_curr_up}:</b>"
+        lines.append(f"{t_lbl} {sign}{val:,.2f} {t_curr_up}")
+        lines.append("")
 
     # Incomes & Expenses
     if has_multi_curr:

@@ -600,6 +600,18 @@ def format_spending_summary_tip(is_spanish: bool, plan_type: str = "free") -> st
         return "\n\n💡 <i>Pro-tip: Type /month or /me anytime for an instant response!</i>"
 
 
+def format_savings_summary_tip(is_spanish: bool, plan_type: str = "free") -> str:
+    """Returns friendly shortcut tip for savings/total balance queries."""
+    if plan_type == "free":
+        if is_spanish:
+            return "\n\n💡 <i>Tip: Escribe /savings o /history en cualquier momento para una respuesta instantánea sin gastar tu cuota mensual de IA.</i>"
+        return "\n\n💡 <i>Pro-tip: Type /savings or /history anytime for an instant response that doesn't use your monthly AI quota!</i>"
+    else:
+        if is_spanish:
+            return "\n\n💡 <i>Tip: Escribe /savings o /history en cualquier momento para una respuesta instantánea.</i>"
+        return "\n\n💡 <i>Pro-tip: Type /savings or /history anytime for an instant response!</i>"
+
+
 def format_upcoming_bills_tip(is_spanish: bool, plan_type: str = "free") -> str:
     """Returns friendly shortcut tip for bills queries."""
     if plan_type == "free":

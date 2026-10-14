@@ -79,7 +79,9 @@ class ParsedQueryIntent(BaseModel):
         "edit_last",
         "undo_last",
         "manage_currency",
-        "upcoming_bills"
+        "upcoming_bills",
+        "savings_summary",
+        "all_time_balance"
     ]
     timeframe: Optional[str] = "this_month"
     start_date: Optional[str] = None
@@ -105,10 +107,19 @@ class ParsedQueryIntent(BaseModel):
     @classmethod
     def normalize_intent_fields(cls, data: Any) -> Any:
         if isinstance(data, dict):
+            # Capture currency into target_currency if provided under alternative keys
+            if not data.get("target_currency"):
+                if data.get("currency"):
+                    data["target_currency"] = data["currency"]
+                elif data.get("currency_filter"):
+                    data["target_currency"] = data["currency_filter"]
+
             # If LLM returned 'classification', 'action', 'type', or 'query_intent' instead of 'intent'
             if not data.get("intent"):
                 cls_val = str(data.get("classification") or data.get("action") or data.get("type") or data.get("query_intent") or "").lower().strip()
-                if any(w in cls_val for w in ("expense", "gasto", "egreso", "spend", "cost")):
+                if any(w in cls_val for w in ("savings", "ahorro", "ahorros", "patrimonio", "en total", "total balance", "acumulado")):
+                    data["intent"] = "savings_summary"
+                elif any(w in cls_val for w in ("expense", "gasto", "egreso", "spend", "cost")):
                     data["intent"] = "spending_summary"
                 elif any(w in cls_val for w in ("income", "ingreso", "earn", "salary", "wage")):
                     data["intent"] = "income_summary"
@@ -126,7 +137,9 @@ class ParsedQueryIntent(BaseModel):
                     data["intent"] = "spending_summary"
             else:
                 intent_val = str(data["intent"]).lower().strip()
-                if intent_val in ("expense", "spending", "gastos", "gasto"):
+                if intent_val in ("savings", "ahorro", "ahorros", "patrimonio", "savings_summary", "all_time_balance"):
+                    data["intent"] = "savings_summary"
+                elif intent_val in ("expense", "spending", "gastos", "gasto"):
                     data["intent"] = "spending_summary"
                 elif intent_val in ("income", "ingresos", "ingreso", "earnings"):
                     data["intent"] = "income_summary"

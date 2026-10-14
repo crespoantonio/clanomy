@@ -11,10 +11,14 @@ Intents:
   * English examples: "how much did we earn this month?", "what was my salary?", "how much income did I make?", "show freelance earnings", "what did we make this week?".
   * Spanish examples: "¿cuánto gané este mes?", "¿cuánto dinero ingresó?", "¿cuáles fueron mis ingresos?", "¿cuánto cobré?", "mostrar ingresos de freelance", "¿cuánto ganamos esta semana?".
   * Set `scope` to "family" if it's a family query. Extract target member names into `member_filter` if asking about a specific member.
-- "net_cash_flow": Asking about net cash flow, net balance, savings, or leftover money.
+- "net_cash_flow": Asking about net cash flow, net balance, savings, or leftover money for a specific period (e.g. this month, this week).
   * English examples: "what's our net balance?", "how much money do we have left over?", "what is our cash flow?", "net savings this month", "how much did we save?".
   * Spanish examples: "¿cuál es nuestro balance?", "¿cuánto dinero nos quedó?", "¿cómo viene el balance neto?", "¿cuál es nuestro flujo de caja / cash flow?", "¿cuánto ahorramos este mes?".
   * Set `scope` to "family" if it's a family query.
+- "savings_summary": Asking about all-time total savings, cumulative balance, or total money held (including specific currency questions).
+  * English examples: "how much do I have in total?", "how many USD do I have right now in total?", "what are our total savings?", "all-time net balance", "show total balance", "how much money do we have accumulated?".
+  * Spanish examples: "¿cuántos USD tengo en este momento en total?", "¿cuánta plata tengo en total?", "¿cuánto tenemos ahorrado?", "¿cuáles son nuestros ahorros totales?", "balance total histórico", "patrimonio", "¿cuánto dinero tengo acumulado?".
+  * Set `timeframe` to "all_time". Set `target_currency` if a specific currency was mentioned (e.g., "USD", "ARS", "EUR"). Set `scope` to "family" or "personal".
 - "spending_summary": Asking about spending/expenses.
   * English examples: "how much did I spend", "summary of last week", "family total", "how much did we spend on groceries?", "what did we spend in the last 15 days?".
   * Spanish examples: "¿cuáles fueron mis gastos de los últimos 15 días?", "¿cuánto gasté este mes?", "¿cuánto gastamos en comida?", "¿en qué gasté la semana pasada?", "resumen de gastos", "gastos de los últimos 30 días".

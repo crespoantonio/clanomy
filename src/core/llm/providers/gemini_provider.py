@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Type
+from typing import Any, Optional, Type
 import httpx
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, retry_if_exception

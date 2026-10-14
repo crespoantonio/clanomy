@@ -36,7 +36,7 @@ def agentic_orchestrator_db(monkeypatch):
     return {"family_id": family_id, "user_id": user_id, "engine": test_engine}
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_orchestrator_routes_query_to_agent_service(agentic_orchestrator_db, monkeypatch):
     monkeypatch.setattr(settings, "ENABLE_AGENTIC_CORE", True)
 
@@ -83,7 +83,7 @@ async def test_orchestrator_routes_query_to_agent_service(agentic_orchestrator_d
         mock_agent_run.assert_awaited_once()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_orchestrator_falls_back_when_agentic_core_disabled(agentic_orchestrator_db, monkeypatch):
     monkeypatch.setattr(settings, "ENABLE_AGENTIC_CORE", False)
 
@@ -122,7 +122,7 @@ async def test_orchestrator_falls_back_when_agentic_core_disabled(agentic_orches
         mock_parse_intent.assert_awaited_once()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_orchestrator_falls_back_on_agent_service_exception(agentic_orchestrator_db, monkeypatch):
     monkeypatch.setattr(settings, "ENABLE_AGENTIC_CORE", True)
 

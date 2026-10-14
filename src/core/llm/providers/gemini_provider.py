@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Type
+from typing import Any, Optional, Type
 import httpx
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, retry_if_exception
@@ -272,3 +272,127 @@ class GeminiProvider(BaseLLMProvider):
 
         parts = candidate.get("content", {}).get("parts", [])
         return parts[0].get("text", "").strip() if parts else ""
+
+    @retry(
+        stop=stop_after_attempt(settings.AI_MAX_RETRIES),
+        wait=ProviderRateLimitWait(min_wait=settings.AI_RETRY_BACKOFF_MIN, max_wait=30.0),
+        retry=retry_if_exception(is_retryable_provider_error),
+        reraise=True
+    )
+    async def complete_chat_with_tools(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        tool_declarations: list[dict],
+        tool_executor: Any,
+        temperature: float = 0.2,
+        timeout: float = 30.0,
+        max_tokens: int = 1000,
+        max_iterations: int = 3
+    ) -> tuple[str, list[dict]]:
+        """
+        Executes a native tool-calling conversation with Gemini v1beta API.
+        Iteratively runs tool calls returned by Gemini, feeds back results,
+        and returns the final synthesized natural language answer and list of executed calls.
+        """
+        client = get_http_client()
+        url = f"{self.base_url}/models/{self.model}:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key or ""
+        }
+
+        generation_config = {
+            "maxOutputTokens": max_tokens,
+            "temperature": temperature
+        }
+        if "gemini-3" in self.model.lower():
+            thinking_lvl = (getattr(settings, "AI_GEMINI_THINKING_LEVEL", "low") or "low").lower()
+            generation_config["thinkingConfig"] = {
+                "thinkingLevel": thinking_lvl
+            }
+
+        contents = [
+            {"role": "user", "parts": [{"text": user_prompt}]}
+        ]
+
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": system_prompt}]
+            },
+            "contents": contents,
+            "tools": [
+                {"functionDeclarations": tool_declarations}
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "AUTO"
+                }
+            },
+            "safetySettings": DEFAULT_GEMINI_SAFETY_SETTINGS,
+            "generationConfig": generation_config
+        }
+
+        executed_calls: list[dict] = []
+
+        for iteration in range(max_iterations):
+            logger.info(f"Calling native Gemini model {self.model} with {len(tool_declarations)} tools (iter {iteration + 1})...")
+            response = await client.post(url, headers=headers, json=payload, timeout=make_timeout(timeout, default_read=30.0))
+            response.raise_for_status()
+            data = response.json()
+
+            _log_gemini_token_usage(data, self.model)
+
+            candidates = data.get("candidates", [])
+            if not candidates:
+                return "", executed_calls
+
+            candidate = candidates[0]
+            parts = candidate.get("content", {}).get("parts", [])
+            if not parts:
+                return "", executed_calls
+
+            # Check if Gemini requested a function call
+            function_calls = [p["functionCall"] for p in parts if "functionCall" in p]
+
+            if not function_calls:
+                # No tool called -> Gemini returned its direct final response
+                final_text = " ".join([p.get("text", "") for p in parts if "text" in p]).strip()
+                return final_text, executed_calls
+
+            # Append the model's message (which includes the functionCall) to the conversation
+            payload["contents"].append({
+                "role": "model",
+                "parts": parts
+            })
+
+            # Execute all requested function calls
+            function_responses = []
+            for fc in function_calls:
+                fn_name = fc.get("name")
+                fn_args = fc.get("args") or {}
+                logger.info(f"[Agentic Tool Call] Gemini invoking tool '{fn_name}' with args {fn_args}")
+
+                try:
+                    tool_output = await tool_executor(fn_name, fn_args)
+                except Exception as ex:
+                    logger.error(f"[Agentic Tool Error] Tool '{fn_name}' failed: {ex}")
+                    tool_output = {"status": "error", "message": str(ex)}
+
+                executed_calls.append({"name": fn_name, "args": fn_args, "output": tool_output})
+
+                function_responses.append({
+                    "functionResponse": {
+                        "name": fn_name,
+                        "response": tool_output
+                    }
+                })
+
+            # Append functionResponse turn to conversation
+            payload["contents"].append({
+                "role": "user",
+                "parts": function_responses
+            })
+
+        # Fallback if loop exceeded max iterations
+        return "I retrieved your financial records, but couldn't finalize the answer.", executed_calls

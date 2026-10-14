@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     AI_RETRY_BACKOFF_MIN: float = 0.5
     AI_RETRY_BACKOFF_MAX: float = 4.0
     AI_GEMINI_THINKING_LEVEL: str = "low"
+    ENABLE_AGENTIC_CORE: bool = True
 
     @model_validator(mode="after")
     def resolve_ai_defaults(self) -> 'Settings':

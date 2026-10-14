@@ -253,8 +253,8 @@ async def test_command_handler_handle_today_and_bills():
         assert "150.00 USD" in bills_res
         assert "Total Pending" in bills_res
         
-        # Verify date range passed covers the entire month
-        call_args = mock_fetch.call_args[0]
+        # Verify date range passed covers the entire month on the primary bills query (call_args_list[0])
+        call_args = mock_fetch.call_args_list[0][0]
         start_time, end_time = call_args[1], call_args[2]
         assert start_time.day == 1
         # end_time should be at the end of the month, not capped at today
@@ -264,7 +264,7 @@ async def test_command_handler_handle_today_and_bills():
     with patch.object(handler.query_service, "_fetch_and_decrypt_scheduled_bills", return_value=mock_bills) as mock_fetch_next:
         bills_next_res = await handler.handle_bills(user, family, args="next")
         assert "Upcoming Bills — Next Month" in bills_next_res
-        call_args_next = mock_fetch_next.call_args[0]
+        call_args_next = mock_fetch_next.call_args_list[0][0]
         start_next, end_next = call_args_next[1], call_args_next[2]
         assert start_next > now
         assert end_next > start_next

@@ -1375,9 +1375,19 @@ async def test_single_transaction_logging_bilingual(orchestrator, monkeypatch):
     class MockExtServiceInc:
         classify_and_extract = mock_classify_inc
 
+    from datetime import datetime, timezone
+    spanish_months = {
+        1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+        5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+        9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    }
+    now_utc = datetime.now(timezone.utc)
+    curr_month_en = now_utc.strftime("%B")
+    curr_month_es = spanish_months[now_utc.month]
+
     monkeypatch.setattr("src.services.ai_orchestrator.ExtractionService", MockExtServiceInc)
     monkeypatch.setattr(orchestrator, "_get_monthly_cash_flow_snapshot", MagicMock(return_value={
-        "month_name": "September",
+        "month_name": curr_month_en,
         "total_in": 50000.0,
         "total_out": 0.0,
         "net_savings": 50000.0,
@@ -1393,7 +1403,7 @@ async def test_single_transaction_logging_bilingual(orchestrator, monkeypatch):
 
     sent_inc = mock_send.call_args[1]["text"]
     assert "💰 Ingreso Registrado: +$50,000.00 ARS (Salary - sueldo)" in sent_inc
-    assert "📊 Resumen de Septiembre:" in sent_inc
+    assert f"📊 Resumen de {curr_month_es}:" in sent_inc
     assert "• Total Ingresos: $50,000.00 ARS" in sent_inc
     assert "• Ahorro Neto: +$50,000.00 ARS" in sent_inc
 

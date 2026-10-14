@@ -143,12 +143,13 @@ async def test_orchestrator_batch_logging_query_and_settlement(setup_db):
     with patch("src.services.ai_orchestrator.TelegramService") as mock_tg_cls:
         mock_tg_cls.return_value.send_message = mock_telegram
 
-        # 1. User A logs batch of fixed expenses with due dates
+        # 1. User A logs batch of fixed expenses with due dates in the current month
+        curr_m = f"{datetime.now(timezone.utc).month:02d}"
         batch_msg = (
             "Los gastos fijos de este mes son:\n"
-            "Prestamo $940246. Con vencimento el 18/09\n"
-            "Tarjeta Visa $1247000. Con vencimiento 04/09\n"
-            "Tarjeta MasterCard $340000. Con vencimiento el 04/09"
+            f"Prestamo $940246. Con vencimento el 18/{curr_m}\n"
+            f"Tarjeta Visa $1247000. Con vencimiento 04/{curr_m}\n"
+            f"Tarjeta MasterCard $340000. Con vencimiento el 04/{curr_m}"
         )
         await orchestrator.orchestrate(user_id=str(user_a_id), text=batch_msg, audio_file_id=None, chat_id=1001)
 
@@ -251,7 +252,8 @@ async def test_orchestrator_english_query_and_shortcuts(setup_db):
 
         # Add a scheduled bill in English
         mock_telegram.reset_mock()
-        batch_en = "Fixed expenses:\nElectric Bill $150. Due on 09/20\nInternet $80. Due on 09/25"
+        curr_m = f"{datetime.now(timezone.utc).month:02d}"
+        batch_en = f"Fixed expenses:\nElectric Bill $150. Due on {curr_m}/20\nInternet $80. Due on {curr_m}/25"
         await orchestrator.orchestrate(user_id=str(user_id), text=batch_en, audio_file_id=None, chat_id=2001)
         assert "Scheduled Bill(s)" in mock_telegram.call_args[1]["text"]
         assert "Electric Bill" in mock_telegram.call_args[1]["text"]

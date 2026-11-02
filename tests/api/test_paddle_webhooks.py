@@ -17,11 +17,12 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import patch, AsyncMock
 from sqlmodel import Session
 
 from src.main import app
 from src.core.config import settings
-from src.db.models import Family, ProcessedWebhook
+from src.db.models import Family, ProcessedWebhook, User
 from src.db.session import engine
 
 
@@ -278,6 +279,10 @@ def test_paddle_webhook_subscription_canceled(paddle_test_setup):
             subscription_status="active"
         )
         session.add(family)
+        u1 = User(telegram_id=8881, family_id=family_id)
+        u2 = User(telegram_id=8882, family_id=family_id)
+        session.add(u1)
+        session.add(u2)
         session.commit()
 
     now_ts = int(time.time())
@@ -292,8 +297,13 @@ def test_paddle_webhook_subscription_canceled(paddle_test_setup):
     raw_body = json.dumps(payload)
     sig = _generate_paddle_signature(raw_body, secret, now_ts)
 
-    res = client.post("/api/v1/paddle/webhook", content=raw_body, headers={"Paddle-Signature": sig})
-    assert res.status_code == 200
+    with patch("src.services.telegram_service.TelegramService.send_message", new_callable=AsyncMock) as mock_send:
+        res = client.post("/api/v1/paddle/webhook", content=raw_body, headers={"Paddle-Signature": sig})
+        assert res.status_code == 200
+        # Verify broadcast notification was dispatched post-commit to all family users
+        assert mock_send.call_count == 2
+        notified_chats = {call.kwargs.get("chat_id") for call in mock_send.call_args_list}
+        assert notified_chats == {8881, 8882}
 
     with Session(engine) as session:
         updated_family = session.get(Family, family_id)

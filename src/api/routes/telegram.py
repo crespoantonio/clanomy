@@ -16,6 +16,7 @@ import html
 from collections import OrderedDict
 from datetime import datetime, timezone
 from sqlmodel import Session, select
+from sqlalchemy import update as sa_update
 
 from src.core.config import settings
 from src.core.security import verify_messaging_secret
@@ -170,6 +171,329 @@ def _is_query_or_command(text: Optional[str]) -> bool:
     return False
 
 
+async def _handle_callback_query(
+    payload: Dict[str, Any],
+    session: Session,
+    telegram_service: TelegramService,
+) -> Dict[str, str]:
+    cb = payload["callback_query"]
+    cb_id = cb.get("id")
+    cb_data = cb.get("data", "")
+    from_user = cb.get("from", {})
+    cb_message = cb.get("message", {})
+    cb_chat = cb_message.get("chat", {})
+    chat_id = cb_chat.get("id") or from_user.get("id")
+    message_id = cb_message.get("message_id")
+    user_id = from_user.get("id")
+
+    if not user_id or not chat_id:
+        return {"status": "ok"}
+
+    try:
+        if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
+            allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
+            user_uname = (from_user.get("username") or "").lower()
+            if user_uname not in allowed_list and str(user_id) not in allowed_list:
+                logger.warning(f"Unauthorized Telegram callback interaction from user: {user_uname} ({user_id})")
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Unauthorized")
+                return {"status": "ok"}
+
+        if cb_data == "noop":
+            if cb_id:
+                await telegram_service.answer_callback_query(callback_query_id=cb_id)
+            return {"status": "ok"}
+
+        if cb_data == "accept_tos":
+            service = MessagingService(session)
+            user_data = {
+                "id": user_id,
+                "telegram_id": user_id,
+                "username": from_user.get("username"),
+                "first_name": from_user.get("first_name"),
+                "last_name": from_user.get("last_name")
+            }
+            user, family = service.get_or_create_user_and_family(user_data)
+            user.terms_accepted = True
+            user.terms_accepted_at = datetime.now(timezone.utc)
+            session.add(user)
+            session.commit()
+            if cb_id:
+                await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Terms accepted! Welcome to Clanomy.")
+            is_sp = (from_user.get("language_code") or "").lower().startswith("es")
+            welcome_msg = format_welcome_message(user, family, from_user, is_spanish=is_sp)
+            if message_id:
+                await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=welcome_msg)
+            else:
+                await telegram_service.send_message(chat_id=chat_id, text=welcome_msg)
+            return {"status": "ok"}
+
+        if cb_data == "view_privacy":
+            back_kb = {"inline_keyboard": [[{"text": "🔙 Back to Consent", "callback_data": "back_to_consent"}]]}
+            if message_id:
+                await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=PRIVACY_POLICY_MESSAGE, reply_markup=back_kb)
+            if cb_id:
+                await telegram_service.answer_callback_query(callback_query_id=cb_id)
+            return {"status": "ok"}
+
+        if cb_data == "view_tos":
+            back_kb = {"inline_keyboard": [[{"text": "🔙 Back to Consent", "callback_data": "back_to_consent"}]]}
+            if message_id:
+                await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=TERMS_OF_SERVICE_MESSAGE, reply_markup=back_kb)
+            if cb_id:
+                await telegram_service.answer_callback_query(callback_query_id=cb_id)
+            return {"status": "ok"}
+
+        if cb_data == "back_to_consent":
+            if message_id:
+                await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=CONSENT_REQUEST_MESSAGE, reply_markup=CONSENT_KEYBOARD)
+            if cb_id:
+                await telegram_service.answer_callback_query(callback_query_id=cb_id)
+            return {"status": "ok"}
+
+        if cb_data.startswith(("curr_p:", "curr_set:", "bills_p:", "bills_t:", "bill_v:", "bill_pay:", "bill_edit:")):
+            service = MessagingService(session)
+            user_data = {
+                "id": user_id,
+                "telegram_id": user_id,
+                "username": from_user.get("username"),
+                "first_name": from_user.get("first_name"),
+                "last_name": from_user.get("last_name")
+            }
+            user, family = service.get_or_create_user_and_family(user_data)
+            if not family:
+                logger.warning(f"No family found for callback query user {user_id}")
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Household not found")
+                return {"status": "ok"}
+
+            family_service = FamilyService()
+
+            if cb_data.startswith("curr_p:"):
+                try:
+                    page = int(cb_data.split(":", 1)[1])
+                except ValueError:
+                    page = 1
+                active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family.id)
+                menu_text = format_currency_menu_text(active_curr)
+                keyboard = build_currency_keyboard(page=page, active_currency=active_curr)
+                if message_id:
+                    await telegram_service.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=menu_text,
+                        reply_markup=keyboard
+                    )
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            elif cb_data.startswith("curr_set:"):
+                target_code = cb_data.split(":", 1)[1].upper()
+                await asyncio.to_thread(family_service.set_family_default_currency, family.id, target_code)
+                success_text = format_currency_success_text(target_code)
+
+                if cb_id:
+                    await telegram_service.answer_callback_query(
+                        callback_query_id=cb_id,
+                        text=f"Default currency set to {target_code}"
+                    )
+
+                if message_id:
+                    deleted = await telegram_service.delete_message(chat_id=chat_id, message_id=message_id)
+                    if not deleted:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text="<i>Currency selection completed.</i>",
+                            reply_markup={"inline_keyboard": []}
+                        )
+
+                await telegram_service.send_message(chat_id=chat_id, text=success_text)
+                return {"status": "ok"}
+
+            elif cb_data.startswith("bills_p:"):
+                parts = cb_data.split(":")
+                page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+                tf_code = parts[2] if len(parts) > 2 else "this"
+                cmd_args = "next" if tf_code == "next" else ""
+                is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                cmd_handler = CommandHandler()
+                menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, args=cmd_args, page=page, is_spanish=is_spanish)
+                if message_id:
+                    try:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=menu_text,
+                            reply_markup=keyboard
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to edit message for bills_p callback: {e}")
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            elif cb_data.startswith("bills_t:"):
+                parts = cb_data.split(":")
+                tf_code = parts[1] if len(parts) > 1 else "this"
+                timeframe = "next_month" if tf_code == "next" else "this_month"
+                is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                active_tz = getattr(user, "timezone", None) or getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+                card_text, card_keyboard = await asyncio.to_thread(
+                    build_bills_trend_card,
+                    family_id=family.id,
+                    timeframe=timeframe,
+                    tz_name=active_tz,
+                    is_spanish=is_spanish,
+                    primary_currency=getattr(family, "default_currency", None)
+                )
+                if message_id:
+                    try:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=card_text,
+                            reply_markup=card_keyboard
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to edit message for bills_t callback: {e}")
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            elif cb_data.startswith("bill_v:"):
+                parts = cb_data.split(":")
+                try:
+                    target_bill_id = UUID(parts[1])
+                except (ValueError, IndexError):
+                    target_bill_id = None
+
+                if target_bill_id:
+                    ret_page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+                    tf_code = parts[3] if len(parts) > 3 else "this"
+                    timeframe = "next_month" if tf_code == "next" else "this_month"
+                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                    card_text, card_keyboard = build_bill_settlement_card(
+                        bill_id=target_bill_id,
+                        family_id=family.id,
+                        return_page=ret_page,
+                        timeframe=timeframe,
+                        is_spanish=is_spanish
+                    )
+                    if message_id:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=card_text,
+                            reply_markup=card_keyboard
+                        )
+                if cb_id:
+                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
+                return {"status": "ok"}
+
+            elif cb_data.startswith("bill_pay:"):
+                parts = cb_data.split(":")
+                try:
+                    target_bill_id = UUID(parts[1])
+                except (ValueError, IndexError):
+                    target_bill_id = None
+
+                tf_code = parts[2] if len(parts) > 2 else "this"
+                if target_bill_id:
+                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                    success, res_msg = settle_bill_by_id(
+                        bill_id=target_bill_id,
+                        user_id=user.id,
+                        family_id=family.id,
+                        is_spanish=is_spanish
+                    )
+                    back_btn = "🔙 Volver a Facturas" if is_spanish else "🔙 Back to Bills"
+                    back_kb = {"inline_keyboard": [[{"text": back_btn, "callback_data": f"bills_p:1:{tf_code}"}]]}
+                    if message_id:
+                        await telegram_service.edit_message_text(
+                            chat_id=chat_id,
+                            message_id=message_id,
+                            text=res_msg,
+                            reply_markup=back_kb
+                        )
+                    if cb_id:
+                        toast = "¡Factura pagada!" if (is_spanish and success) else "Bill marked as paid!" if success else "Error"
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
+                else:
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Invalid bill")
+                return {"status": "ok"}
+
+            elif cb_data.startswith("bill_edit:"):
+                parts = cb_data.split(":")
+                try:
+                    target_bill_id = UUID(parts[1])
+                except (ValueError, IndexError):
+                    target_bill_id = None
+
+                is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
+                if target_bill_id and family:
+                    with Session(engine) as s:
+                        b = s.exec(
+                            select(ScheduledBill).where(
+                                ScheduledBill.id == target_bill_id,
+                                ScheduledBill.family_id == family.id
+                            )
+                        ).first()
+
+                        if not b:
+                            logger.warning(
+                                f"Unauthorized bill access attempt: user_id={user_id}, "
+                                f"family_id={family.id}, target_bill_id={target_bill_id}"
+                            )
+                            if cb_id:
+                                await telegram_service.answer_callback_query(
+                                    callback_query_id=cb_id,
+                                    text="Factura no encontrada." if is_spanish else "Bill not found."
+                                )
+                            return {"status": "ok"}
+
+                        enc_s = EncryptionService()
+                        cpt = enc_s.decrypt(b.concept) or "Bill"
+
+                    _pending_bill_edits[user_id] = {
+                        "bill_id": target_bill_id,
+                        "family_id": family.id,
+                        "concept": cpt,
+                        "timestamp": time.time()
+                    }
+
+                    prompt, toast = format_bill_edit_prompt(target_bill_id, cpt, is_spanish=is_spanish)
+
+                    await telegram_service.send_message(
+                        chat_id=chat_id,
+                        text=prompt,
+                        reply_markup={"force_reply": True, "selective": True}
+                    )
+                    if cb_id:
+                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
+                else:
+                    if cb_id:
+                        await telegram_service.answer_callback_query(
+                            callback_query_id=cb_id,
+                            text="Factura no encontrada." if is_spanish else "Invalid bill"
+                        )
+                return {"status": "ok"}
+
+        if cb_id:
+            await telegram_service.answer_callback_query(callback_query_id=cb_id)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Error handling Telegram callback query for user {user_id}: {e}", exc_info=True)
+        if cb_id:
+            try:
+                await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Error processing selection.")
+            except Exception:
+                pass
+        return {"status": "ok"}
+
+
 @router.post("/webhook")
 async def telegram_webhook(
     request: Request,
@@ -186,322 +510,11 @@ async def telegram_webhook(
     billing_service = BillingService(telegram_service)
 
     if "callback_query" in payload:
-        cb = payload["callback_query"]
-        cb_id = cb.get("id")
-        cb_data = cb.get("data", "")
-        from_user = cb.get("from", {})
-        cb_message = cb.get("message", {})
-        cb_chat = cb_message.get("chat", {})
-        chat_id = cb_chat.get("id") or from_user.get("id")
-        message_id = cb_message.get("message_id")
-        user_id = from_user.get("id")
-
-        if not user_id or not chat_id:
-            return {"status": "ok"}
-
-        try:
-            if settings.ALLOWED_TELEGRAM_USERS and settings.ALLOWED_TELEGRAM_USERS.strip():
-                allowed_list = [entry.strip().lstrip("@").lower() for entry in settings.ALLOWED_TELEGRAM_USERS.split(",") if entry.strip()]
-                user_uname = (from_user.get("username") or "").lower()
-                if user_uname not in allowed_list and str(user_id) not in allowed_list:
-                    logger.warning(f"Unauthorized Telegram callback interaction from user: {user_uname} ({user_id})")
-                    if cb_id:
-                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Unauthorized")
-                    return {"status": "ok"}
-
-            if cb_data == "noop":
-                if cb_id:
-                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                return {"status": "ok"}
-
-            if cb_data == "accept_tos":
-                service = MessagingService(session)
-                user_data = {
-                    "id": user_id,
-                    "telegram_id": user_id,
-                    "username": from_user.get("username"),
-                    "first_name": from_user.get("first_name"),
-                    "last_name": from_user.get("last_name")
-                }
-                user, family = service.get_or_create_user_and_family(user_data)
-                user.terms_accepted = True
-                user.terms_accepted_at = datetime.now(timezone.utc)
-                session.add(user)
-                session.commit()
-                if cb_id:
-                    await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Terms accepted! Welcome to Clanomy.")
-                is_sp = (from_user.get("language_code") or "").lower().startswith("es")
-                welcome_msg = format_welcome_message(user, family, from_user, is_spanish=is_sp)
-                if message_id:
-                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=welcome_msg)
-                else:
-                    await telegram_service.send_message(chat_id=chat_id, text=welcome_msg)
-                return {"status": "ok"}
-
-            if cb_data == "view_privacy":
-                back_kb = {"inline_keyboard": [[{"text": "🔙 Back to Consent", "callback_data": "back_to_consent"}]]}
-                if message_id:
-                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=PRIVACY_POLICY_MESSAGE, reply_markup=back_kb)
-                if cb_id:
-                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                return {"status": "ok"}
-
-            if cb_data == "view_tos":
-                back_kb = {"inline_keyboard": [[{"text": "🔙 Back to Consent", "callback_data": "back_to_consent"}]]}
-                if message_id:
-                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=TERMS_OF_SERVICE_MESSAGE, reply_markup=back_kb)
-                if cb_id:
-                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                return {"status": "ok"}
-
-            if cb_data == "back_to_consent":
-                if message_id:
-                    await telegram_service.edit_message_text(chat_id=chat_id, message_id=message_id, text=CONSENT_REQUEST_MESSAGE, reply_markup=CONSENT_KEYBOARD)
-                if cb_id:
-                    await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                return {"status": "ok"}
-
-            if cb_data.startswith(("curr_p:", "curr_set:", "bills_p:", "bills_t:", "bill_v:", "bill_pay:", "bill_edit:")):
-                service = MessagingService(session)
-                user_data = {
-                    "id": user_id,
-                    "telegram_id": user_id,
-                    "username": from_user.get("username"),
-                    "first_name": from_user.get("first_name"),
-                    "last_name": from_user.get("last_name")
-                }
-                user, family = service.get_or_create_user_and_family(user_data)
-                if not family:
-                    logger.warning(f"No family found for callback query user {user_id}")
-                    if cb_id:
-                        await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Household not found")
-                    return {"status": "ok"}
-
-                family_service = FamilyService()
-
-                if cb_data.startswith("curr_p:"):
-                    try:
-                        page = int(cb_data.split(":", 1)[1])
-                    except ValueError:
-                        page = 1
-                    active_curr = await asyncio.to_thread(family_service.get_family_default_currency, family.id)
-                    menu_text = format_currency_menu_text(active_curr)
-                    keyboard = build_currency_keyboard(page=page, active_currency=active_curr)
-                    if message_id:
-                        await telegram_service.edit_message_text(
-                            chat_id=chat_id,
-                            message_id=message_id,
-                            text=menu_text,
-                            reply_markup=keyboard
-                        )
-                    if cb_id:
-                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                    return {"status": "ok"}
-
-                elif cb_data.startswith("curr_set:"):
-                    target_code = cb_data.split(":", 1)[1].upper()
-                    await asyncio.to_thread(family_service.set_family_default_currency, family.id, target_code)
-                    success_text = format_currency_success_text(target_code)
-
-                    if cb_id:
-                        await telegram_service.answer_callback_query(
-                            callback_query_id=cb_id,
-                            text=f"Default currency set to {target_code}"
-                        )
-
-                    if message_id:
-                        deleted = await telegram_service.delete_message(chat_id=chat_id, message_id=message_id)
-                        if not deleted:
-                            await telegram_service.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text="<i>Currency selection completed.</i>",
-                                reply_markup={"inline_keyboard": []}
-                            )
-
-                    await telegram_service.send_message(chat_id=chat_id, text=success_text)
-                    return {"status": "ok"}
-
-                elif cb_data.startswith("bills_p:"):
-                    parts = cb_data.split(":")
-                    page = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
-                    tf_code = parts[2] if len(parts) > 2 else "this"
-                    cmd_args = "next" if tf_code == "next" else ""
-                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
-                    cmd_handler = CommandHandler()
-                    menu_text, keyboard = await cmd_handler.handle_bills_interactive(user, family, args=cmd_args, page=page, is_spanish=is_spanish)
-                    if message_id:
-                        try:
-                            await telegram_service.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text=menu_text,
-                                reply_markup=keyboard
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to edit message for bills_p callback: {e}")
-                    if cb_id:
-                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                    return {"status": "ok"}
-
-                elif cb_data.startswith("bills_t:"):
-                    parts = cb_data.split(":")
-                    tf_code = parts[1] if len(parts) > 1 else "this"
-                    timeframe = "next_month" if tf_code == "next" else "this_month"
-                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
-                    active_tz = getattr(user, "timezone", None) or getattr(family, "timezone", None) or getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
-                    card_text, card_keyboard = await asyncio.to_thread(
-                        build_bills_trend_card,
-                        family_id=family.id,
-                        timeframe=timeframe,
-                        tz_name=active_tz,
-                        is_spanish=is_spanish,
-                        primary_currency=getattr(family, "default_currency", None)
-                    )
-                    if message_id:
-                        try:
-                            await telegram_service.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text=card_text,
-                                reply_markup=card_keyboard
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to edit message for bills_t callback: {e}")
-                    if cb_id:
-                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                    return {"status": "ok"}
-
-                elif cb_data.startswith("bill_v:"):
-                    parts = cb_data.split(":")
-                    try:
-                        target_bill_id = UUID(parts[1])
-                    except (ValueError, IndexError):
-                        target_bill_id = None
-
-                    if target_bill_id:
-                        ret_page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
-                        tf_code = parts[3] if len(parts) > 3 else "this"
-                        timeframe = "next_month" if tf_code == "next" else "this_month"
-                        is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
-                        card_text, card_keyboard = build_bill_settlement_card(
-                            bill_id=target_bill_id,
-                            family_id=family.id,
-                            return_page=ret_page,
-                            timeframe=timeframe,
-                            is_spanish=is_spanish
-                        )
-                        if message_id:
-                            await telegram_service.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text=card_text,
-                                reply_markup=card_keyboard
-                            )
-                    if cb_id:
-                        await telegram_service.answer_callback_query(callback_query_id=cb_id)
-                    return {"status": "ok"}
-
-                elif cb_data.startswith("bill_pay:"):
-                    parts = cb_data.split(":")
-                    try:
-                        target_bill_id = UUID(parts[1])
-                    except (ValueError, IndexError):
-                        target_bill_id = None
-
-                    tf_code = parts[2] if len(parts) > 2 else "this"
-                    if target_bill_id:
-                        is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
-                        success, res_msg = settle_bill_by_id(
-                            bill_id=target_bill_id,
-                            user_id=user.id,
-                            family_id=family.id,
-                            is_spanish=is_spanish
-                        )
-                        back_btn = "🔙 Volver a Facturas" if is_spanish else "🔙 Back to Bills"
-                        back_kb = {"inline_keyboard": [[{"text": back_btn, "callback_data": f"bills_p:1:{tf_code}"}]]}
-                        if message_id:
-                            await telegram_service.edit_message_text(
-                                chat_id=chat_id,
-                                message_id=message_id,
-                                text=res_msg,
-                                reply_markup=back_kb
-                            )
-                        if cb_id:
-                            toast = "¡Factura pagada!" if (is_spanish and success) else "Bill marked as paid!" if success else "Error"
-                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
-                    else:
-                        if cb_id:
-                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Invalid bill")
-                    return {"status": "ok"}
-
-                elif cb_data.startswith("bill_edit:"):
-                    parts = cb_data.split(":")
-                    try:
-                        target_bill_id = UUID(parts[1])
-                    except (ValueError, IndexError):
-                        target_bill_id = None
-
-                    is_spanish = (from_user.get("language_code") or "").lower().startswith("es")
-                    if target_bill_id and family:
-                        with Session(engine) as s:
-                            b = s.exec(
-                                select(ScheduledBill).where(
-                                    ScheduledBill.id == target_bill_id,
-                                    ScheduledBill.family_id == family.id
-                                )
-                            ).first()
-
-                            if not b:
-                                logger.warning(
-                                    f"Unauthorized bill access attempt: user_id={user_id}, "
-                                    f"family_id={family.id}, target_bill_id={target_bill_id}"
-                                )
-                                if cb_id:
-                                    await telegram_service.answer_callback_query(
-                                        callback_query_id=cb_id,
-                                        text="Factura no encontrada." if is_spanish else "Bill not found."
-                                    )
-                                return {"status": "ok"}
-
-                            enc_s = EncryptionService()
-                            cpt = enc_s.decrypt(b.concept) or "Bill"
-
-                        _pending_bill_edits[user_id] = {
-                            "bill_id": target_bill_id,
-                            "family_id": family.id,
-                            "concept": cpt,
-                            "timestamp": time.time()
-                        }
-
-                        prompt, toast = format_bill_edit_prompt(target_bill_id, cpt, is_spanish=is_spanish)
-
-                        await telegram_service.send_message(
-                            chat_id=chat_id,
-                            text=prompt,
-                            reply_markup={"force_reply": True, "selective": True}
-                        )
-                        if cb_id:
-                            await telegram_service.answer_callback_query(callback_query_id=cb_id, text=toast)
-                    else:
-                        if cb_id:
-                            await telegram_service.answer_callback_query(
-                                callback_query_id=cb_id,
-                                text="Factura no encontrada." if is_spanish else "Invalid bill"
-                            )
-                    return {"status": "ok"}
-
-            if cb_id:
-                await telegram_service.answer_callback_query(callback_query_id=cb_id)
-            return {"status": "ok"}
-        except Exception as e:
-            logger.error(f"Error handling Telegram callback query for user {user_id}: {e}", exc_info=True)
-            if cb_id:
-                try:
-                    await telegram_service.answer_callback_query(callback_query_id=cb_id, text="Error processing selection.")
-                except Exception:
-                    pass
-            return {"status": "ok"}
+        return await _handle_callback_query(
+            payload=payload,
+            session=session,
+            telegram_service=telegram_service
+        )
 
     if "message" not in payload:
         logger.info(f"Ignoring non-message Telegram update (keys: {list(payload.keys())})")
@@ -765,6 +778,7 @@ async def telegram_webhook(
                     if family:
                         if check_and_reset_monthly_quota(family):
                             session.add(family)
+    
                             session.commit()
                         allowed, reason, limit_val = check_transaction_allowance(family)
                         if not allowed:
@@ -828,9 +842,15 @@ async def telegram_webhook(
                         is_spanish=is_spanish
                     )
                     if success and is_voice_override and family:
-                        family.monthly_tx_count = (family.monthly_tx_count or 0) + 1
-                        family.daily_tx_count = (family.daily_tx_count or 0) + 1
-                        session.add(family)
+                        from sqlalchemy import func
+                        session.execute(
+                            sa_update(Family)
+                            .where(Family.id == family.id)
+                            .values(
+                                monthly_tx_count=func.coalesce(Family.monthly_tx_count, 0) + 1,
+                                daily_tx_count=func.coalesce(Family.daily_tx_count, 0) + 1
+                            )
+                        )
                         session.commit()
 
                     background_tasks.add_task(telegram_service.send_message, chat_id=chat_id, text=settle_msg)

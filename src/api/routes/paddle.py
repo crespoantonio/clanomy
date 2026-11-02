@@ -7,7 +7,7 @@ replay protection, and idempotency guarantees.
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List, Tuple
 from uuid import UUID
 from fastapi import APIRouter, Request, Response, status, Depends
 from fastapi.responses import JSONResponse
@@ -118,12 +118,12 @@ async def _safe_send_telegram(chat_id: int, text: str) -> None:
         logger.error(f"Failed to deliver Paddle Telegram notification to {chat_id}: {e}")
 
 
-async def _broadcast_cancellation_to_family(
+def _collect_cancellation_notifications(
     session: Session,
     family: Family,
     tier_name: str,
     effective_end: Optional[datetime]
-) -> None:
+) -> List[Tuple[int, str]]:
     from src.templates.telegram_messages import format_subscription_canceled_message, is_family_spanish
     is_sp = is_family_spanish(family, session)
     text = format_subscription_canceled_message(
@@ -131,10 +131,13 @@ async def _broadcast_cancellation_to_family(
         effective_end=effective_end,
         is_spanish=is_sp
     )
+    notifications: List[Tuple[int, str]] = []
     users = session.exec(select(User).where(User.family_id == family.id)).all()
     for u in users:
         if u.telegram_id:
-            await _safe_send_telegram(u.telegram_id, text)
+            notifications.append((u.telegram_id, text))
+    return notifications
+
 
 
 @router.post("/paddle/webhook", status_code=status.HTTP_200_OK)
@@ -213,6 +216,7 @@ async def paddle_webhook(
     logger.info(f"Processing Paddle webhook: event_id={event_id}, event_type={event_type}")
 
     try:
+        pending_notifications: List[Tuple[int, str]] = []
         family = _find_family(session, data, custom_data)
         prev_plan = family.plan_type if family else None
         prev_status = family.subscription_status if family else None
@@ -304,7 +308,7 @@ async def paddle_webhook(
                                     f"The group <b>{free_fam.name or 'Family'}</b> has transitioned to the <b>Free Plan</b> (up to 5 members).\n"
                                     f"You are now the workspace <b>Administrator</b>."
                                 )
-                                await _safe_send_telegram(new_adm.telegram_id, free_msg)
+                                pending_notifications.append((new_adm.telegram_id, free_msg))
 
                 family.paddle_subscription_id = sub_id
                 if customer_id:
@@ -350,12 +354,12 @@ async def paddle_webhook(
                             period_end=family.current_period_end,
                             is_spanish=is_sp
                         )
-                        await _safe_send_telegram(paying_user.telegram_id, act_msg)
+                        pending_notifications.append((paying_user.telegram_id, act_msg))
 
                 # 2. Scheduled Cancellation Notification: Broadcast to ALL family members
                 if sched_action == "cancel" and prev_sched_action != "cancel":
                     effective_end = sched_effective_at or family.current_period_end
-                    await _broadcast_cancellation_to_family(session, family, tier_display, effective_end)
+                    pending_notifications.extend(_collect_cancellation_notifications(session, family, tier_display, effective_end))
 
             else:
                 logger.warning(
@@ -380,7 +384,7 @@ async def paddle_webhook(
                 # If not previously notified via scheduled_change, broadcast cancellation to all family members
                 if prev_status != "canceled" and prev_sched_action != "cancel":
                     tier_display = _resolve_tier_display_name(prev_plan, None)
-                    await _broadcast_cancellation_to_family(session, family, tier_display, family.current_period_end)
+                    pending_notifications.extend(_collect_cancellation_notifications(session, family, tier_display, family.current_period_end))
             else:
                 logger.warning(f"Family not found for subscription.canceled sub_id={sub_id}")
 
@@ -402,6 +406,10 @@ async def paddle_webhook(
         )
         session.add(processed_record)
         session.commit()
+
+        # 8. Dispatch notifications after database transaction has committed and connection released
+        for chat_id, msg_text in pending_notifications:
+            await _safe_send_telegram(chat_id, msg_text)
 
         return {"received": True}
 

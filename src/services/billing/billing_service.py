@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 class BillingService:
     def __init__(self, telegram_service: Optional[TelegramService] = None):
         self.telegram_service = telegram_service or TelegramService()
-        self._active_family: Optional[Family] = None
-        self._active_user: Optional[User] = None
+
+
 
     async def _get_checkout_or_info_url(
         self,
@@ -46,8 +46,8 @@ class BillingService:
         When Paddle is configured, attempts to generate a hosted checkout URL;
         otherwise returns None if checkout generation fails.
         """
-        fam = family if family is not None else self._active_family
-        usr = user if user is not None else self._active_user
+        fam = family
+        usr = user
         if settings.ENABLE_SUBSCRIPTIONS and fam and usr:
             try:
                 from src.services.billing.paddle_service import PaddleService
@@ -87,8 +87,8 @@ class BillingService:
             )
             return {"status": "ok"}
 
-        self._active_family = family
-        self._active_user = user
+
+
         try:
             parts = text.split()
             arg = "_".join(parts[1:]).lower() if len(parts) > 1 else ""
@@ -390,6 +390,7 @@ class BillingService:
                                 admin_name = f"@{admin_user.username}" if admin_user.username else (admin_user.full_name or "Admin")
                     except Exception:
                         pass
+            
                     intro_text = format_non_admin_upgrade_intro(family.name, admin_name, is_spanish=is_sp)
                 else:
                     intro_text = UPGRADE_MENU_INTRO
@@ -409,9 +410,9 @@ class BillingService:
                 text=SELF_HOSTED_UPGRADE_MESSAGE
             )
             return {"status": "ok"}
-        finally:
-            self._active_family = None
-            self._active_user = None
+
+
+
 
     async def handle_billing_command(
         self,

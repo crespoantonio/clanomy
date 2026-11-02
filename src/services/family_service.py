@@ -7,10 +7,10 @@ from uuid import UUID
 from typing import Tuple, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from sqlmodel import Session, select
-from sqlalchemy import Engine
+from sqlalchemy import Engine, update as sa_update
 
 from src.db.session import engine as default_engine
-from src.db.models import Family, User, FamilyInvite, Transaction
+from src.db.models import Family, User, FamilyInvite, Transaction, ScheduledBill
 from src.core.config import settings
 from src.templates.telegram_messages import (
     LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED,
@@ -237,14 +237,21 @@ class FamilyService:
                     if len(users_in_old) == 1:
                         is_single_member = True
                 
+                # Invalidate invite atomically so it is strictly single-use (prevents race condition)
+                res = session.execute(
+                    sa_update(FamilyInvite)
+                    .where(FamilyInvite.id == invite.id, FamilyInvite.is_active == True)
+                    .values(is_active=False)
+                )
+                if res.rowcount == 0:
+                    self._log_3s_audit("join_family_via_invite", start_time)
+                    return False, "⚠️ This family invite link is invalid or has expired. Please ask a family member to generate a new invite link.", None
+
                 # Reassign user family and mark is_admin=False as invited member
                 user.family_id = invite.family_id
                 user.is_admin = False
                 session.add(user)
 
-                # Invalidate invite so it is single-use
-                invite.is_active = False
-                session.add(invite)
 
                 
                 # Migrate transactions if old family was single-member
@@ -253,6 +260,10 @@ class FamilyService:
                     for tx in txs:
                         tx.family_id = invite.family_id
                         session.add(tx)
+                    bills = session.exec(select(ScheduledBill).where(ScheduledBill.family_id == old_family_id)).all()
+                    for bill in bills:
+                        bill.family_id = invite.family_id
+                        session.add(bill)
                 
                 # If old family was single-member, delete it since it is now empty
                 if is_single_member and old_family:

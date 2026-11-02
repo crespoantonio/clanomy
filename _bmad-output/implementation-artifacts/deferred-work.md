@@ -62,3 +62,9 @@
 - Sequential Blocking Network Calls [src/services/notification_scheduler.py]
 - Plague of Inline Imports [src/api/routes/telegram.py]
 - Bizarre Secret Token Re-Use [src/api/routes/telegram.py]
+
+## Deferred from: code review of backend_audit_remediation.md (2026-11-02)
+- **`ScheduledBill` migration semantics on `leave_family` / `remove_member`**: In `family_service.py`, `leave_family` and `remove_member` only migrate `Transaction` records to the new solo workspace. Household-level scheduled bills remain associated with the family workspace. Deferred pending product clarification on household vs personal bill ownership.
+- **Active Pro subscription check in `join_family_via_invite`**: In `family_service.py:join_family_via_invite`, deleting a solo family does not check for active Paddle subscriptions (`paddle_subscription_id`), unlike `leave_family` which blocks leaving with `LEAVE_FAMILY_ADMIN_ACTIVE_PRO_BLOCKED`. Pre-existing behavior deferred for future subscription guardrail hardening.
+- **Modular extraction of `_handle_callback_query` to external file**: `_handle_callback_query` was modularized inside `src/api/routes/telegram.py` to preserve legacy mock targets in `test_telegram_bills_interactive.py`. Moving to a separate file deferred to avoid cascading test mock refactoring.
+

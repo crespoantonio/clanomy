@@ -2,7 +2,7 @@ import pytest
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from sqlmodel import Session, create_engine, SQLModel
-from src.db.models import User, Family, FamilyInvite, Transaction
+from src.db.models import User, Family, FamilyInvite, Transaction, ScheduledBill
 from src.services.family_service import FamilyService
 
 from sqlalchemy.pool import StaticPool
@@ -151,6 +151,49 @@ def test_join_family_via_invite_single_use_blocked(session: Session, family_serv
     assert success2 is False
     assert "invalid or has expired" in msg2
 
+
+def test_join_family_via_invite_atomic_race_condition(session: Session, family_service: FamilyService):
+    family = Family(name="RaceFam")
+    session.add(family)
+    session.commit()
+
+    creator = User(telegram_id=9876, family_id=family.id)
+    session.add(creator)
+    session.commit()
+
+    invite, _ = family_service.create_invite(family_id=family.id, user_id=creator.id)
+
+    solo_fam = Family(name="UserSoloFam")
+    session.add(solo_fam)
+    session.commit()
+
+    joining_user = User(telegram_id=9877, family_id=solo_fam.id, is_admin=True)
+    session.add(joining_user)
+    session.commit()
+
+    original_family_id = joining_user.family_id
+
+    from unittest.mock import MagicMock
+    mock_cursor = MagicMock()
+    mock_cursor.rowcount = 0
+
+    real_execute = Session.execute
+
+    def mock_execute(sess_self, stmt, *args, **kwargs):
+        if "familyinvite" in str(stmt).lower() and "update" in str(stmt).lower():
+            return mock_cursor
+        return real_execute(sess_self, stmt, *args, **kwargs)
+
+    from unittest.mock import patch
+    with patch.object(Session, "execute", new=mock_execute):
+        success, msg, _ = family_service.join_family_via_invite(token=invite.token, user_id=joining_user.id)
+        assert success is False
+        assert "invalid or has expired" in msg
+        # Refresh user from database to verify it was not modified
+        session.refresh(joining_user)
+        assert joining_user.is_admin is True
+        assert joining_user.family_id == original_family_id
+
 def test_join_family_via_invite_expired(session: Session, family_service: FamilyService):
     family = Family(name="Expired")
     session.add(family)
@@ -227,6 +270,16 @@ def test_join_family_via_invite_with_transaction_migration(session: Session, fam
         category="Food/Drink"
     )
     session.add(tx)
+
+    bill = ScheduledBill(
+        family_id=solo_family.id,
+        user_id=joiner.id,
+        amount="encoded_bill_amt",
+        concept="Internet",
+        category="Utilities",
+        due_date=datetime.now(timezone.utc) + timedelta(days=5)
+    )
+    session.add(bill)
     session.commit()
     
     solo_family_id = solo_family.id
@@ -237,6 +290,8 @@ def test_join_family_via_invite_with_transaction_migration(session: Session, fam
     
     session.refresh(tx)
     assert tx.family_id == target_family.id
+    session.refresh(bill)
+    assert bill.family_id == target_family.id
     session.expire_all()
     assert session.get(Family, solo_family_id) is None
 

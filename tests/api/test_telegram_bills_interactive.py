@@ -372,11 +372,12 @@ def test_telegram_webhook_force_reply_voice_charges_ai_quota():
         mock_whisper = mock_whisper_class.return_value
         mock_whisper.transcribe = AsyncMock(return_value=("pagamos 48.50", {}))
 
+        mock_session = MagicMock()
         result = asyncio.run(telegram_webhook(
             request=mock_request,
             background_tasks=bg_tasks,
             x_telegram_bot_api_secret_token="dummy_token",
-            session=MagicMock()
+            session=mock_session
         ))
 
         assert result == {"status": "ok"}
@@ -387,9 +388,9 @@ def test_telegram_webhook_force_reply_voice_charges_ai_quota():
             override_amount=48.50,
             is_spanish=False
         )
-        # Verify AI quota was charged (+1)
-        assert mock_family.monthly_tx_count == 6
-        assert mock_family.daily_tx_count == 6
+        # Verify atomic AI quota increment was executed on session
+        mock_session.execute.assert_called_once()
+        mock_session.commit.assert_called_once()
 
 
 def test_telegram_webhook_force_reply_voice_quota_exceeded():

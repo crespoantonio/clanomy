@@ -25,22 +25,7 @@ from src.templates.telegram_messages import (
 logger = logging.getLogger(__name__)
 
 
-def create_logged_task(coro, *, name: Optional[str] = None) -> asyncio.Task:
-    """Creates an asyncio task with an attached done callback to log unhandled exceptions."""
-    try:
-        task = asyncio.create_task(coro, name=name) if name else asyncio.create_task(coro)
-    except TypeError:
-        task = asyncio.create_task(coro)
-
-    def _handle_task_result(t: asyncio.Task):
-        if t.cancelled():
-            return
-        exc = t.exception()
-        if exc:
-            task_name = getattr(t, "get_name", lambda: "unnamed_task")()
-            logger.error(f"Unhandled exception in background task '{task_name}': {exc}", exc_info=exc)
-    task.add_done_callback(_handle_task_result)
-    return task
+from src.core.async_utils import create_logged_task
 
 
 def format_currency(amount: float, currency: str = "USD", show_sign: bool = False) -> str:

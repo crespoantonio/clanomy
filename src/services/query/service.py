@@ -203,8 +203,9 @@ class QueryService:
         if not text or not text.strip():
             raise ValueError("Query string cannot be empty")
         
-        # Fast-path deterministic matching for upcoming_bills
+        # Fast-path deterministic matching for upcoming_bills (strictly future/pending)
         clean_lower = text.lower().strip()
+        is_historical_mention = any(w in clean_lower for w in ("last", "past", "últim", "ultim", "pasad", "previous", "histór", "histor"))
         upcoming_bills_patterns = [
             r'\b(?:upcoming|pending)\s+bills\b',
             r'\bbills?\s+(?:to\s+pay|due)\b',
@@ -216,7 +217,7 @@ class QueryService:
             r'\b(?:facturas|cuentas|gastos\s+fijos)\s+(?:pendientes|por\s+pagar|por\s+vencer)\b',
             r'\bvencimientos?\b'
         ]
-        if any(re.search(pat, clean_lower) for pat in upcoming_bills_patterns):
+        if not is_historical_mention and any(re.search(pat, clean_lower) for pat in upcoming_bills_patterns):
             tf = "this_month"
             if "esta semana" in clean_lower or "this week" in clean_lower:
                 tf = "this_week"

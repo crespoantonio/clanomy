@@ -247,6 +247,14 @@ Mateo creates a new workspace and invites Carla. They receive an automatic 60-da
 *   **FR69:** System renders a static compact badge (`3-Mo Fixed: ...` / `Gastos Fijos (3M): ...`) in `/bills` summaries without dynamically changing the label, displaying `(No info)` (or `(Sin datos)`) for unpopulated months and suppressing percentage deltas when prior months lack data.
 *   **FR70:** System provides an interactive Telegram inline button `[ 📊 3-Mo Trend ]` (and `/bills trend`) that flips the `/bills` card into a dedicated 3-month fixed expense breakdown with zero division guardrails and return navigation (`[ ↩️ Back to Bills ]`).
 
+### 5.22 Decoupled Multi-Stage Query Engine & Entity Resolution
+*   **FR71:** The system must process natural language financial inquiries via an orthogonal AST schema (`TemporalScope`, `EntityFilters`, `QueryOperation`) rather than a monolithic single-pass intent enum, completely eliminating regex hijacking for compound or cross-domain queries.
+*   **FR72:** The system must decouple temporal polarity from data domain: queries specifying past periods (e.g. "last 3 months") targeting recurring obligations ("bills") must automatically route to historical settled records (`Transaction` entries classified as bills/utilities and `ScheduledBill` records marked `status='paid'`), while future periods route to pending obligations (`ScheduledBill` with `status='pending'`).
+*   **FR73:** Entity and concept resolution against zero-knowledge AES-256 encrypted columns must execute in-memory on decrypted tenant metadata (family bill templates, custom categories) using deterministic fuzzy matching (RapidFuzz token ratio), without sending raw financial descriptions to external models or requiring unencrypted database indexing.
+*   **FR74:** The system must enforce a programmatic Code-Level Parity Gate (Stage 4.5) ensuring 100% of extracted query entities and parameters are mapped to valid execution filters, rejecting phantom/hallucinated parameters before SQL generation.
+*   **FR75:** All financial calculations, aggregations, and currency segregations must be executed strictly in deterministic Python code using `Decimal` arithmetic; the LLM is structurally forbidden from performing math calculations.
+*   **FR76:** For read-only queries with partial semantic ambiguity, the system must follow the "Answer with Default & Disclose Assumption" rule: it renders the most probable result immediately with explicit assumption disclosure and a low-friction Telegram inline pivot, rather than blocking the user behind a conversational interrogation wall.
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance

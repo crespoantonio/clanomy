@@ -1480,3 +1480,69 @@ So that I can clearly see whether my fixed overhead is growing or decreasing wit
 
 
 
+
+
+---
+
+## Epic 25: Decoupled Multi-Stage Query Engine & Entity Resolution
+
+Deconstruct monolithic query intent parsing into a deterministic, decoupled AST pipeline (Temporal Scope, Entity Filters, Query Operations) capable of resolving complex, cross-domain, and historical inquiries (such as "bills last 3 months") with zero-knowledge AES-256 compliance and sub-second latency.
+
+### Story 25.1: Orthogonal Query AST Models & Stage 1 LLM Normalizer
+As a Clanomy User,
+I want the AI engine to parse my natural language question into structured dimensions (time window, domain entities, requested calculations) without rigid single-intent categorization,
+So that complex, comparative, or historical queries are understood accurately without regex hijacking.
+
+**Acceptance Criteria:**
+**Given** an unstructured natural language question from a user (e.g. "Can you show me the details of my bills last 3 months", "What did I spend on dining out this weekend vs last weekend?")
+**When** processed by the Stage 1 Structured Query Normalizer
+**Then** the output conforms to the orthogonal Pydantic v2 AST schema (`TemporalScope`, `EntityFilters`, `QueryOperation`).
+**And** `TemporalScope` resolves ISO start/end dates, timezone anchoring, relative offsets, and boolean polarity flags (`is_historical`, `is_projected`).
+**And** legacy regex pattern matchers (such as `upcoming_bills_patterns`) are deprecated from hijacking query routing.
+**And** compound questions emit decomposed sub-inquiries with explicit temporal and entity boundaries.
+
+### Story 25.2: In-Memory Decrypted Entity Resolution & Cross-Domain Dataset Router
+As a Household Administrator,
+I want my query to automatically target the correct records (whether historical transactions or recurring bill definitions) based on time polarity and entity hints,
+So that asking for past bills checks settled payments while asking for future bills checks pending commitments.
+
+**Acceptance Criteria:**
+**Given** a normalized AST query targeting domain `bills`
+**When** `TemporalScope.is_historical` is True (e.g. "bills last 3 months")
+**Then** the Dataset Router routes queries across both `Transaction` (filtered by bill/utility categories) and `ScheduledBill` (`status IN ('paid', 'pending')` within the temporal window).
+**And** when `TemporalScope.is_projected` is True (e.g. "upcoming bills"), it routes strictly to `ScheduledBill` (`status = 'pending'`, `due_date >= now`).
+**And** candidate entity names and concepts are matched in-memory against decrypted tenant metadata using RapidFuzz token sort ratio, preserving AES-256 zero-knowledge encryption guarantees.
+
+### Story 25.3: Deterministic Query Builder, Code-Level Parity Gate & Math Engine
+As a User,
+I want all mathematical calculations and data filters to be executed strictly in deterministic code,
+So that the AI never invents numbers, distorts balances, or silently drops requested query constraints.
+
+**Acceptance Criteria:**
+**Given** resolved candidate parameters from Stage 2
+**When** passed through Stage 4.5 Code-Level Parity Gate
+**Then** the system programmatically asserts that 100% of extracted entities and constraints are accounted for in the execution plan before database querying.
+**And** all sums, averages, counts, and deltas are computed exclusively using Python `Decimal` arithmetic.
+**And** all amounts remain strictly segregated by currency without synthetic cross-currency addition.
+**And** tenant boundaries (`family_id`, user permissions) are pushed down to database select filters.
+
+### Story 25.4: Conversational Fallback, Assumption Disclosure & Telegram Formatting
+As a Telegram User,
+I want immediate, actionable answers even when my query has minor ambiguity,
+So that I get the financial insight I need without annoying interrogation messages.
+
+**Acceptance Criteria:**
+**Given** a read-only query with partial ambiguity (e.g., whether "bills" means all utilities or specific recurring service subscriptions)
+**When** the query engine executes
+**Then** it returns the most probable dataset immediately, prominently discloses the assumption made (e.g., "Showing settled utility transactions and paid bills for the last 3 months"), and provides inline Telegram buttons for instant pivot (e.g., `[ 📅 View Upcoming Bills ]` or `[ 🔍 Filter by Electric ]`).
+**And** formatting adheres to clean HTML Telegram cards with localized currency symbols and date ranges.
+
+### Story 25.5: Golden Evaluation Dataset & Regression Test Harness
+As a Quality Engineer and Developer,
+I want an automated regression harness with 150+ messy, multilingual, real-world financial queries,
+So that we empirically verify 95%+ query resolution accuracy and prevent regressions across future model updates.
+
+**Acceptance Criteria:**
+**Given** the golden query dataset in `tests/data/query_engine_golden_dataset.py` spanning 150+ categorized queries (auditing, cash flow tracking, multi-currency, conversational slang, adversarial inputs)
+**When** the test harness runs in CI without live API token consumption (using recorded fixtures and mock LLM providers)
+**Then** the test suite asserts ≥95% schema compliance, 100% Parity Gate enforcement on invalid ASTs, and sub-second deterministic execution.

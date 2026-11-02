@@ -910,3 +910,57 @@ sequenceDiagram
   - Gated strictly by `ENABLE_SUBSCRIPTIONS=true`, returning 404 in self-hosted mode to ensure complete open-core isolation.
   - Exempted from direct Cloudflare Origin Shield verification in `src/core/config.py` to allow direct redirection from Telegram deep links.
 
+
+
+---
+
+### 19. Decoupled Multi-Stage Query Engine & Entity Resolution (Epic 25)
+
+- **The Problem with Monolithic Query Engines:**
+  - Prior implementations relied on a single monolithic `ParsedQueryIntent` enum and aggressive regex fast-paths (e.g. `upcoming_bills_patterns`).
+  - Queries like *"Can you show me the details of my bills last 3 months"* failed because the engine conflated temporal orientation with schema selection: it saw "bills" and routed to `UPCOMING_BILLS`, querying `ScheduledBill` where `due_date >= now` or `due_date.month == current_month`, completely ignoring historical settled bills and past expense transactions.
+- **The Decoupled Lean 3-Stage Architecture:**
+  - Rather than 5 sequential LLM round-trips that introduce 4-6 second latency, Clanomy deploys a **Lean 3-Stage Hybrid Pipeline** combining 1 structured LLM extraction pass with in-memory deterministic resolution and transactional execution.
+  ```
+  [User Unstructured Message]
+               │
+               ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │ STAGE 1: Structured Intent & Temporal Normalizer (LLM)      │
+  │ - Single fast structured output call via Pydantic AST:       │
+  │   * TemporalScope: start_date, end_date, is_historical, etc.│
+  │   * EntityFilters: target domains, category_hints, status   │
+  │   * QueryOperation: op (list, sum, avg), group_by           │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │
+                                 ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │ STAGE 2: In-Memory Decrypted Entity & Schema Resolver       │
+  │          (Deterministic Python / RapidFuzz)                 │
+  │ - Pulls active family bill templates & custom categories.   │
+  │ - Resolves target datasets based on temporal polarity:      │
+  │   * Historical bills (end <= now) -> Transaction (bills)    │
+  │     + ScheduledBill (status='paid')                         │
+  │   * Future bills (start >= now) -> ScheduledBill (pending)  │
+  │   * Spanning windows -> Hybrid union                        │
+  │ - Fuzzy matches concept/merchant against decrypted memory.  │
+  └──────────────────────────────┬──────────────────────────────┘
+                                 │
+                                 ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │ STAGE 3: Deterministic Query Builder & Parity Gate          │
+  │ - Programmatic Code-Level Parity Gate (Stage 4.5 invariant):│
+  │   Asserts 100% of extracted query parameters are mapped.    │
+  │ - Executes safe SQL with tenant isolation and date bounds.  │
+  │ - Pure Python Decimal arithmetic for aggregations and math. │
+  │ - Product Fallback Rule: For ambiguous read queries, answer │
+  │   with most probable default, declare assumption, and       │
+  │   provide an inline toggle pivot rather than interrogating. │
+  └─────────────────────────────────────────────────────────────┘
+  ```
+- **Zero-Knowledge AES-256 Compatibility:**
+  - Sensitive columns (`Transaction.amount`, `Transaction.concept`, `ScheduledBill.amount`, `ScheduledBill.concept`) are encrypted at rest via `EncryptionService`.
+  - Database queries push down all plaintext metadata (`family_id`, `due_date`, `timestamp`, `category_id`, `status`).
+  - Text and concept matching executes in-memory within the authenticated family session using RapidFuzz token sort ratio, ensuring zero raw financial data leaks to unindexed databases or secondary LLM prompts.
+- **Pure Deterministic Computation:**
+  - The LLM never computes financial sums, averages, or net balances. All calculations are executed by deterministic Python functions with `Decimal` precision and multi-currency segregation.

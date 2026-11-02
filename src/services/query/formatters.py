@@ -970,3 +970,49 @@ def format_history_summary(
     return "\n".join(lines)
 
 
+
+
+def format_decoupled_query_card(
+    title: str,
+    timeframe_label: str,
+    metrics_by_currency: dict,
+    items_breakdown: list,
+    assumption_note: Optional[str] = None,
+    is_spanish: bool = False
+) -> str:
+    """
+    Stage 5 Formatter:
+    Renders clean Telegram HTML card with assumption disclosure and deterministic metrics.
+    """
+    lines = []
+    
+    # 1. Header
+    lines.append(f"📊 <b>{html.escape(title)} ({html.escape(timeframe_label)}):</b>\n")
+
+    # 2. Assumption Disclosure Banner (if applicable)
+    if assumption_note:
+        lines.append(f"<i>ℹ️ {html.escape(assumption_note)}</i>\n")
+
+    # 3. Item breakdown lines
+    if items_breakdown:
+        for it in items_breakdown[:15]:
+            lines.append(f"• {it}")
+        if len(items_breakdown) > 15:
+            extra = len(items_breakdown) - 15
+            lines.append(f"<i>...y {extra} más</i>" if is_spanish else f"<i>...and {extra} more</i>")
+        lines.append("")
+
+    # 4. Totals per currency
+    if metrics_by_currency:
+        lines.append("💰 <b>Total:</b>" if is_spanish else "💰 <b>Total:</b>")
+        for curr, m in sorted(metrics_by_currency.items()):
+            tot_str = f"{m.total_amount:,.2f} {curr}"
+            if m.pending_amount > 0 and m.paid_amount > 0:
+                detail = f" ({m.paid_amount:,.2f} pagado, {m.pending_amount:,.2f} pendiente)" if is_spanish else f" ({m.paid_amount:,.2f} paid, {m.pending_amount:,.2f} pending)"
+                lines.append(f"  • <b>{tot_str}</b>{detail}")
+            else:
+                lines.append(f"  • <b>{tot_str}</b>")
+    else:
+        lines.append("<i>Sin registros encontrados para este período.</i>" if is_spanish else "<i>No records found for this period.</i>")
+
+    return "\n".join(lines)

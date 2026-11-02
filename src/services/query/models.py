@@ -299,3 +299,77 @@ class BillsTrendSummary(BaseModel):
     trailing_average: Optional[float] = None
     has_any_data: bool = False
 
+
+
+class TemporalScope(BaseModel):
+    """Temporal window and directionality for a financial query."""
+    timeframe: str = "custom"
+    start_date: Optional[str] = None  # YYYY-MM-DD
+    end_date: Optional[str] = None    # YYYY-MM-DD
+    is_historical: bool = True        # Query refers to past records
+    is_projected: bool = False        # Query refers to future / pending records
+    granularity: Literal["day", "week", "month", "year", "none"] = "none"
+
+class EntityFilters(BaseModel):
+    """Semantic domain targets, categories, and attributes."""
+    domains: List[Literal["expenses", "income", "bills", "savings", "balance", "transfers"]] = ["expenses"]
+    category_hints: List[str] = []
+    concept_hints: List[str] = []
+    status: Literal["all", "paid", "pending", "overdue"] = "all"
+    target_currency: Optional[str] = None
+    target_member: Optional[str] = None
+    scope: Literal["family", "personal"] = "family"
+
+class QueryOperation(BaseModel):
+    """Operation to perform on matched records."""
+    op: Literal["list", "sum", "average", "comparison", "trend", "breakdown"] = "list"
+    group_by: Literal["none", "category", "member", "month", "day"] = "none"
+
+class NormalizedQueryAST(BaseModel):
+    """Decoupled AST representation of a user's financial inquiry."""
+    raw_query: str
+    temporal: TemporalScope = TemporalScope()
+    filters: EntityFilters = EntityFilters()
+    operation: QueryOperation = QueryOperation()
+    is_compound: bool = False
+    sub_inquiries: List["NormalizedQueryAST"] = []
+
+    def to_legacy_parsed_intent(self) -> "ParsedQueryIntent":
+        """Adapter converting AST to legacy ParsedQueryIntent for backward compatibility."""
+        # Determine intent based on domain and polarity
+        intent = "spending_summary"
+        primary_domain = self.filters.domains[0] if self.filters.domains else "expenses"
+        
+        if primary_domain == "bills":
+            if self.temporal.is_projected and not self.temporal.is_historical:
+                intent = "upcoming_bills"
+            else:
+                # Historical bills map to query_spending with bills category hint
+                intent = "query_spending" if self.operation.op == "list" else "spending_summary"
+        elif primary_domain == "income":
+            intent = "income_summary" if self.operation.op in ("sum", "breakdown", "average") else "query_income"
+        elif primary_domain in ("balance", "transfers"):
+            intent = "net_cash_flow"
+        elif primary_domain == "savings":
+            intent = "savings_summary"
+        else:
+            intent = "query_spending" if self.operation.op == "list" else "spending_summary"
+
+        cat = self.filters.category_hints[0] if self.filters.category_hints else None
+        if primary_domain == "bills" and not cat:
+            cat = "Rent/Bills"
+
+        concept = self.filters.concept_hints[0] if self.filters.concept_hints else None
+
+        return ParsedQueryIntent(
+            intent=intent,
+            timeframe=self.temporal.timeframe,
+            start_date=self.temporal.start_date,
+            end_date=self.temporal.end_date,
+            category=cat,
+            concept_keyword=concept,
+            target_currency=self.filters.target_currency,
+            scope=self.filters.scope,
+            member_filter=self.filters.target_member,
+            query_type="details" if self.operation.op == "list" else "summary"
+        )

@@ -199,4 +199,10 @@ development_status:
   24-1-3-month-fixed-expenses-trend-and-in-place-resume: done
   epic-24-retrospective: optional
 
-
+  epic-25: done
+  25-1-orthogonal-query-ast-models-and-stage-1-normalizer: done
+  25-2-in-memory-decrypted-entity-resolution-and-dataset-router: done
+  25-3-deterministic-query-builder-parity-gate-and-math-engine: done
+  25-4-conversational-fallback-and-assumption-disclosure: done
+  25-5-golden-evaluation-dataset-and-regression-test-harness: done
+  epic-25-retrospective: optional

@@ -187,6 +187,31 @@ def _resolve_comparison_timeframe(
         
     return None, None, None
 
+def _parse_flexible_date(val: Optional[str], ref_year: int) -> Optional[tuple[int, int, int]]:
+    """Returns (year, month, day) or None from flexible formats (ISO, DD/MM/YYYY, DD/MM)."""
+    if not val or not isinstance(val, str):
+        return None
+    s = val.strip().lower()
+    s = re.sub(r'^(?:del|el)\s+', '', s).strip()
+
+    # ISO: YYYY-MM-DD
+    m_iso = re.match(r'^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$', s)
+    if m_iso:
+        return int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
+
+    # DMY: DD/MM/YYYY or DD-MM-YYYY
+    m_dmy = re.match(r'^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$', s)
+    if m_dmy:
+        return int(m_dmy.group(3)), int(m_dmy.group(2)), int(m_dmy.group(1))
+
+    # DM: DD/MM or DD-MM
+    m_dm = re.match(r'^(\d{1,2})[-/.](\d{1,2})$', s)
+    if m_dm:
+        return ref_year, int(m_dm.group(2)), int(m_dm.group(1))
+
+    return None
+
+
 def resolve_date_range(
     timeframe: str,
     start_date_str: Optional[str] = None,
@@ -202,6 +227,17 @@ def resolve_date_range(
         ref_local = datetime.now(tz)
     
     tf_str = (timeframe or "").lower().strip()
+
+    # Direct specific date match in timeframe: e.g. "11/11", "del 11/11", "2026-11-11"
+    flex_date = _parse_flexible_date(tf_str, ref_local.year)
+    if flex_date:
+        y, m, d = flex_date
+        try:
+            start_local = datetime(y, m, d, 0, 0, 0, 0, tzinfo=tz)
+            end_local = datetime(y, m, d, 23, 59, 59, 999999, tzinfo=tz)
+            return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+        except ValueError:
+            pass
 
     # 1. Dynamic regex day patterns: e.g. last_15_days, ultimos_15_dias, past_30_days, 15_days, 15_dias
     days_match = re.match(r'^(?:last|past|ultimos|ultimas)?_?(\d+)_(?:days|dias)$', tf_str)
@@ -277,19 +313,27 @@ def resolve_date_range(
         start_local = end_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
-    elif tf_str in ["custom", "personalizado"] or (start_date_str and end_date_str):
+    elif tf_str in ["custom", "personalizado"] or start_date_str or end_date_str:
         start_time = None
         end_time = None
         if start_date_str and isinstance(start_date_str, str):
-            try:
-                start_time = datetime.strptime(start_date_str.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            except (ValueError, AttributeError):
-                pass
+            fd = _parse_flexible_date(start_date_str, ref_local.year)
+            if fd:
+                try:
+                    start_time = datetime(fd[0], fd[1], fd[2], 0, 0, 0, 0, tzinfo=timezone.utc)
+                except ValueError:
+                    pass
         if end_date_str and isinstance(end_date_str, str):
-            try:
-                end_time = datetime.strptime(end_date_str.strip(), "%Y-%m-%d").replace(tzinfo=timezone.utc, hour=23, minute=59, second=59, microsecond=999999)
-            except (ValueError, AttributeError):
-                pass
+            fd = _parse_flexible_date(end_date_str, ref_local.year)
+            if fd:
+                try:
+                    end_time = datetime(fd[0], fd[1], fd[2], 23, 59, 59, 999999, tzinfo=timezone.utc)
+                except ValueError:
+                    pass
+        if start_time and not end_time:
+            end_time = start_time.replace(hour=23, minute=59, second=59, microsecond=999999)
+        elif end_time and not start_time:
+            start_time = end_time.replace(hour=0, minute=0, second=0, microsecond=0)
         return start_time, end_time
     
     return None, None

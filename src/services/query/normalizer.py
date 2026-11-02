@@ -25,8 +25,9 @@ CRITICAL RULES:
 - Do NOT confuse temporal directionality with domain.
   * "bills last 3 months" -> domain: ["bills"], is_historical: true, is_projected: false, op: list (or breakdown/sum if asking for total)
   * "upcoming bills" -> domain: ["bills"], is_historical: false, is_projected: true, op: list
+  * "sumar vencimientos del 11/11" (Ref Date: 2026-11-02) -> domain: ["bills"], start_date: "2026-11-11", end_date: "2026-11-11", timeframe: "2026-11-11", is_historical: false, is_projected: true, op: sum
   * "dining out this weekend vs last weekend" -> domain: ["expenses"], category_hints: ["Food/Drink"], op: comparison, is_compound: true
-- Relative date resolution: Use the Reference Date from <system_context> to compute exact start_date and end_date (YYYY-MM-DD).
+- Relative date resolution: Use the Reference Date from <system_context> to compute exact start_date and end_date (YYYY-MM-DD). If user specifies a day/month (like 11/11), use current reference year unless year specified.
 - Scope: Default to "family" unless the user explicitly asks about their personal finances ("my", "mis gastos", "tengo yo").
 - Context isolation: You do not have database context. Do not invent entities not mentioned in the query.
 
@@ -118,7 +119,48 @@ class QueryNormalizer:
         end_date = ref_time.strftime("%Y-%m-%d")
         timeframe = "this_month"
 
-        if "last 3 months" in lower or "ultimos 3 meses" in lower or "últimos 3 meses" in lower or "last 90 days" in lower or "three monthz" in lower:
+        # Check for specific date pattern (e.g. 11/11, del 11/11, 2026-11-11)
+        slash_match = re.search(r'\b(?:del\s+|el\s+)?(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b', lower)
+        iso_match = re.search(r'\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b', lower)
+        if slash_match:
+            d = int(slash_match.group(1))
+            m = int(slash_match.group(2))
+            y = int(slash_match.group(3)) if slash_match.group(3) else ref_time.year
+            if y < 100:
+                y += 2000
+            try:
+                target_dt = datetime(y, m, d)
+                date_str = target_dt.strftime("%Y-%m-%d")
+                start_date = date_str
+                end_date = date_str
+                timeframe = date_str
+                if target_dt.date() >= ref_time.date():
+                    is_projected = True
+                    is_historical = False
+                else:
+                    is_projected = False
+                    is_historical = True
+            except ValueError:
+                pass
+        elif iso_match:
+            y = int(iso_match.group(1))
+            m = int(iso_match.group(2))
+            d = int(iso_match.group(3))
+            try:
+                target_dt = datetime(y, m, d)
+                date_str = target_dt.strftime("%Y-%m-%d")
+                start_date = date_str
+                end_date = date_str
+                timeframe = date_str
+                if target_dt.date() >= ref_time.date():
+                    is_projected = True
+                    is_historical = False
+                else:
+                    is_projected = False
+                    is_historical = True
+            except ValueError:
+                pass
+        elif "last 3 months" in lower or "ultimos 3 meses" in lower or "últimos 3 meses" in lower or "last 90 days" in lower or "three monthz" in lower:
             start_date = (ref_time - timedelta(days=90)).strftime("%Y-%m-%d")
             timeframe = "last_90_days"
         elif "last 6 months" in lower or "ultimos 6 meses" in lower or "últimos 6 meses" in lower:

@@ -1,4 +1,5 @@
 import logging
+import inspect
 from typing import Optional, Literal, List, Dict, Any
 from uuid import UUID
 from datetime import datetime, timezone
@@ -10,6 +11,13 @@ from src.services.query.models import ParsedQueryIntent, QueryResult, DecryptedT
 from src.services.query.aggregator import aggregate_transactions
 
 logger = logging.getLogger(__name__)
+
+
+async def _maybe_await(val: Any) -> Any:
+    """Helper to safely handle both coroutines and synchronous returns from service calls or mocks."""
+    if inspect.isawaitable(val):
+        return await val
+    return val
 
 
 # ---------------------------------------------------------
@@ -49,11 +57,15 @@ class QueryCashFlowParams(BaseModel):
 class QueryBillsParams(BaseModel):
     timeframe: str = Field(
         default="this_month",
-        description="Timeframe for upcoming bills: 'this_month', 'next_month', 'this_week', or 'all'."
+        description="Timeframe for upcoming bills: 'this_month', 'next_month', 'this_week', 'all', or a specific date/month like '11/11' or '2026-11-11'."
     )
     status: Literal["pending", "paid", "all"] = Field(
         default="pending",
         description="Status of bills to query."
+    )
+    date: Optional[str] = Field(
+        default=None,
+        description="Specific date to filter bills (e.g. '11/11', '2026-11-11')."
     )
 
 
@@ -208,9 +220,9 @@ async def execute_agent_tool(
             target_curr = (params.currency or "").upper().strip() or None
             is_personal = params.scope == "personal"
 
-            all_txs = await qs._fetch_and_decrypt_transactions(
+            all_txs = await _maybe_await(qs._fetch_and_decrypt_transactions(
                 context.family_id, None, None, None, None, None
-            )
+            ))
             if is_personal:
                 all_txs = [t for t in all_txs if t.user_id == context.user_id]
 
@@ -256,9 +268,9 @@ async def execute_agent_tool(
             ref_time = datetime.now(timezone.utc)
             start_t, end_t = qs._resolve_date_range(tf, None, None, ref_time, tz_name=context.timezone_name)
 
-            all_txs = await qs._fetch_and_decrypt_transactions(
+            all_txs = await _maybe_await(qs._fetch_and_decrypt_transactions(
                 context.family_id, start_t, end_t, params.category, None, None
-            )
+            ))
             if is_personal:
                 all_txs = [t for t in all_txs if t.user_id == context.user_id]
 
@@ -290,12 +302,13 @@ async def execute_agent_tool(
         elif tool_name == "query_bills":
             params = QueryBillsParams(**args)
             ref_time = datetime.now(timezone.utc)
-            start_t, end_t = qs._resolve_date_range(params.timeframe, None, None, ref_time, tz_name=context.timezone_name, future_inclusive=True)
+            tf = params.date or params.timeframe
+            start_t, end_t = qs._resolve_date_range(tf, None, None, ref_time, tz_name=context.timezone_name, future_inclusive=True)
 
             status_filter = None if params.status == "all" else params.status
-            bills = await qs._fetch_and_decrypt_scheduled_bills(
+            bills = await _maybe_await(qs._fetch_and_decrypt_scheduled_bills(
                 context.family_id, start_t, end_t, status_filter
-            )
+            ))
 
             bills_data = [
                 {
@@ -331,9 +344,9 @@ async def execute_agent_tool(
             overall_start = trailing[0][2]
             overall_end = trailing[-1][3]
 
-            all_txs = await qs._fetch_and_decrypt_transactions(
+            all_txs = await _maybe_await(qs._fetch_and_decrypt_transactions(
                 context.family_id, overall_start, overall_end, None, None, None
-            )
+            ))
             if params.scope == "personal":
                 all_txs = [t for t in all_txs if t.user_id == context.user_id]
 

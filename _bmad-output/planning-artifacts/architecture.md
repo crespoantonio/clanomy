@@ -964,3 +964,28 @@ sequenceDiagram
   - Text and concept matching executes in-memory within the authenticated family session using RapidFuzz token sort ratio, ensuring zero raw financial data leaks to unindexed databases or secondary LLM prompts.
 - **Pure Deterministic Computation:**
   - The LLM never computes financial sums, averages, or net balances. All calculations are executed by deterministic Python functions with `Decimal` precision and multi-currency segregation.
+
+---
+
+### 20. End-to-End Decoupled Query Pipeline & AI Verification Gate (Option B - Post-Epic 25 Hardening)
+
+- **Problem Context & Root Cause Analysis:**
+  - Following the implementation of Epic 25 AST models, the live query router (`AIOrchestrator`) continued dispatching conversational queries through isolated `AgentService` paths.
+  - The agent tool calling runtime suffered from a fatal sync/async defect: `execute_agent_tool` attempted to `await` synchronous `QueryService` methods (`_fetch_and_decrypt_scheduled_bills`, `_fetch_and_decrypt_transactions`). In unit tests, this bug was hidden by `AsyncMock`, but in production it triggered an unhandled `TypeError` inside the tool error boundary, causing Gemini to output generic fallback errors (*"Lo siento, estoy teniendo un problema técnico..."*).
+  - Concurrently, queries with single-day expressions (e.g. *"Me podes sumar el total de mis vencimientos del 11/11?"*) failed because `QueryBillsParams` and `resolve_date_range` only accepted predefined periodic strings (`this_month`, `next_month`), dropping explicit single dates.
+
+- **Option B Architecture (The 4-Stage Pipeline with Verification Gate):**
+  1. **Stage 1 — AST Normalizer & Flexible Date Resolver:**
+     - Deconstructs natural language into orthogonal `NormalizedQueryAST` with full single-day and flexible date support (`DD/MM`, `DD/MM/YYYY`, `YYYY-MM-DD`).
+     - Directly extracts and bounds single calendar dates (e.g., `11/11` -> `2026-11-11 00:00:00` to `2026-11-11 23:59:59.999999`).
+  2. **Stage 2 — Zero-Knowledge Dataset Router:**
+     - Routes the AST into tenant-isolated queries against `ScheduledBill` (pending/paid) and `Transaction` (historical obligations), decrypting AES-256 data in-memory.
+  3. **Stage 3 — Deterministic Math Engine:**
+     - Computes all financial arithmetic strictly in Decimal, segregating currencies and determining exact sums, pending balances, and category distributions.
+  4. **Stage 4 — Conversational Synthesis & Parity Checkup Gate:**
+     - Injects ground-truth metrics into the LLM synthesis prompt with strict instructions forbidding independent arithmetic.
+     - Enforces an automated **Parity Checkup Gate**: validates that numbers in the synthesized text match the computed ground truth. If verification fails or the model times out, the system automatically falls back to a deterministic formatted template, ensuring 100% mathematical integrity and zero hallucinations.
+
+- **Agent Tooling Hardening:**
+  - Integrated `_maybe_await` across all agent tools (`query_savings`, `query_cash_flow`, `query_bills`, `query_history`) to safely interoperate with both asynchronous and synchronous service implementations.
+  - Added direct `date` filtering to `QueryBillsParams` and linked `AIOrchestrator` query handling to `DecoupledQueryPipeline`.

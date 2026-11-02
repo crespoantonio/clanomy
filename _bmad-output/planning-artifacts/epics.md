@@ -1546,3 +1546,17 @@ So that we empirically verify 95%+ query resolution accuracy and prevent regress
 **Given** the golden query dataset in `tests/data/query_engine_golden_dataset.py` spanning 150+ categorized queries (auditing, cash flow tracking, multi-currency, conversational slang, adversarial inputs)
 **When** the test harness runs in CI without live API token consumption (using recorded fixtures and mock LLM providers)
 **Then** the test suite asserts ≥95% schema compliance, 100% Parity Gate enforcement on invalid ASTs, and sub-second deterministic execution.
+
+### Story 25.6: Option B Decoupled Query Pipeline, Single-Day Date Resolution & AI Verification Gate
+As a Clanomy User,
+I want to ask specific, conversational questions about exact dates (e.g. "Me podes sumar el total de mis vencimientos del 11/11?") and receive 100% accurate, mathematically verified answers with an itemized breakdown,
+So that I never encounter technical errors or hallucinated numbers.
+
+**Acceptance Criteria:**
+**Given** a conversational question specifying a single calendar date or day/month expression (e.g. "11/11", "del 11/11", "2026-11-11")
+**When** processed through `DecoupledQueryPipeline`
+**Then** Stage 1 normalizes the query into orthogonal AST and resolves exact 24-hour UTC boundaries (`00:00:00` to `23:59:59.999999`) for the requested date.
+**And** Stage 2 routes to `ScheduledBill` and/or `Transaction` and decrypts matching records using AES-256 in-memory.
+**And** Stage 3 computes exact totals, pending amounts, and currency aggregations strictly using Python `Decimal` arithmetic.
+**And** Stage 4 synthesizes a warm, conversational response and asserts numeric agreement via the AI Verification Gate, falling back to deterministic templates if the LLM produces mismatched numbers.
+**And** agentic tools (`execute_agent_tool`) support synchronous query service calls without `TypeError` exceptions.

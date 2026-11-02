@@ -205,4 +205,5 @@ development_status:
   25-3-deterministic-query-builder-parity-gate-and-math-engine: done
   25-4-conversational-fallback-and-assumption-disclosure: done
   25-5-golden-evaluation-dataset-and-regression-test-harness: done
+  25-6-option-b-decoupled-query-pipeline-and-ai-verification-gate: done
   epic-25-retrospective: optional

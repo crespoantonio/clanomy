@@ -825,30 +825,52 @@ class AIOrchestrator:
                             )
                             response_text = await asyncio.to_thread(self._handle_transaction_correction, user_uuid, parsed_query, _is_spanish(raw_text))
                         elif unified.action == "query":
-                            if getattr(settings, "ENABLE_AGENTIC_CORE", False):
-                                try:
-                                    response_text = await self._run_agentic_query(
-                                        text=raw_text,
-                                        user_uuid=user_uuid,
-                                        family_id=family_id,
-                                        family_currency=family_currency,
-                                        is_spanish=_is_spanish(raw_text)
-                                    )
-                                except Exception as agent_err:
-                                    logger.warning(f"Agentic core query failed, falling back to legacy QueryService: {agent_err}")
+                            from src.services.query.pipeline import DecoupledQueryPipeline
+                            user_name = "You"
+                            try:
+                                u_info = await asyncio.to_thread(self._get_user_info, user_uuid)
+                                user_name = u_info.get("display_name") or "You"
+                            except Exception:
+                                pass
+
+                            try:
+                                query_pipeline = DecoupledQueryPipeline()
+                                response_text = await query_pipeline.execute(
+                                    text=raw_text,
+                                    family_id=family_id,
+                                    user_id=user_uuid,
+                                    user_name=user_name,
+                                    default_currency=family_currency or settings.DEFAULT_CURRENCY,
+                                    tz_name=active_tz,
+                                    reference_time=datetime.now(timezone.utc),
+                                    is_spanish=_is_spanish(raw_text)
+                                )
+                            except Exception as pipe_err:
+                                logger.warning(f"DecoupledQueryPipeline failed: {pipe_err}")
+                                if getattr(settings, "ENABLE_AGENTIC_CORE", False):
+                                    try:
+                                        response_text = await self._run_agentic_query(
+                                            text=raw_text,
+                                            user_uuid=user_uuid,
+                                            family_id=family_id,
+                                            family_currency=family_currency,
+                                            is_spanish=_is_spanish(raw_text)
+                                        )
+                                    except Exception as agent_err:
+                                        logger.warning(f"Agentic core query failed, falling back to legacy QueryService: {agent_err}")
+                                        query_service = QueryService()
+                                        parsed_query = await query_service.parse_intent(text)
+                                        res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
+                                        if res is None:
+                                            return {"status": "ok"}
+                                        response_text = res
+                                else:
                                     query_service = QueryService()
                                     parsed_query = await query_service.parse_intent(text)
                                     res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
                                     if res is None:
                                         return {"status": "ok"}
                                     response_text = res
-                            else:
-                                query_service = QueryService()
-                                parsed_query = await query_service.parse_intent(text)
-                                res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
-                                if res is None:
-                                    return {"status": "ok"}
-                                response_text = res
                         else:
                             # action == "log_transaction"
                             if not dry_run and send_telegram and chat_id and family_id:
@@ -1034,17 +1056,42 @@ class AIOrchestrator:
                                         concept_hint = re.sub(r'\b(?:pagu[eé]|paid|abon[eé]|liquid[eé]|cancel[eé]|pay|la|el|los|las|the|de|del|por|for|mi|my)\b', '', raw_text, flags=re.IGNORECASE).strip()
                                         response_text = format_unmatched_bill_claim(concept_hint or raw_text, is_spanish=is_spanish)
                                 else:
-                                    if getattr(settings, "ENABLE_AGENTIC_CORE", False):
-                                        try:
-                                            response_text = await self._run_agentic_query(
-                                                text=raw_text,
-                                                user_uuid=user_uuid,
-                                                family_id=family_id,
-                                                family_currency=family_currency,
-                                                is_spanish=is_spanish
-                                            )
-                                        except Exception as agent_err:
-                                            logger.warning(f"Agentic core query in amount-none failed, falling back: {agent_err}")
+                                    from src.services.query.pipeline import DecoupledQueryPipeline
+                                    try:
+                                        query_pipeline = DecoupledQueryPipeline()
+                                        response_text = await query_pipeline.execute(
+                                            text=raw_text,
+                                            family_id=family_id,
+                                            user_id=user_uuid,
+                                            user_name="You",
+                                            default_currency=family_currency or settings.DEFAULT_CURRENCY,
+                                            tz_name=active_tz,
+                                            reference_time=datetime.now(timezone.utc),
+                                            is_spanish=is_spanish
+                                        )
+                                    except Exception as pipe_err:
+                                        logger.warning(f"DecoupledQueryPipeline failed: {pipe_err}")
+                                        if getattr(settings, "ENABLE_AGENTIC_CORE", False):
+                                            try:
+                                                response_text = await self._run_agentic_query(
+                                                    text=raw_text,
+                                                    user_uuid=user_uuid,
+                                                    family_id=family_id,
+                                                    family_currency=family_currency,
+                                                    is_spanish=is_spanish
+                                                )
+                                            except Exception as agent_err:
+                                                logger.warning(f"Agentic core query in amount-none failed, falling back: {agent_err}")
+                                                query_service = QueryService()
+                                                parsed_query = await query_service.parse_intent(text)
+                                                if parsed_query.intent != "log_expense":
+                                                    res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
+                                                    if res is None:
+                                                        return {"status": "ok"}
+                                                    response_text = res
+                                                else:
+                                                    response_text = format_extraction_error_message(is_spanish=is_spanish)
+                                        else:
                                             query_service = QueryService()
                                             parsed_query = await query_service.parse_intent(text)
                                             if parsed_query.intent != "log_expense":
@@ -1054,16 +1101,6 @@ class AIOrchestrator:
                                                 response_text = res
                                             else:
                                                 response_text = format_extraction_error_message(is_spanish=is_spanish)
-                                    else:
-                                        query_service = QueryService()
-                                        parsed_query = await query_service.parse_intent(text)
-                                        if parsed_query.intent != "log_expense":
-                                            res = await self._execute_parsed_query(parsed_query, raw_text, user_uuid, chat_id, message_id)
-                                            if res is None:
-                                                return {"status": "ok"}
-                                            response_text = res
-                                        else:
-                                            response_text = format_extraction_error_message(is_spanish=is_spanish)
                             else:
                                 transaction_time = override_tx_time if override_tx_time is not None else unified.to_datetime()
                                 tx_amount = unified.amount

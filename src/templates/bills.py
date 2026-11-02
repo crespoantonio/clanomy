@@ -2,7 +2,7 @@
 Scheduled bills, reminders, settlement cards, and interactive bill edit templates for Clanomy.
 """
 import html
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Tuple
 from datetime import datetime
 from src.templates.common import is_spanish_text, format_date_localized
 

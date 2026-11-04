@@ -108,11 +108,11 @@ so that I retain complete control over my privacy and personal financial data.
 
 ### References
 
-- [Architecture: Multi-Tenant Cascade Deletes Validation](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L418)
-- [Architecture: Data Architecture & Encryption](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L114)
-- [Epics: Story 4.2](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L292)
-- [PRD: Data Erasure (FR15)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L35)
-- [Story 4.1 Implementation](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/4-1-financial-data-export-json-csv.md)
+- [Architecture: Multi-Tenant Cascade Deletes Validation](_bmad-output/planning-artifacts/architecture.md#L418)
+- [Architecture: Data Architecture & Encryption](_bmad-output/planning-artifacts/architecture.md#L114)
+- [Epics: Story 4.2](_bmad-output/planning-artifacts/epics.md#L292)
+- [PRD: Data Erasure (FR15)](_bmad-output/planning-artifacts/prd.md#L35)
+- [Story 4.1 Implementation](_bmad-output/implementation-artifacts/4-1-financial-data-export-json-csv.md)
 
 ## Dev Agent Record
 

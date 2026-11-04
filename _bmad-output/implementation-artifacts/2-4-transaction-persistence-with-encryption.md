@@ -76,10 +76,10 @@ so that I can review my spending later.
 
 ### References
 
-- [Architecture: Data Architecture](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L113)
-- [Architecture: Complete Project Directory Structure](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 2.4](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L208)
-- [PRD: Privacy Core](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L79)
+- [Architecture: Data Architecture](_bmad-output/planning-artifacts/architecture.md#L113)
+- [Architecture: Complete Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 2.4](_bmad-output/planning-artifacts/epics.md#L208)
+- [PRD: Privacy Core](_bmad-output/planning-artifacts/prd.md#L79)
 
 ## Dev Agent Record
 

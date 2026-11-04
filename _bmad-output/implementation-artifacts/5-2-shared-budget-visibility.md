@@ -133,7 +133,7 @@ so that all members can stay on budget and maintain collective financial visibil
 
 ### Source Files to Touch
 
-#### [MODIFY] [src/services/query_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/query_service.py)
+#### [MODIFY] [src/services/query_service.py](src/services/query_service.py)
 - **Current State**: `ParsedQueryIntent` parses single-user spending intents. `_build_summary_prompt_context` and `generate_fallback_summary` only receive `user_name` and format "You've spent...".
 - **Changes for Story 5.2**:
   - Add `scope: Optional[str] = "family"` to `ParsedQueryIntent`.
@@ -142,7 +142,7 @@ so that all members can stay on budget and maintain collective financial visibil
   - Update `generate_summary` LLM prompt to instruct collective summaries when `family_name` or multiple members are provided.
 - **Preserve**: All existing category normalization, date range resolution, time-based aggregation, period comparison, and error handling.
 
-#### [MODIFY] [src/services/ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/ai_orchestrator.py)
+#### [MODIFY] [src/services/ai_orchestrator.py](src/services/ai_orchestrator.py)
 - **Current State**: Routes commands like `/family`, `/invite`, `/createfamily`, and generic `spending_summary`.
 - **Changes for Story 5.2**:
   - Update `_is_special_intent` to match `/familytotal`, "family total", "family spending", "our spending", "how much did we spend".
@@ -150,10 +150,10 @@ so that all members can stay on budget and maintain collective financial visibil
   - In `spending_summary` handling, fetch family name and members via `FamilyService.get_family_info(user_uuid)` or DB session, and pass to `query_service.get_spending_summary(family_id, timeframe, category, user_name, family_name, member_names)`.
 - **Preserve**: Existing expense logging, audio transcription, account deletion, and export routing.
 
-#### [MODIFY] [tests/services/test_query_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_query_service.py)
+#### [MODIFY] [tests/services/test_query_service.py](tests/services/test_query_service.py)
 - **Changes**: Add unit tests for multi-member transaction aggregation, cross-tenant isolation, family-aware context building, and fallback summary formatting.
 
-#### [MODIFY] [tests/services/test_ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_ai_orchestrator.py)
+#### [MODIFY] [tests/services/test_ai_orchestrator.py](tests/services/test_ai_orchestrator.py)
 - **Changes**: Add tests verifying `/familytotal` and natural language family spending queries aggregate multi-user transactions and return collective summaries.
 
 ### Anti-Patterns to Prevent
@@ -166,11 +166,11 @@ so that all members can stay on budget and maintain collective financial visibil
 
 ### References
 
-- [Architecture: Multi-Tenancy & Family Scoping](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L105)
-- [Epics: Story 5.2 (Shared Budget Visibility)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L322)
-- [PRD: Family Groups & Shared Ledger (FR11, Journey 3.4)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L66-L68)
-- [Story 5.1: Family Group Creation & Invite Link](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/5-1-family-group-creation-invite-link.md)
-- [Epic 4 Retrospective](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/epic-4-retro-2026-08-16.md)
+- [Architecture: Multi-Tenancy & Family Scoping](_bmad-output/planning-artifacts/architecture.md#L105)
+- [Epics: Story 5.2 (Shared Budget Visibility)](_bmad-output/planning-artifacts/epics.md#L322)
+- [PRD: Family Groups & Shared Ledger (FR11, Journey 3.4)](_bmad-output/planning-artifacts/prd.md#L66-L68)
+- [Story 5.1: Family Group Creation & Invite Link](_bmad-output/implementation-artifacts/5-1-family-group-creation-invite-link.md)
+- [Epic 4 Retrospective](_bmad-output/implementation-artifacts/epic-4-retro-2026-08-16.md)
 
 ## Dev Agent Record
 

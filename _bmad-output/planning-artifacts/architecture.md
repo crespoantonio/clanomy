@@ -1,8 +1,8 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments:
-  - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\product_brief_famfin_ai.md
-  - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\prd.md
+  - _bmad-output/planning-artifacts/product_brief_famfin_ai.md
+  - _bmad-output/planning-artifacts/prd.md
 workflowType: 'architecture'
 project_name: 'Clanomy'
 user_name: 'Tony'

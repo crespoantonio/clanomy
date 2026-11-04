@@ -15,7 +15,7 @@ stepsCompleted:
   - step-11-polish
 releaseMode: phased
 inputDocuments:
-  - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\product_brief_famfin_ai.md
+  - _bmad-output/planning-artifacts/product_brief_famfin_ai.md
 classification:
   projectType: SaaS (Messaging Bot Platform)
   domain: Fintech (Micro-Accounting)

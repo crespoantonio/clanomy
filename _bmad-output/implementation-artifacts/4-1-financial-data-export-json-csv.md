@@ -136,11 +136,11 @@ so that I can maintain personal financial backups, import my records into spread
 
 ### References
 
-- [Architecture: Epic 4 Technical Research & Design](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L342)
-- [Architecture: Data Architecture & Encryption](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L114)
-- [Epics: Story 4.1](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L279)
-- [PRD: Data Portability (FR14)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L34)
-- [Epic 3 Retrospective](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/epic-3-retro-2026-08-16.md)
+- [Architecture: Epic 4 Technical Research & Design](_bmad-output/planning-artifacts/architecture.md#L342)
+- [Architecture: Data Architecture & Encryption](_bmad-output/planning-artifacts/architecture.md#L114)
+- [Epics: Story 4.1](_bmad-output/planning-artifacts/epics.md#L279)
+- [PRD: Data Portability (FR14)](_bmad-output/planning-artifacts/prd.md#L34)
+- [Epic 3 Retrospective](_bmad-output/implementation-artifacts/epic-3-retro-2026-08-16.md)
 
 ## Dev Agent Record
 

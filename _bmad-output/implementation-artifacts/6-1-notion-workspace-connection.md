@@ -209,10 +209,10 @@ so that I can link my family bot records to my existing financial workspace in N
 
 ### Source Files to Touch
 
-#### [MODIFY] [requirements.txt](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/requirements.txt)
+#### [MODIFY] [requirements.txt](requirements.txt)
 - Add `notion-client>=2.2.1`.
 
-#### [MODIFY] [src/db/models.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/db/models.py)
+#### [MODIFY] [src/db/models.py](src/db/models.py)
 - **Current State**: `Family` model contains `id`, `name`, `created_at`, and relationship definitions.
 - **Changes for Story 6.1**:
   - Add `notion_api_key: Optional[str] = Field(default=None)`
@@ -221,7 +221,7 @@ so that I can link my family bot records to my existing financial workspace in N
   - Add `notion_connected_at: Optional[datetime] = Field(default=None)`
 - **Preserve**: All existing relationships (`users`, `transactions`, `invites`) and cascade delete options.
 
-#### [NEW] [src/services/notion_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/notion_service.py)
+#### [NEW] [src/services/notion_service.py](src/services/notion_service.py)
 - **Purpose**: Wraps `notion-client` to provide token validation, database searching, metadata extraction, and connection management for family accounts.
 - **Key Methods**:
   - `validate_token(api_key: str) -> bool`
@@ -231,7 +231,7 @@ so that I can link my family bot records to my existing financial workspace in N
   - `disconnect_workspace(family_id: UUID) -> bool`
   - `get_family_notion_status(family_id: UUID) -> Dict[str, Any]`
 
-#### [MODIFY] [src/services/ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/ai_orchestrator.py)
+#### [MODIFY] [src/services/ai_orchestrator.py](src/services/ai_orchestrator.py)
 - **Current State**: Routes expense logging, queries, family creation/invites, account deletion, and data exports.
 - **Changes for Story 6.1**:
   - Add Notion keywords to `_is_special_intent`.
@@ -240,7 +240,7 @@ so that I can link my family bot records to my existing financial workspace in N
   - Log `[3s Audit]` latency for Notion connection requests.
 - **Preserve**: All existing routing for `/createfamily`, `/invite`, `/family`, `/familytotal`, export, and expense persistence.
 
-#### [NEW] [tests/services/test_notion_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_notion_service.py)
+#### [NEW] [tests/services/test_notion_service.py](tests/services/test_notion_service.py)
 - **Purpose**: Unit tests for `NotionService` with mocked `notion_client` calls.
 - **Scenarios**:
   - Valid token search returning multiple databases.
@@ -251,10 +251,10 @@ so that I can link my family bot records to my existing financial workspace in N
   - `disconnect_workspace` clearing Notion fields.
   - `get_family_notion_status` returning correct connection state.
 
-#### [MODIFY] [tests/db/test_models.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/db/test_models.py)
+#### [MODIFY] [tests/db/test_models.py](tests/db/test_models.py)
 - **Changes**: Add tests for `Family` Notion fields, verifying persistence and `EncryptionService` token encryption.
 
-#### [MODIFY] [tests/services/test_ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_ai_orchestrator.py)
+#### [MODIFY] [tests/services/test_ai_orchestrator.py](tests/services/test_ai_orchestrator.py)
 - **Changes**: Add integration test cases for `/notion`, `/notion connect`, `/notion setdb`, `/notion status`, and `/notion disconnect`.
 
 ### Anti-Patterns to Prevent
@@ -267,12 +267,12 @@ so that I can link my family bot records to my existing financial workspace in N
 
 ### References
 
-- [Architecture: Notion Sync Worker & Boundaries](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L28-L38)
-- [Architecture: Project Directory Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196-L227)
-- [Epics: Story 6.1 (Notion Workspace Connection)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L350-L362)
-- [PRD: Integrated Dashboard & Notion Mirror (FR12, FR13, Journey 3.3)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L63-L65)
-- [Story 5.1: Family Group Creation & Invite Link](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/5-1-family-group-creation-invite-link.md)
-- [Story 5.3: Per-Member Spending Attribution](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/5-3-per-member-spending-attribution.md)
+- [Architecture: Notion Sync Worker & Boundaries](_bmad-output/planning-artifacts/architecture.md#L28-L38)
+- [Architecture: Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196-L227)
+- [Epics: Story 6.1 (Notion Workspace Connection)](_bmad-output/planning-artifacts/epics.md#L350-L362)
+- [PRD: Integrated Dashboard & Notion Mirror (FR12, FR13, Journey 3.3)](_bmad-output/planning-artifacts/prd.md#L63-L65)
+- [Story 5.1: Family Group Creation & Invite Link](_bmad-output/implementation-artifacts/5-1-family-group-creation-invite-link.md)
+- [Story 5.3: Per-Member Spending Attribution](_bmad-output/implementation-artifacts/5-3-per-member-spending-attribution.md)
 
 ## Dev Agent Record
 

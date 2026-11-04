@@ -161,11 +161,11 @@ so that I can identify specific spending leaks, understand category-level cash o
 
 ### References
 
-- [Architecture: Data Architecture & Encryption](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L114)
-- [Architecture: Service Layer Pattern](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L163)
-- [Epics: Story 3.3](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L251)
-- [PRD: Conversational Queries (ASK)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L102)
-- [Previous Story: Story 3.2](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/3-2-time-based-aggregations-weekly-monthly-totals.md#L1)
+- [Architecture: Data Architecture & Encryption](_bmad-output/planning-artifacts/architecture.md#L114)
+- [Architecture: Service Layer Pattern](_bmad-output/planning-artifacts/architecture.md#L163)
+- [Epics: Story 3.3](_bmad-output/planning-artifacts/epics.md#L251)
+- [PRD: Conversational Queries (ASK)](_bmad-output/planning-artifacts/prd.md#L102)
+- [Previous Story: Story 3.2](_bmad-output/implementation-artifacts/3-2-time-based-aggregations-weekly-monthly-totals.md#L1)
 
 ## Dev Agent Record
 

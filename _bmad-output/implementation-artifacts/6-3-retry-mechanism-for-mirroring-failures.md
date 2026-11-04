@@ -262,30 +262,30 @@ async def sync_pending_transactions(self, family_id: UUID, limit: int = 50) -> D
 
 ### Source Files to Touch
 
-#### [MODIFY] [requirements.txt](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/requirements.txt)
+#### [MODIFY] [requirements.txt](requirements.txt)
 - Add `tenacity>=9.0.0` to dependencies.
 
-#### [MODIFY] [src/db/models.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/db/models.py)
+#### [MODIFY] [src/db/models.py](src/db/models.py)
 - Add `notion_page_id: Optional[str] = Field(default=None, nullable=True, index=True)` and `notion_synced_at: Optional[datetime] = Field(default=None, nullable=True)` to `Transaction`.
 
-#### [MODIFY] [src/services/notion_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/notion_service.py)
+#### [MODIFY] [src/services/notion_service.py](src/services/notion_service.py)
 - Import `tenacity` utilities (`AsyncRetrying`, `stop_after_attempt`, `wait_exponential`, `retry_if_exception`, `before_sleep_log`).
 - Implement `is_transient_notion_error` helper.
 - Update `mirror_transaction` to use tenacity retry on transient errors and accept optional `transaction_id: Optional[UUID] = None`. When provided and successful, update `transaction.notion_page_id` and `transaction.notion_synced_at` in the database.
 - Implement `sync_pending_transactions(self, family_id: UUID, limit: int = 50)` for catch-up synchronization.
 
-#### [MODIFY] [src/services/ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/ai_orchestrator.py)
+#### [MODIFY] [src/services/ai_orchestrator.py](src/services/ai_orchestrator.py)
 - Update `_persist_transaction` to return the created `transaction.id`.
 - Pass `transaction_id` into `_safe_mirror_to_notion` and forward to `notion_service.mirror_transaction`.
 - Update `/notion sync` command handler to call `sync_pending_transactions` and report results.
 
-#### [MODIFY] [tests/services/test_notion_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_notion_service.py)
+#### [MODIFY] [tests/services/test_notion_service.py](tests/services/test_notion_service.py)
 - Add tests for transient error retries, failure exhaustion, permanent error fail-fast, `transaction_id` database update, and `sync_pending_transactions`.
 
-#### [MODIFY] [tests/services/test_ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_ai_orchestrator.py)
+#### [MODIFY] [tests/services/test_ai_orchestrator.py](tests/services/test_ai_orchestrator.py)
 - Add tests for `/notion sync` with pending vs. up-to-date transactions.
 
-#### [MODIFY] [tests/db/test_models.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/db/test_models.py)
+#### [MODIFY] [tests/db/test_models.py](tests/db/test_models.py)
 - Add test verifying `Transaction` instantiation and querying with `notion_page_id` and `notion_synced_at`.
 
 ### Anti-Patterns to Prevent
@@ -302,11 +302,11 @@ async def sync_pending_transactions(self, family_id: UUID, limit: int = 50) -> D
 
 ### References
 
-- [Epics: Story 6.3 (Retry Mechanism for Mirroring)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L376-L388)
-- [PRD: Consistency & Reliability (NFR8, FR12, FR13)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L111-L113)
-- [Architecture: Notion Sync Worker & Service Layer Pattern](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L28-L38)
-- [Story 6.2: Real-Time Log Mirroring](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/6-2-real-time-log-mirroring.md)
-- [Story 6.1: Notion Workspace Connection](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/6-1-notion-workspace-connection.md)
+- [Epics: Story 6.3 (Retry Mechanism for Mirroring)](_bmad-output/planning-artifacts/epics.md#L376-L388)
+- [PRD: Consistency & Reliability (NFR8, FR12, FR13)](_bmad-output/planning-artifacts/prd.md#L111-L113)
+- [Architecture: Notion Sync Worker & Service Layer Pattern](_bmad-output/planning-artifacts/architecture.md#L28-L38)
+- [Story 6.2: Real-Time Log Mirroring](_bmad-output/implementation-artifacts/6-2-real-time-log-mirroring.md)
+- [Story 6.1: Notion Workspace Connection](_bmad-output/implementation-artifacts/6-1-notion-workspace-connection.md)
 
 ## Dev Agent Record
 

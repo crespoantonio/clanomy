@@ -180,7 +180,7 @@ so that we have full transparency in our shared ledger and can track individual 
 
 ### Source Files to Touch
 
-#### [MODIFY] [src/services/query_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/query_service.py)
+#### [MODIFY] [src/services/query_service.py](src/services/query_service.py)
 - **Current State**: `DecryptedTransaction` only has `user_id`. `ParsedQueryIntent` has `scope` and `category`. Aggregations only group by time and category.
 - **Changes for Story 5.3**:
   - Add `user_name` and `user_handle` to `DecryptedTransaction`.
@@ -192,7 +192,7 @@ so that we have full transparency in our shared ledger and can track individual 
   - Update `_build_summary_prompt_context`, `generate_summary`, and `generate_fallback_summary` to include member breakdown.
 - **Preserve**: All existing category normalization, time-based aggregation, period comparison, and error handling.
 
-#### [MODIFY] [src/services/export_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/export_service.py)
+#### [MODIFY] [src/services/export_service.py](src/services/export_service.py)
 - **Current State**: Exports transactions without `Logged By` in CSV or JSON.
 - **Changes for Story 5.3**:
   - Update `_decrypt_transaction` and `fetch_and_process` in `export_data` to load family users and populate `user_name` on `DecryptedTransaction`.
@@ -200,20 +200,20 @@ so that we have full transparency in our shared ledger and can track individual 
   - In `generate_json`: Include `"logged_by": tx.user_name or "User"` in each transaction record.
 - **Preserve**: Temp file creation, cleanup in `finally` blocks, and Telegram document transmission.
 
-#### [MODIFY] [src/services/ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/ai_orchestrator.py)
+#### [MODIFY] [src/services/ai_orchestrator.py](src/services/ai_orchestrator.py)
 - **Current State**: Heuristics in `_is_special_intent` detect family queries and export requests.
 - **Changes for Story 5.3**:
   - Add keywords to `_is_special_intent` for member attribution (e.g., "who spent", "who bought", "member spending", "spending by person").
   - Ensure member filters from parsed queries are passed cleanly to `QueryService`.
 - **Preserve**: All existing command handling (`/createfamily`, `/invite`, `/family`, `/familytotal`, delete confirmation).
 
-#### [MODIFY] [tests/services/test_query_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_query_service.py)
+#### [MODIFY] [tests/services/test_query_service.py](tests/services/test_query_service.py)
 - **Changes**: Add unit tests for member attribution fields, `aggregate_by_member`, member filtering, and conversational summary attribution.
 
-#### [MODIFY] [tests/services/test_export_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_export_service.py)
+#### [MODIFY] [tests/services/test_export_service.py](tests/services/test_export_service.py)
 - **Changes**: Add tests for CSV "Logged By" column and JSON "logged_by" field.
 
-#### [MODIFY] [tests/services/test_ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_ai_orchestrator.py)
+#### [MODIFY] [tests/services/test_ai_orchestrator.py](tests/services/test_ai_orchestrator.py)
 - **Changes**: Add tests for member-specific queries and breakdown routing.
 
 ### Anti-Patterns to Prevent
@@ -226,12 +226,12 @@ so that we have full transparency in our shared ledger and can track individual 
 
 ### References
 
-- [Architecture: Multi-Tenancy & Family Scoping](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L105)
-- [Architecture: Project Directory Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 5.3 (Per-Member Spending Attribution)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L334)
-- [PRD: Family Groups & Shared Ledger (FR11, Journey 3.4)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L66-L68)
-- [Story 5.1: Family Group Creation & Invite Link](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/5-1-family-group-creation-invite-link.md)
-- [Story 5.2: Shared Budget Visibility](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/5-2-shared-budget-visibility.md)
+- [Architecture: Multi-Tenancy & Family Scoping](_bmad-output/planning-artifacts/architecture.md#L105)
+- [Architecture: Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 5.3 (Per-Member Spending Attribution)](_bmad-output/planning-artifacts/epics.md#L334)
+- [PRD: Family Groups & Shared Ledger (FR11, Journey 3.4)](_bmad-output/planning-artifacts/prd.md#L66-L68)
+- [Story 5.1: Family Group Creation & Invite Link](_bmad-output/implementation-artifacts/5-1-family-group-creation-invite-link.md)
+- [Story 5.2: Shared Budget Visibility](_bmad-output/implementation-artifacts/5-2-shared-budget-visibility.md)
 
 ## Dev Agent Record
 

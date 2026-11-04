@@ -82,10 +82,10 @@ so that I can store precise financial records.
 
 ### References
 
-- [Architecture: Inference Engine](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L100)
-- [Architecture: Project Directory Structure](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 2.2](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L181)
-- [PRD: Latency & Local Processing](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L121)
+- [Architecture: Inference Engine](_bmad-output/planning-artifacts/architecture.md#L100)
+- [Architecture: Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 2.2](_bmad-output/planning-artifacts/epics.md#L181)
+- [PRD: Latency & Local Processing](_bmad-output/planning-artifacts/prd.md#L121)
 
 ## Dev Agent Record
 

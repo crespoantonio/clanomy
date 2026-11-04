@@ -167,11 +167,11 @@ so that I can easily add my partner, housemates, or family members to my shared 
 
 ### References
 
-- [Architecture: Multi-Tenancy & Family Scoping](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L105)
-- [Architecture: Project Directory Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 5.1](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L309)
-- [PRD: Family Groups (FR10)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L109)
-- [Epic 4 Retrospective: Commitments for Epic 5](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/epic-4-retro-2026-08-16.md#L40)
+- [Architecture: Multi-Tenancy & Family Scoping](_bmad-output/planning-artifacts/architecture.md#L105)
+- [Architecture: Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 5.1](_bmad-output/planning-artifacts/epics.md#L309)
+- [PRD: Family Groups (FR10)](_bmad-output/planning-artifacts/prd.md#L109)
+- [Epic 4 Retrospective: Commitments for Epic 5](_bmad-output/implementation-artifacts/epic-4-retro-2026-08-16.md#L40)
 
 ## Dev Agent Record
 

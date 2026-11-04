@@ -149,11 +149,11 @@ so that I can understand my spending trends, monitor my cash flow, and stay with
 
 ### References
 
-- [Architecture: Data Architecture & Encryption](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L114)
-- [Architecture: Service Layer Pattern](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L163)
-- [Epics: Story 3.2](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L238)
-- [PRD: Conversational Queries (ASK)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L102)
-- [Previous Story: Story 3.1](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/3-1-natural-language-query-processor-rag-lite.md#L1)
+- [Architecture: Data Architecture & Encryption](_bmad-output/planning-artifacts/architecture.md#L114)
+- [Architecture: Service Layer Pattern](_bmad-output/planning-artifacts/architecture.md#L163)
+- [Epics: Story 3.2](_bmad-output/planning-artifacts/epics.md#L238)
+- [PRD: Conversational Queries (ASK)](_bmad-output/planning-artifacts/prd.md#L102)
+- [Previous Story: Story 3.1](_bmad-output/implementation-artifacts/3-1-natural-language-query-processor-rag-lite.md#L1)
 
 ## Dev Agent Record
 

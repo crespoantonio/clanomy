@@ -74,10 +74,10 @@ so that I can log expenses without typing.
 
 ### References
 
-- [Architecture: Inference Engine](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L100)
-- [Architecture: Project Directory Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 2.1](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L168)
-- [PRD: Latency & Local Processing](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L121)
+- [Architecture: Inference Engine](_bmad-output/planning-artifacts/architecture.md#L100)
+- [Architecture: Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 2.1](_bmad-output/planning-artifacts/epics.md#L168)
+- [PRD: Latency & Local Processing](_bmad-output/planning-artifacts/prd.md#L121)
 
 ## Dev Agent Record
 

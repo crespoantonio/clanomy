@@ -58,9 +58,9 @@ so that my privacy is guaranteed even if the database is compromised.
 
 ### References
 
-- [Architecture: Data Architecture](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L112)
-- [Architecture: Project Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L192)
-- [Epics: Story 1.2](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L124)
+- [Architecture: Data Architecture](_bmad-output/planning-artifacts/architecture.md#L112)
+- [Architecture: Project Structure](_bmad-output/planning-artifacts/architecture.md#L192)
+- [Epics: Story 1.2](_bmad-output/planning-artifacts/epics.md#L124)
 
 ## Dev Agent Record
 
@@ -70,8 +70,8 @@ Gemini 1.5 Pro
 
 ### Debug Log References
 
-- [pytest results](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_encryption.py) - 3 tests passed.
-- [Key generation](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/.env) - Validated Fernet key added.
+- [pytest results](tests/services/test_encryption.py) - 3 tests passed.
+- [Key generation](.env) - Validated Fernet key added.
 
 ### Completion Notes List
 

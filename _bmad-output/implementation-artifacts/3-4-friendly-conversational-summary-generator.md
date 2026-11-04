@@ -139,12 +139,12 @@ so that I feel financially aware, in control of my household budget, and motivat
 
 ### References
 
-- [Architecture: Inference Engine & Ollama](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L100)
-- [Architecture: Conversational Query Logic](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L26)
-- [Architecture: 3s Rule Audit](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L182)
-- [Epics: Story 3.4](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L263)
-- [PRD: Conversational Summaries FR9](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L29)
-- [Previous Story: Story 3.3](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/3-3-category-based-spending-filters.md#L1)
+- [Architecture: Inference Engine & Ollama](_bmad-output/planning-artifacts/architecture.md#L100)
+- [Architecture: Conversational Query Logic](_bmad-output/planning-artifacts/architecture.md#L26)
+- [Architecture: 3s Rule Audit](_bmad-output/planning-artifacts/architecture.md#L182)
+- [Epics: Story 3.4](_bmad-output/planning-artifacts/epics.md#L263)
+- [PRD: Conversational Summaries FR9](_bmad-output/planning-artifacts/prd.md#L29)
+- [Previous Story: Story 3.3](_bmad-output/implementation-artifacts/3-3-category-based-spending-filters.md#L1)
 
 ## Dev Agent Record
 

@@ -55,10 +55,10 @@ so that **I have a zero-friction onboarding experience**.
 
 ### References
 
-- [Architecture: Authentication & Security](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L118)
-- [Architecture: Project Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L192)
-- [Epics: Story 1.4](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L150)
-- [SQLModel Models](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/db/models.py)
+- [Architecture: Authentication & Security](_bmad-output/planning-artifacts/architecture.md#L118)
+- [Architecture: Project Structure](_bmad-output/planning-artifacts/architecture.md#L192)
+- [Epics: Story 1.4](_bmad-output/planning-artifacts/epics.md#L150)
+- [SQLModel Models](src/db/models.py)
 
 ## Dev Agent Record
 

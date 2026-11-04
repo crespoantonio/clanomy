@@ -80,9 +80,9 @@ so that I can store data with strict isolation and security.
 
 ## Project Context Reference
 
-- [Architecture: Data Architecture](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L112)
-- [Architecture: Project Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L192)
-- [Epics: Story 1.3](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L137)
+- [Architecture: Data Architecture](_bmad-output/planning-artifacts/architecture.md#L112)
+- [Architecture: Project Structure](_bmad-output/planning-artifacts/architecture.md#L192)
+- [Epics: Story 1.3](_bmad-output/planning-artifacts/epics.md#L137)
 
 ## Dev Agent Record
 
@@ -92,7 +92,7 @@ Gemini 2.0 Flash
 
 ### Debug Log References
 
-- [pytest results](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/db/test_models.py) - 5 tests passed (SQLite in-memory).
+- [pytest results](tests/db/test_models.py) - 5 tests passed (SQLite in-memory).
 
 ### Completion Notes List
 

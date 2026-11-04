@@ -1,8 +1,8 @@
 ---
 stepsCompleted: [1, 2, 3, 4]
 inputDocuments:
-  - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\prd.md
-  - c:\Users\cresp\Documents\Projectos\FamFin-AI\_bmad-output\planning-artifacts\architecture.md
+  - _bmad-output/planning-artifacts/prd.md
+  - _bmad-output/planning-artifacts/architecture.md
 workflowType: 'epics-and-stories'
 status: 'complete'
 completedAt: '2026-09-01'

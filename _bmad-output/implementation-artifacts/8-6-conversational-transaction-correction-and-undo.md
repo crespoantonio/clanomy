@@ -61,10 +61,10 @@ So that I can immediately fix transcription mistakes or incorrect categories wit
   - [x] Test Notion update/archive mocking.
 
 ## Suggested Review Order
-1. [`src/services/query_service.py`](file:///c:/Users/cresp/Documents/Projectos/clanomy/src/services/query_service.py): Review `ParsedQueryIntent` delta fields and system prompt updates.
-2. [`src/services/notion_service.py`](file:///c:/Users/cresp/Documents/Projectos/clanomy/src/services/notion_service.py): Review `update_transaction_page` and `archive_transaction_page`.
-3. [`src/services/ai_orchestrator.py`](file:///c:/Users/cresp/Documents/Projectos/clanomy/src/services/ai_orchestrator.py): Review `_handle_transaction_correction`, `_handle_transaction_undo`, and regex routing shortcuts.
-4. [`tests/services/test_corrections_and_undo.py`](file:///c:/Users/cresp/Documents/Projectos/clanomy/tests/services/test_corrections_and_undo.py): Review test cases covering all correction, undo, and Notion mirroring flows.
+1. [`src/services/query_service.py`](src/services/query_service.py): Review `ParsedQueryIntent` delta fields and system prompt updates.
+2. [`src/services/notion_service.py`](src/services/notion_service.py): Review `update_transaction_page` and `archive_transaction_page`.
+3. [`src/services/ai_orchestrator.py`](src/services/ai_orchestrator.py): Review `_handle_transaction_correction`, `_handle_transaction_undo`, and regex routing shortcuts.
+4. [`tests/services/test_corrections_and_undo.py`](tests/services/test_corrections_and_undo.py): Review test cases covering all correction, undo, and Notion mirroring flows.
 
 ## Technical Notes
 

@@ -260,7 +260,7 @@ so that my Notion financial dashboard and workspace are always in sync without m
 
 ### Source Files to Touch
 
-#### [MODIFY] [src/services/notion_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/notion_service.py)
+#### [MODIFY] [src/services/notion_service.py](src/services/notion_service.py)
 - **Current State**: Contains token validation, database searching, connection and status management. `get_database_details` returns property names as a list.
 - **Changes for Story 6.2**:
   - Update `get_database_details` to also return `properties_schema: Dict[str, Any]` containing property types for schema discovery.
@@ -269,7 +269,7 @@ so that my Notion financial dashboard and workspace are always in sync without m
   - Add `test_connection_mirror(self, family_id)` to create a test database page for diagnostics.
 - **Preserve**: All existing methods (`validate_token`, `search_databases`, `connect_database`, `disconnect_workspace`, `get_family_notion_status`) and exception classes (`NotionAuthError`, `NotionDatabaseNotFoundError`, `NotionServiceError`).
 
-#### [MODIFY] [src/services/ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/src/services/ai_orchestrator.py)
+#### [MODIFY] [src/services/ai_orchestrator.py](src/services/ai_orchestrator.py)
 - **Current State**: Extracts expenses, encrypts and saves them to SQLite/Postgres, handles conversational queries, family management, and `/notion connect/setdb/status/disconnect`.
 - **Changes for Story 6.2**:
   - After saving an expense transaction in `orchestrate()`, retrieve `user.family_id` and `user.full_name` (or `username`), and spawn a background task:
@@ -288,13 +288,13 @@ so that my Notion financial dashboard and workspace are always in sync without m
   - Add handlers in `parsed_query.intent == "notion_manage"` for `/notion test` and `/notion sync`.
 - **Preserve**: All existing routing for `/createfamily`, `/invite`, `/family`, `/familytotal`, export, delete account, and `/notion connect/setdb/status/disconnect`.
 
-#### [MODIFY] [tests/services/test_notion_service.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_notion_service.py)
+#### [MODIFY] [tests/services/test_notion_service.py](tests/services/test_notion_service.py)
 - **Changes for Story 6.2**:
   - Add unit tests for `mirror_transaction` covering successful page creation, property formatting, missing connection handling (returns `None`), and API error handling.
   - Add unit tests for `_build_page_properties` verifying adaptive matching of custom database schemas (e.g., `"Name"`, `"Cost"`, `"Tags"`, `"Date"`, `"Member"`).
   - Add unit tests for `test_connection_mirror`.
 
-#### [MODIFY] [tests/services/test_ai_orchestrator.py](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/tests/services/test_ai_orchestrator.py)
+#### [MODIFY] [tests/services/test_ai_orchestrator.py](tests/services/test_ai_orchestrator.py)
 - **Changes for Story 6.2**:
   - Add integration tests verifying that when a family has Notion configured, logging an expense triggers `mirror_transaction`.
   - Add test verifying that when Notion mirroring fails, local transaction is still persisted and user still receives Telegram confirmation.
@@ -310,11 +310,11 @@ so that my Notion financial dashboard and workspace are always in sync without m
 
 ### References
 
-- [Epics: Story 6.2 (Real-Time Log Mirroring)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L363-L375)
-- [PRD: Integrated Dashboard (FR12, FR13, Journey 3.3)](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L63-L65)
-- [Architecture: Notion Sync Worker & Boundaries](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L28-L38)
-- [Story 6.1: Notion Workspace Connection](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/6-1-notion-workspace-connection.md)
-- [Story 5.3: Per-Member Spending Attribution](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/5-3-per-member-spending-attribution.md)
+- [Epics: Story 6.2 (Real-Time Log Mirroring)](_bmad-output/planning-artifacts/epics.md#L363-L375)
+- [PRD: Integrated Dashboard (FR12, FR13, Journey 3.3)](_bmad-output/planning-artifacts/prd.md#L63-L65)
+- [Architecture: Notion Sync Worker & Boundaries](_bmad-output/planning-artifacts/architecture.md#L28-L38)
+- [Story 6.1: Notion Workspace Connection](_bmad-output/implementation-artifacts/6-1-notion-workspace-connection.md)
+- [Story 5.3: Per-Member Spending Attribution](_bmad-output/implementation-artifacts/5-3-per-member-spending-attribution.md)
 
 ## Dev Agent Record
 

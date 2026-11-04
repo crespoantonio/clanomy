@@ -185,11 +185,11 @@ so that I can quickly review and retrieve my financial records without navigatin
 
 ### References
 
-- [Architecture: Inference Engine](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L100)
-- [Architecture: Complete Project Directory Structure](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 3.1](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L225)
-- [PRD: Conversational Queries ("ASK")](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L102)
-- [Epic 2 Retrospective: Action Plan for Epic 3](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/implementation-artifacts/epic-2-retro-2026-08-14.md#L44)
+- [Architecture: Inference Engine](_bmad-output/planning-artifacts/architecture.md#L100)
+- [Architecture: Complete Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 3.1](_bmad-output/planning-artifacts/epics.md#L225)
+- [PRD: Conversational Queries ("ASK")](_bmad-output/planning-artifacts/prd.md#L102)
+- [Epic 2 Retrospective: Action Plan for Epic 3](_bmad-output/implementation-artifacts/epic-2-retro-2026-08-14.md#L44)
 
 ## Dev Agent Record
 

@@ -101,10 +101,10 @@ so that I don't have to wait for the bot to finish processing.
 
 ### References
 
-- [Architecture: API & Communication Patterns](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L125)
-- [Architecture: Project Directory Structure](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L196)
-- [Epics: Story 2.3](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/epics.md#L194)
-- [PRD: The 3-Second Rule](file:///C:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L41)
+- [Architecture: API & Communication Patterns](_bmad-output/planning-artifacts/architecture.md#L125)
+- [Architecture: Project Directory Structure](_bmad-output/planning-artifacts/architecture.md#L196)
+- [Epics: Story 2.3](_bmad-output/planning-artifacts/epics.md#L194)
+- [PRD: The 3-Second Rule](_bmad-output/planning-artifacts/prd.md#L41)
 
 ## Dev Agent Record
 

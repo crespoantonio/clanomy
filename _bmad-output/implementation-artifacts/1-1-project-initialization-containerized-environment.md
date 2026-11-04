@@ -65,9 +65,9 @@ so that I have a consistent, "Cloud-Ready" development environment.
 - **Conflict Avoidance:** Do not move or delete `_bmad` or `_bmad-output` folders.
 
 ### References
-- [Architecture Decision Document: Project Structure](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L192)
-- [Architecture Decision Document: Selected Starter](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/architecture.md#L61)
-- [PRD: Technical Success](file:///c:/Users/cresp/Documents/Projectos/FamFin-AI/_bmad-output/planning-artifacts/prd.md#L50)
+- [Architecture Decision Document: Project Structure](_bmad-output/planning-artifacts/architecture.md#L192)
+- [Architecture Decision Document: Selected Starter](_bmad-output/planning-artifacts/architecture.md#L61)
+- [PRD: Technical Success](_bmad-output/planning-artifacts/prd.md#L50)
 
 ## Dev Agent Record
 

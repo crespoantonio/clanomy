@@ -68,8 +68,21 @@ Thumbs.db
 *.swp
 *.swo
 
-# Sensitive Strategy Docs
+# Sensitive Strategy, Monetization, Subscription & Payment Configuration Docs
 monetization-and-subscription-strategy.md
-post.md
+docs/monetization-and-subscription-strategy.md
+paddle-production-setup.md
+docs/paddle-production-setup.md
+paddle-sandbox-testing.md
+docs/paddle-sandbox-testing.md
 gcp_cloud_scheduler_setup.md
+docs/gcp_cloud_scheduler_setup.md
+docs/*paddle*.md
+docs/*subscription*.md
+docs/*monetization*.md
+docs/*billing*.md
+docs/*payment*.md
+*paddle*.md
+*monetization*.md
+post.md
 audit.md

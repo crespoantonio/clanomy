@@ -29,8 +29,12 @@ class Settings(BaseSettings):
     # - /api/internal/jobs/trial-lifecycle: Internal scheduled jobs (authenticated separately via CRON_SECRET)
     CLOUDFLARE_ORIGIN_EXEMPT_PATHS: set[str] = {
         "/health",
+        "/landing",
         "/pay",
         "/welcome",
+        "/styles.css",
+        "/script.js",
+        "/translations.js",
         "/api/v1/telegram/webhook",
         "/api/v1/paddle/webhook",
         "/api/internal/jobs/trial-lifecycle",
@@ -226,6 +230,8 @@ class Settings(BaseSettings):
     def is_origin_shield_exempt(self, path: str) -> bool:
         """Check if request path is exempt from Cloudflare origin verification."""
         norm_path = path.rstrip("/") if path != "/" else path
+        if norm_path.startswith("/assets/"):
+            return True
         exempt_normalized = {p.rstrip("/") if p != "/" else p for p in self.CLOUDFLARE_ORIGIN_EXEMPT_PATHS}
         return norm_path in exempt_normalized
 

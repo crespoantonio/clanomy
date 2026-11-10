@@ -256,10 +256,22 @@ async def paddle_webhook(
             except Exception as grad_err:
                 logger.error(f"Error checking member graduation on webhook: {grad_err}", exc_info=True)
 
-        if event_type in ("subscription.created", "subscription.updated"):
+        if event_type in (
+            "subscription.created",
+            "subscription.updated",
+            "subscription.activated",
+            "subscription.past_due",
+            "subscription.paused",
+            "subscription.resumed",
+        ):
             sub_id = data.get("id")
             customer_id = data.get("customer_id")
-            sub_status = data.get("status", "active")
+            default_status = (
+                "past_due"
+                if event_type == "subscription.past_due"
+                else ("paused" if event_type == "subscription.paused" else "active")
+            )
+            sub_status = data.get("status", default_status)
 
             period_end = None
             billing_period = data.get("current_billing_period")

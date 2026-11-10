@@ -836,3 +836,104 @@ def test_paddle_webhook_portal_price_change_precedence(paddle_test_setup, monkey
         assert updated.max_members == 5
         assert updated.paddle_price_id == configured_fam_price
 
+
+def test_paddle_webhook_past_due_paused_resumed_activated_events(paddle_test_setup):
+    """
+    Verify that subscription.past_due, subscription.paused, subscription.resumed,
+    and subscription.activated events properly update family.subscription_status.
+    """
+    secret = paddle_test_setup
+    client = TestClient(app)
+
+    family_id = uuid4()
+    with Session(engine) as session:
+        family = Family(
+            id=family_id,
+            name="Status Transitions Family",
+            plan_type="duo_pro",
+            subscription_status="active",
+            max_members=2,
+            paddle_subscription_id="sub_status_001"
+        )
+        session.add(family)
+        session.commit()
+
+    now_ts = int(time.time())
+
+    # 1. subscription.past_due
+    payload_past_due = {
+        "event_id": "evt_status_past_due_001",
+        "event_type": "subscription.past_due",
+        "data": {
+            "id": "sub_status_001",
+            "status": "past_due"
+        }
+    }
+    raw_pd = json.dumps(payload_past_due)
+    res_pd = client.post(
+        "/api/v1/paddle/webhook",
+        content=raw_pd,
+        headers={"Paddle-Signature": _generate_paddle_signature(raw_pd, secret, now_ts)}
+    )
+    assert res_pd.status_code == 200
+    with Session(engine) as session:
+        assert session.get(Family, family_id).subscription_status == "past_due"
+
+    # 2. subscription.paused
+    payload_paused = {
+        "event_id": "evt_status_paused_002",
+        "event_type": "subscription.paused",
+        "data": {
+            "id": "sub_status_001",
+            "status": "paused"
+        }
+    }
+    raw_pa = json.dumps(payload_paused)
+    res_pa = client.post(
+        "/api/v1/paddle/webhook",
+        content=raw_pa,
+        headers={"Paddle-Signature": _generate_paddle_signature(raw_pa, secret, now_ts)}
+    )
+    assert res_pa.status_code == 200
+    with Session(engine) as session:
+        assert session.get(Family, family_id).subscription_status == "paused"
+
+    # 3. subscription.resumed
+    payload_resumed = {
+        "event_id": "evt_status_resumed_003",
+        "event_type": "subscription.resumed",
+        "data": {
+            "id": "sub_status_001",
+            "status": "active"
+        }
+    }
+    raw_re = json.dumps(payload_resumed)
+    res_re = client.post(
+        "/api/v1/paddle/webhook",
+        content=raw_re,
+        headers={"Paddle-Signature": _generate_paddle_signature(raw_re, secret, now_ts)}
+    )
+    assert res_re.status_code == 200
+    with Session(engine) as session:
+        assert session.get(Family, family_id).subscription_status == "active"
+
+    # 4. subscription.activated
+    payload_activated = {
+        "event_id": "evt_status_activated_004",
+        "event_type": "subscription.activated",
+        "data": {
+            "id": "sub_status_001",
+            "status": "active"
+        }
+    }
+    raw_ac = json.dumps(payload_activated)
+    res_ac = client.post(
+        "/api/v1/paddle/webhook",
+        content=raw_ac,
+        headers={"Paddle-Signature": _generate_paddle_signature(raw_ac, secret, now_ts)}
+    )
+    assert res_ac.status_code == 200
+    with Session(engine) as session:
+        assert session.get(Family, family_id).subscription_status == "active"
+
+

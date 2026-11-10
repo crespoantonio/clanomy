@@ -83,6 +83,9 @@ jobs:
             "^\.pre-commit-config\.ya?ml$"
             "^docs/monetization-and-subscription-strategy\.md$"
             "^docs/gcp_cloud_scheduler_setup\.md$"
+            "^docs/.*paddle.*\.md$"
+            "^docs/.*subscription.*\.md$"
+            "^docs/.*monetization.*\.md$"
 
             # Supply Chain & Infrastructure as Code
             "^requirements.*\.txt$"

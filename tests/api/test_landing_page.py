@@ -127,8 +127,29 @@ def test_welcome_page_serves_html():
     assert "Back to Telegram" in content
     assert "Paddle Merchant of Record" in content
     assert "https://t.me/" in content
+    assert "{{ BOT_USERNAME }}" not in content
     # Ensure no extra parameters on the redirect button
     assert "t.me/" in content and "?start=" not in content
+
+
+def test_pay_page_injects_bot_username_and_paddle_config(monkeypatch):
+    from src.core.config import settings
+    from unittest.mock import patch, AsyncMock
+
+    monkeypatch.setattr(settings, "ENABLE_SUBSCRIPTIONS", True)
+    monkeypatch.setattr(settings, "PADDLE_CLIENT_SIDE_TOKEN", "test_token_xyz")
+    monkeypatch.setattr(settings, "PADDLE_ENVIRONMENT", "sandbox")
+    monkeypatch.setattr(settings, "TELEGRAM_BOT_USERNAME", "custom_clanomy_bot")
+
+    client = TestClient(app)
+    with patch("src.services.telegram_service.TelegramService.get_bot_username", AsyncMock(return_value="custom_clanomy_bot")):
+        response = client.get("/pay")
+    assert response.status_code == 200
+    content = response.text
+    assert "test_token_xyz" in content
+    assert "https://t.me/custom_clanomy_bot" in content
+    assert "{{ BOT_USERNAME }}" not in content
+    assert "{{ PADDLE_CLIENT_SIDE_TOKEN }}" not in content
 
 def test_landing_page_pricing_links_and_elements():
     client = TestClient(app)

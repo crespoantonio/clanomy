@@ -1560,3 +1560,60 @@ So that I never encounter technical errors or hallucinated numbers.
 **And** Stage 3 computes exact totals, pending amounts, and currency aggregations strictly using Python `Decimal` arithmetic.
 **And** Stage 4 synthesizes a warm, conversational response and asserts numeric agreement via the AI Verification Gate, falling back to deterministic templates if the LLM produces mismatched numbers.
 **And** agentic tools (`execute_agent_tool`) support synchronous query service calls without `TypeError` exceptions.
+
+---
+
+## Epic 26: Context Engineering Hardening & Bounded Agentic Memory
+
+Implement dynamic token budgeting, exemplar pruning in the query synthesis pipeline, and bounded multi-turn sliding-window conversation memory in the agentic assistant core.
+
+### Story 26.1: Query Synthesizer Dynamic Context Budgeting & Exemplar Pruning
+As a System Architect and User,
+I want the Stage 4 Query Synthesizer to bound its ground-truth context to a maximum of 5 representative transaction exemplars alongside exact category and currency aggregations,
+So that queries across large ledgers never overflow LLM context windows, middle-truncate on local Ollama, or inflate API token consumption.
+
+**Acceptance Criteria:**
+**Given** a routed dataset containing any number of transactions or bills (e.g., 1 to 500+ records)
+**When** passed to `QuerySynthesizer.synthesize`
+**Then** the individual records list in `<ground_truth_metrics>` includes at most 5 representative exemplars (sorted by amount descending).
+**And** appends an explicit structural note indicating the number of displayed exemplars vs total records.
+**And** all mathematical totals and currency aggregations computed by `math_engine` remain comprehensive and mathematically exact.
+**And** `ground_truth_context` character length is strictly capped to prevent prompt inflation.
+
+### Story 26.2: Agentic Multi-Turn Sliding-Window Memory & Reference Resolution
+As a Clanomy User,
+I want the conversational agent to remember recent context when I ask follow-up questions (e.g. "And how much of that was dining out?"),
+So that I don't have to repeat dates, categories, or currency context across sequential messages.
+
+**Acceptance Criteria:**
+**Given** an active conversation turn in `AgentService.run`
+**When** the user sends a follow-up message within the same session
+**Then** the agent incorporates the bounded recent history (up to 3 recent turns) into the tool-calling context.
+**And** the session store automatically evicts stale conversations using an LRU policy with a hard maximum session count.
+**And** the session store automatically expires sessions exceeding a configurable inactivity timeout (default 15 minutes / 900s), flushing stale context so hours-old inquiries never contaminate subsequent messages.
+**And** the system provides a clean reset mechanism (`clear_session`) for testing and explicit context resetting.
+
+### Story 26.3: Context Budgeting and Regression Test Suite
+As a Quality Engineer,
+I want comprehensive unit and integration tests verifying context bounds and multi-turn dialogue memory,
+So that regressions in context injection, prompt bounds, or memory state are caught in CI.
+
+**Acceptance Criteria:**
+**Given** test suites in `tests/services/` and `tests/unit/`
+**When** running with mock and in-memory LLM providers
+**Then** tests verify that synthesizer context never exceeds 5 exemplars for datasets with 50+ transactions.
+**And** tests verify that `AgentService` preserves recent user turns and provides correct follow-up context.
+**And** all existing tests pass with 100% backward compatibility.
+
+### Story 26.4: Agent Fallback Circuit Breaker & Structured Tool Error Envelope
+As a Clanomy User,
+I want the agentic assistant to handle tool errors and execution iteration limits with structured recovery envelopes and deterministic fallbacks,
+So that I never see raw stack traces, technical error jargon, or empty responses if an AI provider or tool call stumbles.
+
+**Acceptance Criteria:**
+**Given** an agent turn in `AgentService.run`
+**When** a tool execution encounters an error or validation failure in `execute_agent_tool`
+**Then** the tool returns a `ToolExecutionEnvelope` with `status: "error"`, domain error code, human-readable message, and recovery hint, omitting raw stack traces.
+**And** when `complete_chat_with_tools` times out, raises an unhandled error, or returns an empty response after exhausting iterations
+**Then** the Fallback Circuit Breaker automatically falls back to `DecoupledQueryPipeline` or deterministic query logic to construct a verified answer.
+**And** logs structured error telemetry for debugging and monitoring.

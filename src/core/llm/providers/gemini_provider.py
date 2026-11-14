@@ -285,6 +285,7 @@ class GeminiProvider(BaseLLMProvider):
         user_prompt: str,
         tool_declarations: list[dict],
         tool_executor: Any,
+        chat_history: Optional[list[dict]] = None,
         temperature: float = 0.2,
         timeout: float = 30.0,
         max_tokens: int = 1000,
@@ -294,6 +295,7 @@ class GeminiProvider(BaseLLMProvider):
         Executes a native tool-calling conversation with Gemini v1beta API.
         Iteratively runs tool calls returned by Gemini, feeds back results,
         and returns the final synthesized natural language answer and list of executed calls.
+        Supports multi-turn conversation context via optional `chat_history`.
         """
         client = get_http_client()
         url = f"{self.base_url}/models/{self.model}:generateContent"
@@ -312,9 +314,19 @@ class GeminiProvider(BaseLLMProvider):
                 "thinkingLevel": thinking_lvl
             }
 
-        contents = [
+        contents = []
+        if chat_history:
+            for turn in chat_history:
+                if "parts" in turn:
+                    contents.append(turn)
+                elif "content" in turn:
+                    contents.append({"role": turn.get("role", "user"), "parts": [{"text": str(turn["content"])}]})
+                elif "text" in turn:
+                    contents.append({"role": turn.get("role", "user"), "parts": [{"text": str(turn["text"])}]})
+
+        contents.append(
             {"role": "user", "parts": [{"text": user_prompt}]}
-        ]
+        )
 
         payload = {
             "systemInstruction": {

@@ -255,12 +255,20 @@ Mateo creates a new workspace and invites Carla. They receive an automatic 60-da
 *   **FR75:** All financial calculations, aggregations, and currency segregations must be executed strictly in deterministic Python code using `Decimal` arithmetic; the LLM is structurally forbidden from performing math calculations.
 *   **FR76:** For read-only queries with partial semantic ambiguity, the system must follow the "Answer with Default & Disclose Assumption" rule: it renders the most probable result immediately with explicit assumption disclosure and a low-friction Telegram inline pivot, rather than blocking the user behind a conversational interrogation wall.
 
+### 5.23 Context & Harness Engineering Architecture
+*   **FR77:** The query synthesis pipeline must enforce dynamic context budgeting by capping itemized transaction exemplars to a deterministic maximum (Top 5 representative records) and providing ground-truth metrics aggregations, preventing context window overflow and middle-truncation on local models (Ollama) and high-volume ledgers.
+*   **FR78:** The agentic core (`AgentService`) must maintain a bounded sliding-window session store (max 3 recent user/assistant turns) per workspace member with an automated inactivity TTL (default 15 minutes) to enable natural multi-turn reference resolution while automatically flushing stale historical dialogue to prevent cross-session context contamination.
+*   **FR79:** Decrypted zero-knowledge transaction concepts must be selectively minimized at the context injection boundary, transmitting high-level categorical aggregates and capped exemplars rather than exhaustive raw decrypted ledger dumps to external LLM providers.
+*   **FR80:** The agentic execution harness must implement a Fallback Circuit Breaker: if a tool calling turn encounters unhandled exceptions, provider timeouts, or reaches iteration caps (`max_iterations`) without producing a valid answer, the harness automatically intercepts the failure and synthesizes a deterministic response via the query engine, preventing blank or unhelpful error messages.
+*   **FR81:** All agent tool executions must return a structured `ToolExecutionEnvelope` separating execution metadata, semantic status (`success` vs `error`), validated data, and domain-specific recovery hints, preventing raw Python tracebacks or unhandled exceptions from entering the LLM context.
+
 ## 6. Non-Functional Requirements
 
 ### 6.1 Performance
 *   **Latency:** 95% of logs confirmed within 3 seconds of input reception.
 *   **Efficiency:** STT/LLM pipeline must run on consumer-grade local hardware or lightweight cloud inference (<150MB container RAM with Gemini).
 *   **NFR17 (Interactive UI Callback Latency):** Telegram `callback_query` acknowledgment and in-place message updates must execute in < 1.0 second.
+*   **NFR20 (Context Window Invariance & Token Budget Cap):** Total dynamic prompt context injected into query and synthesis pipelines must be deterministically bounded (<2,048 tokens / 4,000 characters) regardless of underlying ledger size to guarantee sub-3s inference and zero middle-truncation on local and cloud models.
 
 ### 6.2 Security & Privacy
 *   **Encryption:** 100% of transaction descriptions, amounts, and scheduled obligations encrypted at rest using AES-256 (Fernet).

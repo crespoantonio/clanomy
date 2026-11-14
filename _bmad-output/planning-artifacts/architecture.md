@@ -989,3 +989,26 @@ sequenceDiagram
 - **Agent Tooling Hardening:**
   - Integrated `_maybe_await` across all agent tools (`query_savings`, `query_cash_flow`, `query_bills`, `query_history`) to safely interoperate with both asynchronous and synchronous service implementations.
   - Added direct `date` filtering to `QueryBillsParams` and linked `AIOrchestrator` query handling to `DecoupledQueryPipeline`.
+
+---
+
+### 21. Context & Harness Engineering Architecture (Epic 26 Hardening)
+
+- **Context Engineering Principles:**
+  - **Dynamic Context Budgeting & Exemplar Pruning (`QuerySynthesizer`):**
+    - Prevents unbounded prompt growth by capping raw individual transaction descriptions in `<ground_truth_metrics>` to a deterministic maximum of 5 representative exemplars (sorted by amount descending).
+    - Offloads all aggregate representation to Stage 3 `DeterministicMathEngine` metrics (`Currency Aggregations` and `category_totals`), ensuring the LLM is supplied with exact pre-calculated totals rather than raw ledger dumps.
+    - Caps total ground truth character volume (`MAX_GROUND_TRUTH_CHARS`), protecting against context exhaustion on local Ollama models (4K token limits) and controlling latency/token cost on cloud inference.
+  - **Bounded Multi-Turn Sliding-Window Memory (`AgentService`):**
+    - Implements an LRU-bounded conversation session cache (`_BoundedAgentSessionStore`) tracking up to 3 recent user/assistant turns per workspace member.
+    - Injects recent dialogue context into Gemini native tool calling (`complete_chat_with_tools`), enabling smooth conversational reference resolution (e.g., "how much of that was food?") while strictly bounding token growth and eliminating stale context drift.
+    - Prevents memory leaks through strict LRU eviction (`max_sessions=1000`) and provides atomic session clearing (`clear_session`).
+    - Enforces an automated Inactivity TTL Governor (`ttl_seconds=900`, 15 minutes): flushes active session history automatically if the gap between messages exceeds 15 minutes, guaranteeing that independent inquiries sent hours or days apart start with a clean slate without temporal anchoring bias.
+
+- **Harness Engineering Principles:**
+  - **Structured Tool Execution Envelope (`execute_agent_tool`):**
+    - Standardizes all agent tool return payloads into a structured `ToolExecutionEnvelope` containing execution `status` (`success` vs `error`), typed payload `data`, and a clean domain `error` object (`code`, `message`, `recovery_hint`).
+    - Strips low-level internal stack traces from model context, preventing the agent from echoing technical tracebacks to end users and equipping the model to execute semantic recovery within its iteration budget.
+  - **Fallback Circuit Breaker (`AgentService`):**
+    - Protects user interaction against unhandled AI provider errors, timeout terminations, or loop exhaustions (`max_iterations` reached with empty text).
+    - Automatically trips the circuit breaker to invoke the deterministic `DecoupledQueryPipeline`, transforming stochastic execution failures into guaranteed, mathematically accurate responses.

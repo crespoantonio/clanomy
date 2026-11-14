@@ -382,8 +382,36 @@ async def execute_agent_tool(
             }
 
         else:
-            return {"status": "error", "message": f"Unknown tool: {tool_name}"}
+            return {
+                "status": "error",
+                "tool": tool_name,
+                "message": f"Unknown tool: '{tool_name}'",
+                "error": {
+                    "code": "UNKNOWN_TOOL",
+                    "message": f"The tool '{tool_name}' is not recognized.",
+                    "recovery_hint": "Select one of the valid registered tools: query_savings, query_cash_flow, query_bills, query_history."
+                }
+            }
 
     except Exception as e:
         logger.error(f"Error executing agent tool '{tool_name}': {e}", exc_info=True)
-        return {"status": "error", "message": str(e), "tool": tool_name}
+        from pydantic import ValidationError
+        if isinstance(e, ValidationError):
+            code = "INVALID_PARAMETERS"
+            hint = "Verify tool arguments match the schema parameters (valid ISO currency, valid timeframe, or numeric constraints)."
+            msg = f"Parameter validation failed for tool '{tool_name}'."
+        else:
+            code = "EXECUTION_FAILURE"
+            hint = "The domain query encountered an error. Try adjusting timeframe or checking if relevant records exist."
+            msg = f"Failed to execute tool '{tool_name}': {type(e).__name__}"
+
+        return {
+            "status": "error",
+            "tool": tool_name,
+            "message": msg,
+            "error": {
+                "code": code,
+                "message": msg,
+                "recovery_hint": hint
+            }
+        }

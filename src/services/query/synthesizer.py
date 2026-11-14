@@ -190,17 +190,39 @@ class QuerySynthesizer:
         if total_count == 0:
             return deterministic_resp
 
-        # 2. Build structured ground truth prompt context
-        items_descriptions = []
-        for b in routed.scheduled_bills:
+        # 2. Build structured ground truth prompt context with Dynamic Context Budgeting (Story 26.1)
+        MAX_CONTEXT_EXEMPLARS = 5
+        MAX_GROUND_TRUTH_CHARS = 4000
+
+        # Sort items deterministically by amount descending
+        sorted_bills = sorted(
+            routed.scheduled_bills,
+            key=lambda x: (0 if x.status == "pending" else 1, -(float(x.amount or 0)))
+        )
+        sorted_txs = sorted(
+            routed.transactions,
+            key=lambda x: -(float(x.amount or 0))
+        )
+
+        all_item_strings = []
+        for b in sorted_bills:
             due_str = b.due_date.strftime("%Y-%m-%d") if b.due_date else "none"
-            items_descriptions.append(
+            all_item_strings.append(
                 f"- Concept: {b.concept}, Amount: {b.amount} {b.currency}, Due Date: {due_str}, Status: {b.status}"
             )
-        for t in routed.transactions:
-            items_descriptions.append(
+        for t in sorted_txs:
+            all_item_strings.append(
                 f"- Concept: {t.concept}, Amount: {t.amount} {t.currency}, Category: {t.category}"
             )
+
+        total_item_count = len(all_item_strings)
+        if total_item_count > MAX_CONTEXT_EXEMPLARS:
+            exemplar_descriptions = all_item_strings[:MAX_CONTEXT_EXEMPLARS]
+            exemplar_descriptions.append(
+                f"- Note: Showing top {MAX_CONTEXT_EXEMPLARS} representative items out of {total_item_count} total records. The comprehensive financial totals and category metrics above are mathematically exact across all records."
+            )
+        else:
+            exemplar_descriptions = all_item_strings
 
         currency_metrics_summary = []
         for curr, m in metrics_by_currency.items():
@@ -215,8 +237,11 @@ class QuerySynthesizer:
             f"Requested Operation: {ast.operation.op}\n"
             f"Total Records Count: {total_count}\n\n"
             "Currency Aggregations:\n" + "\n".join(currency_metrics_summary) + "\n\n"
-            "Individual Records:\n" + ("\n".join(items_descriptions) if items_descriptions else "None")
+            "Individual Records:\n" + ("\n".join(exemplar_descriptions) if exemplar_descriptions else "None")
         )
+
+        if len(ground_truth_context) > MAX_GROUND_TRUTH_CHARS:
+            ground_truth_context = ground_truth_context[:MAX_GROUND_TRUTH_CHARS] + "\n[Context Truncated for Safety]"
 
         user_prompt = (
             f"<user_question>\n{query_text}\n</user_question>\n\n"

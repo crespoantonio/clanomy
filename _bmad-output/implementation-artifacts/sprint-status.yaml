@@ -207,3 +207,10 @@ development_status:
   25-5-golden-evaluation-dataset-and-regression-test-harness: done
   25-6-option-b-decoupled-query-pipeline-and-ai-verification-gate: done
   epic-25-retrospective: optional
+
+  epic-26: done
+  26-1-query-synthesizer-dynamic-context-budgeting: done
+  26-2-agentic-multi-turn-sliding-window-memory: done
+  26-3-context-budgeting-regression-tests: done
+  26-4-agent-fallback-circuit-breaker-and-error-envelope: done
+  epic-26-retrospective: optional

@@ -1,4 +1,6 @@
 import logging
+import asyncio
+from collections import OrderedDict
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 from datetime import datetime, timezone
@@ -33,15 +35,91 @@ CRITICAL INSTRUCTIONS:
 """
 
 
+class _BoundedAgentSessionStore:
+    """
+    LRU-bounded conversation history store for multi-turn agent interactions (Story 26.2).
+    Stores up to `max_turns` (default 6 messages = 3 user + 3 assistant turns) per session.
+    Evicts oldest sessions when exceeding `max_sessions` (default 1,000) to guarantee bounded memory.
+    Enforces a strict inactivity TTL (`ttl_seconds`, default 900s = 15 minutes) to ensure stale
+    historical context decays and never pollutes subsequent independent conversation sessions.
+    """
+    def __init__(self, max_sessions: int = 1000, max_turns: int = 6, ttl_seconds: int = 900):
+        self._sessions: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        self._max_sessions = max_sessions
+        self._max_turns = max_turns
+        self._ttl_seconds = ttl_seconds
+        self._lock = asyncio.Lock()
+
+    def _get_key(self, user_id: UUID, family_id: Optional[UUID]) -> str:
+        return f"{family_id or 'none'}:{user_id}"
+
+    async def get_history(self, user_id: UUID, family_id: Optional[UUID]) -> List[Dict[str, Any]]:
+        async with self._lock:
+            key = self._get_key(user_id, family_id)
+            if key in self._sessions:
+                session = self._sessions[key]
+                last_active = session.get("last_activity")
+                now = datetime.now(timezone.utc)
+                if last_active and (now - last_active).total_seconds() > self._ttl_seconds:
+                    logger.info(
+                        f"[_BoundedAgentSessionStore] Session {key} expired after {self._ttl_seconds}s of inactivity. Flushing stale context."
+                    )
+                    del self._sessions[key]
+                    return []
+                self._sessions.move_to_end(key)
+                return list(session.get("history", []))
+            return []
+
+    async def append_turn(self, user_id: UUID, family_id: Optional[UUID], user_text: str, assistant_text: str) -> None:
+        async with self._lock:
+            key = self._get_key(user_id, family_id)
+            now = datetime.now(timezone.utc)
+            if key not in self._sessions:
+                if len(self._sessions) >= self._max_sessions:
+                    self._sessions.popitem(last=False)
+                self._sessions[key] = {
+                    "history": [],
+                    "last_activity": now
+                }
+            else:
+                self._sessions.move_to_end(key)
+
+            history = self._sessions[key]["history"]
+            history.append({"role": "user", "parts": [{"text": user_text}]})
+            history.append({"role": "model", "parts": [{"text": assistant_text}]})
+
+            # Bounded sliding window
+            if len(history) > self._max_turns:
+                self._sessions[key]["history"] = history[-self._max_turns:]
+            self._sessions[key]["last_activity"] = now
+
+    async def clear_session(self, user_id: UUID, family_id: Optional[UUID] = None) -> None:
+        async with self._lock:
+            key = self._get_key(user_id, family_id)
+            self._sessions.pop(key, None)
+
+
 class AgentService:
     """
     Agentic Conversational Orchestrator.
-    Combines native Gemini tool calling with in-memory zero-knowledge AES-GCM data access.
+    Combines native Gemini tool calling with in-memory zero-knowledge AES-GCM data access
+    and bounded multi-turn conversation memory with session inactivity TTL.
     """
 
-    def __init__(self, provider: Optional[GeminiProvider] = None, query_service: Optional[QueryService] = None):
+    def __init__(
+        self,
+        provider: Optional[GeminiProvider] = None,
+        query_service: Optional[QueryService] = None,
+        session_store: Optional[_BoundedAgentSessionStore] = None,
+        ttl_seconds: int = 900
+    ):
         self.provider = provider or GeminiProvider()
         self.query_service = query_service or QueryService()
+        self.session_store = session_store or _BoundedAgentSessionStore(ttl_seconds=ttl_seconds)
+
+    async def clear_session(self, user_id: UUID, family_id: Optional[UUID] = None) -> None:
+        """Clears active conversation session history for the given user/family."""
+        await self.session_store.clear_session(user_id, family_id)
 
     async def run(
         self,
@@ -55,7 +133,7 @@ class AgentService:
         is_spanish: Optional[bool] = None
     ) -> Dict[str, Any]:
         """
-        Executes an agentic interaction turn for the given user message.
+        Executes an agentic interaction turn for the given user message with bounded multi-turn context.
         """
         if not text or not text.strip():
             return {"response": "Please provide a valid question or message.", "tools_used": []}
@@ -97,16 +175,60 @@ class AgentService:
                 query_service=self.query_service
             )
 
-        logger.info(f"[AgentService] Running agent turn for user {user_id} with prompt: {text!r}")
+        # Retrieve bounded multi-turn conversation history
+        chat_history = await self.session_store.get_history(user_id, family_id)
 
-        final_text, tools_used = await self.provider.complete_chat_with_tools(
-            system_prompt=dynamic_system_prompt,
-            user_prompt=text,
-            tool_declarations=CLANOMY_TOOLS_DECLARATIONS,
-            tool_executor=_tool_executor,
-            temperature=0.2,
-            timeout=30.0
+        logger.info(
+            f"[AgentService] Running agent turn for user {user_id} with prompt: {text!r} (history turns: {len(chat_history) // 2})"
         )
+
+        try:
+            final_text, tools_used = await self.provider.complete_chat_with_tools(
+                system_prompt=dynamic_system_prompt,
+                user_prompt=text,
+                tool_declarations=CLANOMY_TOOLS_DECLARATIONS,
+                tool_executor=_tool_executor,
+                chat_history=chat_history if chat_history else None,
+                temperature=0.2,
+                timeout=30.0
+            )
+        except Exception as e:
+            logger.warning(
+                f"[AgentService] complete_chat_with_tools failed for user {user_id}: {e}. Tripping Fallback Circuit Breaker.",
+                exc_info=True
+            )
+            final_text = ""
+            tools_used = []
+
+        # Fallback Circuit Breaker: If AI response is empty, whitespace, or aborted due to provider error
+        if not final_text or not final_text.strip():
+            logger.info(
+                f"[AgentService] Fallback Circuit Breaker active for user {user_id}. Executing DecoupledQueryPipeline."
+            )
+            try:
+                from src.services.query.pipeline import DecoupledQueryPipeline
+                pipeline = DecoupledQueryPipeline()
+                final_text = await pipeline.execute(
+                    text=text,
+                    family_id=family_id or user_id,
+                    user_id=user_id,
+                    user_name=user_name or "You",
+                    default_currency=eff_curr,
+                    tz_name=eff_tz,
+                    reference_time=datetime.now(timezone.utc),
+                    is_spanish=is_spanish
+                )
+            except Exception as pipe_err:
+                logger.error(f"[AgentService] Fallback pipeline failed for user {user_id}: {pipe_err}")
+                final_text = (
+                    "No pude procesar tu consulta en este momento. Por favor, intenta nuevamente."
+                    if is_spanish
+                    else "I could not process your query at this moment. Please try again."
+                )
+
+        # Record successful turn into bounded session history
+        if final_text:
+            await self.session_store.append_turn(user_id, family_id, text, final_text)
 
         return {
             "response": final_text,

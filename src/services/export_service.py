@@ -75,7 +75,7 @@ class ExportService:
         """Generates a hardened CSV file from a list of decrypted transactions."""
         with open(file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["Date", "Type", "Amount", "Currency", "Concept", "Category"])
+            writer.writerow(["Date", "Type", "Amount", "Currency", "Concept", "Category", "Member"])
             for tx in transactions:
                 writer.writerow([
                     tx.timestamp.strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -83,7 +83,8 @@ class ExportService:
                     tx.amount,
                     sanitize_csv_cell(tx.currency),
                     sanitize_csv_cell(tx.concept),
-                    sanitize_csv_cell(tx.category)
+                    sanitize_csv_cell(tx.category),
+                    sanitize_csv_cell(tx.user_name or "User")
                 ])
 
     def generate_json(self, transactions: List[DecryptedTransaction], family_id: UUID, file_path: str) -> None:
@@ -102,6 +103,7 @@ class ExportService:
                     "category": tx.category,
                     "concept": tx.concept,
                     "logged_by": tx.user_name or "User",
+                    "member": tx.user_name or "User",
                     "user_id": str(tx.user_id)
                 }
                 for tx in transactions

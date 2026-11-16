@@ -106,22 +106,25 @@ async def test_generate_csv(tmp_path, session):
         rows = list(reader)
         
     assert len(rows) == 4 # header + 3 records
-    assert rows[0] == ["Date", "Type", "Amount", "Currency", "Concept", "Category"]
+    assert rows[0] == ["Date", "Type", "Amount", "Currency", "Concept", "Category", "Member"]
     assert rows[1][1] == "expense"
     assert rows[1][2] == "15.5"
     assert rows[1][3] == "USD"
     assert rows[1][4] == "Coffee with friends"
     assert rows[1][5] == "Food/Drink"
+    assert rows[1][6] == "user1"
     assert rows[2][1] == "expense"
     assert rows[2][2] == "100.0"
     assert rows[2][3] == "EUR"
     assert rows[2][4] == 'Sneakers "Nike", cool'
     assert rows[2][5] == "Shopping"
+    assert rows[2][6] == "user2"
     assert rows[3][1] == "income"
     assert rows[3][2] == "3500.0"
     assert rows[3][3] == "EUR"
     assert rows[3][4] == 'Monthly "Acme" Paycheck'
     assert rows[3][5] == "Salary"
+    assert rows[3][6] == "user2"
 
 @pytest.mark.anyio
 async def test_generate_json(tmp_path, session):
@@ -144,6 +147,7 @@ async def test_generate_json(tmp_path, session):
     assert data["transactions"][0]["amount"] == 15.5
     assert data["transactions"][0]["concept"] == "Coffee with friends"
     assert data["transactions"][0]["logged_by"] == "user1"
+    assert data["transactions"][0]["member"] == "user1"
     assert "user_id" in data["transactions"][0]
     assert data["transactions"][1]["type"] == "expense"
     assert data["transactions"][1]["amount"] == 100.0
@@ -225,7 +229,7 @@ async def test_export_data_mixed_transactions(session, encryption_service, test_
         content = f.read()
     os.unlink(file_path)
     
-    assert "Date,Type,Amount,Currency,Concept,Category" in content
+    assert "Date,Type,Amount,Currency,Concept,Category,Member" in content
     assert "expense" in content
     assert "income" in content
 

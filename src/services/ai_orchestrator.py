@@ -1,6 +1,7 @@
 import time
 import logging
 import datetime
+from datetime import datetime, timezone, timedelta
 import asyncio
 import re
 import html
@@ -118,7 +119,7 @@ class AIOrchestrator:
         amount: str,
         concept: str,
         category: str,
-        timestamp: Optional[datetime.datetime] = None,
+        timestamp: Optional[datetime] = None,
         tx_type: str = "expense"
     ) -> UUID:
         """
@@ -140,7 +141,7 @@ class AIOrchestrator:
                     concept=concept,
                     category=category,
                     tx_type=tx_type,
-                    timestamp=timestamp or datetime.datetime.now(datetime.timezone.utc)
+                    timestamp=timestamp or datetime.now(timezone.utc)
                 )
                 session.add(transaction)
 
@@ -164,7 +165,7 @@ class AIOrchestrator:
         family_id: UUID,
         items: list,
         family_currency: str,
-        ref_time: datetime.datetime
+        ref_time: datetime
     ) -> list:
         results = []
         with Session(engine) as session:
@@ -265,7 +266,7 @@ class AIOrchestrator:
         self,
         family_id: UUID,
         is_spanish: bool = False,
-        reference_time: Optional[datetime.datetime] = None
+        reference_time: Optional[datetime] = None
     ) -> str:
         """Returns formatted reminder block for upcoming/overdue bills."""
         return get_overdue_bills_reminder(family_id, is_spanish, self.encryption_service, reference_time, session_factory=Session)
@@ -273,7 +274,7 @@ class AIOrchestrator:
     def _get_monthly_cash_flow_snapshot(
         self,
         family_id: UUID,
-        target_date: datetime.datetime,
+        target_date: datetime,
         primary_currency: str = "USD"
     ) -> dict:
         """Calculates monthly cash flow snapshot for family."""
@@ -327,10 +328,10 @@ class AIOrchestrator:
     def _handle_transaction_correction(self, user_uuid: UUID, parsed_query: ParsedQueryIntent, is_spanish: bool = False) -> str:
         return handle_transaction_correction(user_uuid, parsed_query, self.encryption_service, session_factory=Session, is_spanish=is_spanish)
 
-    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None, tx_type: str = "expense"):
+    async def _safe_mirror_to_notion(self, family_id: UUID, amount: float, currency: str, concept: str, category: str, timestamp: datetime, user_name: Optional[str], transaction_id: Optional[UUID] = None, tx_type: str = "expense"):
         return await safe_mirror_to_notion(family_id, amount, currency, concept, category, timestamp, user_name, transaction_id, tx_type)
 
-    async def _safe_update_notion_page(self, family_id: UUID, page_id: str, amount: float, currency: str, concept: str, category: str, timestamp: datetime.datetime, user_name: Optional[str], tx_type: str = "expense"):
+    async def _safe_update_notion_page(self, family_id: UUID, page_id: str, amount: float, currency: str, concept: str, category: str, timestamp: datetime, user_name: Optional[str], tx_type: str = "expense"):
         return await safe_update_notion_page(family_id, page_id, amount, currency, concept, category, timestamp, user_name, tx_type)
 
     async def _safe_archive_notion_page(self, family_id: UUID, page_id: str):
@@ -397,7 +398,7 @@ class AIOrchestrator:
             member_names = [m.get("full_name") or m.get("username") or "User" for m in family_info["members"]] if parsed_query.scope == "family" else None
             
             user_name = None
-            reference_time = datetime.datetime.now(datetime.timezone.utc)
+            reference_time = datetime.now(timezone.utc)
             query_service = QueryService()
 
             if intent_str in [IntentType.SAVINGS_SUMMARY, "savings_summary", IntentType.ALL_TIME_BALANCE, "all_time_balance"]:
@@ -676,6 +677,11 @@ class AIOrchestrator:
                         "leave family confirm", "leave family confirmar"
                     ]:
                         deterministic_intent = ParsedQueryIntent(intent="leave_family")
+                    elif any(w in raw_lower for w in ["delete my account", "delete account", "borrar mi cuenta", "borrar cuenta", "eliminar mi cuenta", "eliminar cuenta"]):
+                        deterministic_intent = ParsedQueryIntent(intent="delete_account")
+                    elif re.search(r'\bexport(?:ar)?(?:\s+(?:my\s+|mis\s+)?data)?(?:\s+(?:to|a)\s+(csv|json))?\b', raw_lower):
+                        fmt = "json" if "json" in raw_lower else "csv"
+                        deterministic_intent = ParsedQueryIntent(intent="export_data", export_format=fmt)
                     elif raw_lower.startswith("/removemember") or raw_lower.startswith("remove member"):
                         target = raw_text[13:].strip() if raw_lower.startswith("/removemember") else raw_text[13:].strip()
                         deterministic_intent = ParsedQueryIntent(intent="remove_member", target_member=target)
@@ -711,16 +717,27 @@ class AIOrchestrator:
                         response_text = res
                     else:
                         # Unified Single-Call Classification & Extraction
+                        active_tz = getattr(settings, "DEFAULT_TIMEZONE", "America/Argentina/Buenos_Aires")
+                        if family_id and isinstance(family_id, str):
+                            try:
+                                family_id = UUID(family_id)
+                            except ValueError:
+                                pass
                         if not dry_run:
                             try:
-                                family_id = await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                family_id = family_id or await asyncio.to_thread(self._get_user_family_id, user_uuid)
+                                if family_id and isinstance(family_id, str):
+                                    family_id = UUID(family_id)
                                 family_service = FamilyService()
                                 family_currency = await asyncio.to_thread(family_service.get_family_default_currency, family_id)
+                                u_tz = await asyncio.to_thread(family_service.get_user_timezone, user_uuid)
+                                f_tz = await asyncio.to_thread(family_service.get_family_timezone, family_id) if family_id else None
+                                active_tz = u_tz or f_tz or active_tz
                             except Exception:
-                                family_id = None
+                                family_id = family_id or None
                                 family_currency = default_currency or "USD"
                         else:
-                            family_id = None
+                            family_id = family_id or None
                             family_currency = default_currency or "USD"
 
                         # Track daily AI message usage for this workspace
@@ -827,6 +844,13 @@ class AIOrchestrator:
                                     reference_time=datetime.now(timezone.utc),
                                     is_spanish=_is_spanish(raw_text)
                                 )
+                                if family_id:
+                                    is_es = _is_spanish(raw_text)
+                                    status_kws = ("como venimos", "cómo venimos", "como vamos", "cómo vamos", "how are we doing", "status", "estado", "this month", "este mes")
+                                    if any(k in raw_lower for k in status_kws):
+                                        overdue_block = await asyncio.to_thread(self._get_overdue_bills_reminder, family_id, is_es, datetime.now(timezone.utc))
+                                        if overdue_block and "Recordatorio de Vencimientos" not in response_text:
+                                            response_text += f"\n\n{overdue_block}"
                             except Exception as pipe_err:
                                 logger.warning(f"DecoupledQueryPipeline failed: {pipe_err}")
                                 if getattr(settings, "ENABLE_AGENTIC_CORE", False):
@@ -900,7 +924,7 @@ class AIOrchestrator:
                                             family_id=family_id,
                                             items=all_items,
                                             family_currency=family_currency,
-                                            ref_time=datetime.datetime.now(datetime.timezone.utc)
+                                            ref_time=datetime.now(timezone.utc)
                                         )
                                         batch_tx_ids = [r["id"] for r in batch_results if r.get("kind") == "transaction"]
                                         if batch_tx_ids:
@@ -913,7 +937,7 @@ class AIOrchestrator:
                                 else:
                                     user_info = {"display_name": "User"}
                                     batch_results = []
-                                    ref_now = datetime.datetime.now(datetime.timezone.utc)
+                                    ref_now = datetime.now(timezone.utc)
                                     for item in all_items:
                                         curr = item.currency or family_currency or "USD"
                                         cpt = item.concept.strip() if item.concept else "Expense"
@@ -1051,6 +1075,12 @@ class AIOrchestrator:
                                             reference_time=datetime.now(timezone.utc),
                                             is_spanish=is_spanish
                                         )
+                                        if family_id:
+                                            status_kws = ("como venimos", "cómo venimos", "como vamos", "cómo vamos", "how are we doing", "status", "estado", "this month", "este mes")
+                                            if any(k in raw_lower for k in status_kws):
+                                                overdue_block = await asyncio.to_thread(self._get_overdue_bills_reminder, family_id, is_spanish, datetime.now(timezone.utc))
+                                                if overdue_block and "Recordatorio de Vencimientos" not in response_text:
+                                                    response_text += f"\n\n{overdue_block}"
                                     except Exception as pipe_err:
                                         logger.warning(f"DecoupledQueryPipeline failed: {pipe_err}")
                                         if getattr(settings, "ENABLE_AGENTIC_CORE", False):

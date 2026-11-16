@@ -55,6 +55,7 @@ async def test_orchestrator_routes_query_to_agent_service(agentic_orchestrator_d
 
     with patch("src.services.ai_orchestrator.ExtractionService") as mock_extract_cls, \
          patch("src.services.agent.service.AgentService.run", new_callable=AsyncMock) as mock_agent_run, \
+         patch("src.services.query.pipeline.DecoupledQueryPipeline.execute", side_effect=RuntimeError("Pipeline bypassed for fallback test")), \
          patch("src.services.ai_orchestrator.TelegramService") as mock_tg_cls:
 
         mock_ext_instance = MagicMock()
@@ -97,6 +98,7 @@ async def test_orchestrator_falls_back_when_agentic_core_disabled(agentic_orches
 
     with patch("src.services.ai_orchestrator.ExtractionService") as mock_extract_cls, \
          patch("src.services.agent.service.AgentService.run", new_callable=AsyncMock) as mock_agent_run, \
+         patch("src.services.query.pipeline.DecoupledQueryPipeline.execute", side_effect=RuntimeError("Pipeline bypassed for fallback test")), \
          patch("src.services.ai_orchestrator.QueryService.parse_intent", new_callable=AsyncMock) as mock_parse_intent, \
          patch.object(AIOrchestrator, "_execute_parsed_query", new_callable=AsyncMock) as mock_exec_query:
 
@@ -136,6 +138,7 @@ async def test_orchestrator_falls_back_on_agent_service_exception(agentic_orches
 
     with patch("src.services.ai_orchestrator.ExtractionService") as mock_extract_cls, \
          patch("src.services.agent.service.AgentService.run", side_effect=RuntimeError("Gemini timeout")), \
+         patch("src.services.query.pipeline.DecoupledQueryPipeline.execute", side_effect=RuntimeError("Pipeline bypassed for fallback test")), \
          patch("src.services.ai_orchestrator.QueryService.parse_intent", new_callable=AsyncMock) as mock_parse_intent, \
          patch.object(AIOrchestrator, "_execute_parsed_query", new_callable=AsyncMock) as mock_exec_query:
 

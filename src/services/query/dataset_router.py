@@ -101,9 +101,17 @@ class RoutedDataset:
 class DatasetRouter:
     """Routes queries across transactions and scheduled bills based on temporal scope."""
 
-    def __init__(self, encryption_service: Optional[EncryptionService] = None):
+    def __init__(self, encryption_service: Optional[EncryptionService] = None, engine: Optional[Any] = None):
         self.encryption = encryption_service or EncryptionService()
         self.resolver = InMemoryEntityResolver(self.encryption)
+        self._engine = engine
+
+    @property
+    def engine(self):
+        if self._engine is not None:
+            return self._engine
+        import src.db.session as session_module
+        return getattr(session_module, "engine", engine)
 
     def route_and_fetch(
         self,
@@ -121,7 +129,7 @@ class DatasetRouter:
         bills: List[DecryptedScheduledBill] = []
         assumption_note: Optional[str] = None
 
-        with Session(engine) as session:
+        with Session(self.engine) as session:
             users = session.exec(select(User).where(User.family_id == family_id)).all()
             user_map = {u.id: (u.full_name or u.username or "User", f"@{u.username}" if u.username else None) for u in users}
 
@@ -145,10 +153,15 @@ class DatasetRouter:
                     transactions = self._fetch_transactions(session, family_id, user_map, start_time, end_time, category="Rent/Bills")
 
             # 2. Domain: Income
-            elif primary_domain == "income":
+            elif primary_domain in ("income", "earnings"):
                 transactions = self._fetch_transactions(session, family_id, user_map, start_time, end_time, tx_type="income")
 
-            # 3. Default: Expenses / Spending
+            # 3. Domain: Balance / Cash Flow / Savings
+            elif primary_domain in ("balance", "cash_flow", "net_balance", "savings"):
+                transactions = self._fetch_transactions(session, family_id, user_map, start_time, end_time)
+                bills = self._fetch_scheduled_bills(session, family_id, user_map, start_time, end_time, status=("paid", "pending"))
+
+            # 4. Default: Expenses / Spending
             else:
                 cat = ast.filters.category_hints[0] if ast.filters.category_hints else None
                 transactions = self._fetch_transactions(

@@ -15,6 +15,9 @@ class AggregatedFinancialMetrics:
     total_amount: Decimal = Decimal("0.00")
     paid_amount: Decimal = Decimal("0.00")
     pending_amount: Decimal = Decimal("0.00")
+    income_amount: Decimal = Decimal("0.00")
+    expense_amount: Decimal = Decimal("0.00")
+    net_amount: Decimal = Decimal("0.00")
     count: int = 0
     average_amount: Decimal = Decimal("0.00")
     category_totals: Dict[str, Decimal] = field(default_factory=dict)
@@ -51,6 +54,13 @@ class DeterministicMathEngine:
             m.paid_amount += amt
             m.count += 1
 
+            tx_type = getattr(tx, "type", "expense") or "expense"
+            if tx_type == "income":
+                m.income_amount += amt
+            else:
+                m.expense_amount += amt
+            m.net_amount = m.income_amount - m.expense_amount
+
             cat = tx.category or "Other"
             m.category_totals[cat] = m.category_totals.get(cat, Decimal("0.00")) + amt
 
@@ -67,6 +77,8 @@ class DeterministicMathEngine:
             m = metrics_by_currency[curr]
             m.total_amount += amt
             m.count += 1
+            m.expense_amount += amt
+            m.net_amount = m.income_amount - m.expense_amount
 
             if bill.status == "paid":
                 m.paid_amount += amt

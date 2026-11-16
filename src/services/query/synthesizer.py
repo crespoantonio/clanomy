@@ -60,27 +60,33 @@ class QuerySynthesizer:
         if total_count == 0:
             if domain == "bills":
                 return (
-                    f"✅ <b>No tienes vencimientos registrados para {timeframe_label}.</b>"
+                    f"✅ <b>No tienes facturas pendientes ni vencimientos para {timeframe_label}.</b>"
                     if is_spanish
                     else f"✅ <b>You have no bills or dues scheduled for {timeframe_label}.</b>"
                 )
-            elif domain == "income":
+            elif domain in ("income", "earnings"):
                 return (
-                    f"ℹ️ <b>No se encontraron ingresos registrados para {timeframe_label}.</b>"
+                    f"ℹ️ <b>No se encontraron ingresos registrados para {timeframe_label} (0.00 {default_currency}).</b>"
                     if is_spanish
-                    else f"ℹ️ <b>No income recorded for {timeframe_label}.</b>"
+                    else f"ℹ️ <b>You haven't logged any income for {timeframe_label} yet (Total: 0.00 {default_currency}).</b>"
+                )
+            elif domain in ("balance", "cash_flow", "net_balance", "savings"):
+                return (
+                    f"ℹ️ <b>No se encontraron movimientos registrados para {timeframe_label} (Saldo: 0.00 {default_currency}).</b>"
+                    if is_spanish
+                    else f"ℹ️ <b>You haven't logged any income or expenses for {timeframe_label} yet (Net Balance: 0.00 {default_currency}).</b>"
                 )
             else:
                 return (
-                    f"ℹ️ <b>No se encontraron gastos registrados para {timeframe_label}.</b>"
+                    f"ℹ️ <b>No se encontraron gastos registrados para {timeframe_label} (0.00 {default_currency}).</b>"
                     if is_spanish
-                    else f"ℹ️ <b>No expenses recorded for {timeframe_label}.</b>"
+                    else f"ℹ️ <b>You haven't logged any expenses for {timeframe_label} yet (Total: 0.00 {default_currency}).</b>"
                 )
 
         # Case 2: Bills
         if domain == "bills":
             header = (
-                f"📋 <b>Vencimientos ({timeframe_label}):</b>\n"
+                f"🗓️ <b>Facturas por pagar ({timeframe_label}):</b>\n"
                 if is_spanish
                 else f"📋 <b>Scheduled Bills ({timeframe_label}):</b>\n"
             )
@@ -105,6 +111,53 @@ class QuerySynthesizer:
             if totals_lines:
                 parts.append("")
                 parts.extend(totals_lines)
+            return "\n".join(parts)
+
+        # Case 2.5: Balance / Cash Flow / Savings
+        if domain in ("balance", "cash_flow", "net_balance", "savings"):
+            header = (
+                f"💰 <b>Flujo de Caja y Saldo ({timeframe_label}):</b>\n"
+                if is_spanish
+                else f"💰 <b>Cash Flow & Balance ({timeframe_label}):</b>\n"
+            )
+            totals_lines = []
+            for curr, m in metrics_by_currency.items():
+                sign = "+" if m.net_amount > Decimal("0.00") else ""
+                if is_spanish:
+                    totals_lines.append(f"💰 Total Ingresos ({curr}): {format_currency_amount(m.income_amount, curr)}")
+                    totals_lines.append(f"💸 Total Gastos ({curr}): {format_currency_amount(m.expense_amount, curr)}")
+                    totals_lines.append(f"💵 Saldo Neto / Ahorro ({curr}): {sign}{format_currency_amount(m.net_amount, curr)}")
+                else:
+                    totals_lines.append(f"💰 Total Incomes ({curr}): {format_currency_amount(m.income_amount, curr)}")
+                    totals_lines.append(f"💸 Total Expenses ({curr}): {format_currency_amount(m.expense_amount, curr)}")
+                    totals_lines.append(f"💵 Net Balance / Surplus ({curr}): {sign}{format_currency_amount(m.net_amount, curr)}")
+
+            parts = [header] + totals_lines
+            return "\n".join(parts)
+
+        # Case 2.6: Income
+        if domain in ("income", "earnings"):
+            header = (
+                f"💰 <b>Ingresos ({timeframe_label}):</b>\n"
+                if is_spanish
+                else f"💰 <b>Income ({timeframe_label}):</b>\n"
+            )
+            totals_lines = []
+            for curr, m in metrics_by_currency.items():
+                lbl = "Total Ingresos" if is_spanish else "Total Income"
+                totals_lines.append(f"💰 <b>{lbl} ({curr}): {format_currency_amount(m.income_amount or m.total_amount, curr)}</b> ({m.count} transacciones)")
+
+            cat_breakdown = []
+            for curr, m in metrics_by_currency.items():
+                if m.category_totals:
+                    cat_breakdown.append("<b>Por categoría:</b>" if is_spanish else "<b>By Category:</b>")
+                    for cat, c_amt in sorted(m.category_totals.items(), key=lambda x: x[1], reverse=True)[:5]:
+                        cat_breakdown.append(f"  • {html.escape(cat)}: {format_currency_amount(c_amt, curr)}")
+
+            parts = [header] + totals_lines
+            if cat_breakdown:
+                parts.append("")
+                parts.extend(cat_breakdown)
             return "\n".join(parts)
 
         # Case 3: Expenses / Spending
@@ -152,16 +205,25 @@ class QuerySynthesizer:
         # e.g., if total is 37000.00, check for 37000, 37,000, or 37.000
         found_any_number = False
         for curr, m in metrics_by_currency.items():
-            target_amount = m.pending_amount if m.pending_amount > Decimal("0.00") else m.total_amount
-            amt_int = int(target_amount)
-            # Variants: 37000, 37,000, 37.000
-            patterns = [
-                str(amt_int),
-                f"{amt_int:,}",
-                f"{amt_int:,}".replace(",", ".")
+            candidates = [
+                m.pending_amount,
+                m.total_amount,
+                m.income_amount,
+                m.expense_amount,
+                abs(m.net_amount)
             ]
-            if any(p in response_text for p in patterns):
-                found_any_number = True
+            for target_amount in candidates:
+                if target_amount > Decimal("0.00"):
+                    amt_int = int(target_amount)
+                    patterns = [
+                        str(amt_int),
+                        f"{amt_int:,}",
+                        f"{amt_int:,}".replace(",", ".")
+                    ]
+                    if any(p in response_text for p in patterns):
+                        found_any_number = True
+                        break
+            if found_any_number:
                 break
 
         return found_any_number
@@ -249,11 +311,18 @@ class QuerySynthesizer:
         )
 
         try:
-            llm_response = await self.provider.complete(
-                system_prompt=SYNTHESIZER_SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                timeout=60.0
-            )
+            if hasattr(self.provider, "complete") and callable(getattr(self.provider, "complete")):
+                llm_response = await self.provider.complete(
+                    system_prompt=SYNTHESIZER_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    timeout=60.0
+                )
+            else:
+                llm_response = await self.provider.complete_text(
+                    system_prompt=SYNTHESIZER_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    timeout=60.0
+                )
             clean_llm_response = (llm_response or "").strip()
 
             # 3. AI Verification / Parity Gate

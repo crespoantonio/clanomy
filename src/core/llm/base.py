@@ -44,3 +44,20 @@ class BaseLLMProvider(ABC):
         Executes a text completion request and returns the resulting string.
         """
         pass
+
+    async def complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.0,
+        timeout: float = 30.0
+    ) -> str:
+        """
+        Alias for complete_text for backwards compatibility with tests and callers.
+        """
+        return await self.complete_text(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            timeout=timeout
+        )

@@ -107,10 +107,10 @@ class QueryNormalizer:
         elif _matches_any_word((
             "bill", "bills", "factura", "facturas", "cuentas", "servicios",
             "electricity", "internet", "expensas", "luz", "gas", "utility", "utilities",
-            "obligations", "commitments", "vencimiento", "vencimientos", "boletas", "boleta", "tarjeta"
-        ), lower) or "bill detailz" in lower or "wat bills" in lower:
+            "obligations", "commitments", "vencimiento", "vencimientos", "vence", "vencen", "boletas", "boleta", "tarjeta"
+        ), lower) or any(re.search(p, lower) for p in (r'\bque vence\b', r'\bqué vence\b', r'\bwhat bills\b', r'\bbills? due\b', r'\bwat bills\b', r'\bbill detailz\b')):
             domains = ["bills"]
-            if _matches_any_word(("upcoming", "pending", "due", "owe", "scheduled", "por pagar", "por vencer", "vence", "próximas", "proximos", "proximas"), lower) or "r due" in lower:
+            if _matches_any_word(("upcoming", "pending", "due", "owe", "scheduled", "por pagar", "por vencer", "vence", "vencen", "próximas", "proximos", "proximas"), lower) or "r due" in lower or "que vence" in lower or "qué vence" in lower:
                 is_projected = True
                 is_historical = False
 
@@ -168,6 +168,12 @@ class QueryNormalizer:
             timeframe = "last_180_days"
         elif "this month" in lower or "este mes" in lower:
             start_date = ref_time.replace(day=1).strftime("%Y-%m-%d")
+            if is_projected:
+                if ref_time.month == 12:
+                    next_m = ref_time.replace(year=ref_time.year + 1, month=1, day=1)
+                else:
+                    next_m = ref_time.replace(month=ref_time.month + 1, day=1)
+                end_date = (next_m - timedelta(days=1)).strftime("%Y-%m-%d")
             timeframe = "this_month"
         elif "last month" in lower or "mes pasado" in lower:
             first_this_month = ref_time.replace(day=1)
@@ -175,6 +181,18 @@ class QueryNormalizer:
             start_date = last_day_prev.replace(day=1).strftime("%Y-%m-%d")
             end_date = last_day_prev.strftime("%Y-%m-%d")
             timeframe = "last_month"
+        elif "this week" in lower or "esta semana" in lower or "week" in lower or "semana" in lower:
+            start_date = (ref_time - timedelta(days=ref_time.weekday())).strftime("%Y-%m-%d")
+            timeframe = "this_week"
+        elif "today" in lower or "hoy" in lower:
+            start_date = ref_time.strftime("%Y-%m-%d")
+            end_date = ref_time.strftime("%Y-%m-%d")
+            timeframe = "today"
+        elif "yesterday" in lower or "ayer" in lower:
+            yest_str = (ref_time - timedelta(days=1)).strftime("%Y-%m-%d")
+            start_date = yest_str
+            end_date = yest_str
+            timeframe = "yesterday"
 
         scope = "personal" if any(w in lower for w in ("my", "mis", "yo", "tengo")) and not any(w in lower for w in ("we", "nuestro", "familia")) else "family"
 
